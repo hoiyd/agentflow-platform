@@ -27,7 +27,7 @@ import (
 // The HTTP handler, Runtime, Binding, generated schema and Postgres are real.
 func TestProductionDurableClarification(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart"} {
+		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "uncertain_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart"} {
 			t.Run(mode+"/"+scenario, func(t *testing.T) {
 				generic := strings.HasPrefix(scenario, "generic_")
 				scenario = strings.TrimPrefix(scenario, "generic_")
@@ -200,7 +200,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				answer.Answers[answerField] = "Managers"
 				call("POST", path+"/"+q.ID+"/answers", answer, 409, nil)
 
-				if scenario == "claim_restart" || scenario == "corrupt" || scenario == "corrupt_identity" || scenario == "completed_restart" || scenario == "unsafe_restart" {
+				if scenario == "claim_restart" || scenario == "corrupt" || scenario == "corrupt_identity" || scenario == "completed_restart" || scenario == "unsafe_restart" || scenario == "uncertain_restart" {
 					db, err := sql.Open("pgx", database)
 					if err != nil {
 						t.Fatal(err)
@@ -245,13 +245,15 @@ func TestProductionDurableClarification(t *testing.T) {
 								}
 							}
 						}
-						if scenario == "unsafe_restart" {
+						if scenario == "unsafe_restart" || scenario == "uncertain_restart" {
 							effect, _, err := application.store.BeginToolEffect(domain.ToolEffectRecord{IdempotencyKey: "post-question-effect", RunID: run.ID, StageID: q.StageID, TurnID: "real-turn", ToolCallID: "writer", ToolName: "fixture_external_writer", RequestHash: "fixture"})
 							if err != nil {
 								t.Fatal(err)
 							}
-							if _, err = application.store.CompleteToolEffect(effect.IdempotencyKey, json.RawMessage(`{"written":true}`)); err != nil {
-								t.Fatal(err)
+							if scenario == "unsafe_restart" {
+								if _, err = application.store.CompleteToolEffect(effect.IdempotencyKey, json.RawMessage(`{"written":true}`)); err != nil {
+									t.Fatal(err)
+								}
 							}
 						}
 						if _, err = db.ExecContext(t.Context(), "UPDATE runs SET heartbeat_at=NOW()-INTERVAL '1 hour' WHERE id=$1", run.ID); err != nil {
@@ -295,10 +297,14 @@ func TestProductionDurableClarification(t *testing.T) {
 					resumeBody = map[string]string{"user_input": ""}
 				}
 				payload = call("POST", resumePath, resumeBody, 200, nil)
-				if scenario == "unsafe_restart" {
+				if scenario == "unsafe_restart" || scenario == "uncertain_restart" {
 					unchanged, _, err := application.store.GetRun(run.ID)
 					if err != nil || unchanged.Status != domain.RunFailedRecoverable || !strings.Contains(payload, "event: error") {
 						t.Fatalf("unsafe retry admitted: %+v %v %s", unchanged, err, payload)
+					}
+					after, err := application.store.ListModelRequestRecords(run.ID)
+					if err != nil || len(after) != len(beforeResume) {
+						t.Fatalf("unsafe recovery reached provider: %d -> %d: %v", len(beforeResume), len(after), err)
 					}
 					return
 				}
@@ -331,6 +337,24 @@ func TestProductionDurableClarification(t *testing.T) {
 				if strings.Contains(payload, "event: error") {
 					t.Fatalf("resume error: %s", payload)
 				}
+				if scenario == "completed_restart" {
+					after, err := application.store.ListModelRequestRecords(run.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					countStage := func(records []domain.ModelRequestRecord) int {
+						count := 0
+						for _, record := range records {
+							if record.Envelope.StageID == q.StageID {
+								count++
+							}
+						}
+						return count
+					}
+					if countStage(after) != countStage(beforeResume) {
+						t.Fatalf("committed Stage executed again: %d -> %d", countStage(beforeResume), countStage(after))
+					}
+				}
 				if mode == "multi_agent" {
 					payload = call("POST", "/api/runs/"+run.ID+"/continue", map[string]any{"plan": "Execute the audience-specific report"}, 200, nil)
 					if strings.Contains(payload, "event: error") {
@@ -361,6 +385,11 @@ func TestProductionDurableClarification(t *testing.T) {
 					t.Fatal(err)
 				}
 				foundCapture := false
+				call("POST", path+"/"+q.ID+"/resume", nil, 409, nil)
+				afterDuplicate, err := application.store.ListModelRequestRecords(run.ID)
+				if err != nil || len(afterDuplicate) != len(records) {
+					t.Fatalf("duplicate resume reached provider: %d -> %d: %v", len(records), len(afterDuplicate), err)
+				}
 				foundManifest := false
 				for _, record := range records {
 					if strings.Contains(record.Capture.Content, "Engineering leads") {
