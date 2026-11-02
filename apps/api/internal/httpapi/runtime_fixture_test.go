@@ -41,13 +41,19 @@ func newRuntimeForTest(options agent.RuntimeOptions, client provider.Client) *ag
 		options.Tools = manager
 	}
 	if options.CheckpointProvider == nil {
-		options.CheckpointProvider = checkpoint.NewInternalProvider(options.Store)
+		if storage, ok := options.Store.(checkpoint.Store); ok {
+			options.CheckpointProvider = checkpoint.NewInternalProvider(storage)
+		}
 	}
-	if storage, ok := options.Store.(taskstate.Store); ok {
-		options.TaskStates = taskstate.NewService(storage, event.StoreSink{Store: options.Store})
+	if options.TaskStates == nil {
+		if storage, ok := options.Store.(taskstate.Store); ok {
+			options.TaskStates = taskstate.NewService(storage, event.StoreSink{Store: options.Store})
+		}
 	}
-	if storage, ok := options.Store.(store.ToolArtifactStore); ok {
-		options.ToolArtifacts = artifact.NewService(storage, event.NewRecorder(options.Store))
+	if options.ToolArtifacts == nil {
+		if storage, ok := options.Store.(store.ToolArtifactStore); ok {
+			options.ToolArtifacts = artifact.NewService(storage, event.NewRecorder(options.Store))
+		}
 	}
 	if options.KnowledgeRetriever == nil {
 		if storage, ok := options.Store.(rag.SearchStore); ok {

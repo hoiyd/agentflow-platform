@@ -1709,6 +1709,8 @@ export interface components {
             unavailable_reason?: string;
         };
         Run: {
+            /** @description Frozen execution mode derived from RuntimeSnapshot, independent of Stage availability. Omitted only for records without this metadata. */
+            readonly mode?: components["schemas"]["ChatMode"];
             knowledge_scope?: components["schemas"]["KnowledgeScope"];
             /** @description Derived from the frozen Snapshot; omission means ordinary execution. */
             readonly execution_constraint?: string;

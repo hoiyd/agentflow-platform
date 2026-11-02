@@ -93,7 +93,7 @@ type RuntimeStore interface {
 	store.ContextCompactionStore
 	store.SessionHistoryStore
 	store.RunUsageStore
-	store.CheckpointStore
+	ListToolEffects(string) ([]domain.ToolEffectRecord, error)
 }
 
 type AutonomousLimits struct {

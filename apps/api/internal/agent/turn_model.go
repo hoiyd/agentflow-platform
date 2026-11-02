@@ -135,13 +135,6 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		retryCtx, _ := m.withContextSession(ctx, request, &assemblySnapshot, isolatedContext)
 		return m.executeText(retryCtx, request, route.Client)
 	}
-	schema := domain.ToolSchemaConfig{Mode: "eager"}
-	if snapshot.ToolSchema != nil {
-		schema = *snapshot.ToolSchema
-	}
-	if request.Role == "planner" {
-		schema = domain.ToolSchemaConfig{Mode: "eager"}
-	}
 	options := m.runtime.toolExecutionOptions
 	// Only server-resolved, currently ready Workspace Bindings supply logical
 	// credential grants. Token bytes stay inside the MCP connection transport.
@@ -152,7 +145,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	// Reviewed plans contain private file-derived content even if ordinary
 	// Conversation history is trimmed from this new Run's Context.
 	options.PrivateContext = options.PrivateContext || snapshot.PlanOrigin != nil || snapshot.ProjectGuidance != nil
-	return m.executeStream(ctx, request, route.Client, schema, options, emit)
+	return m.executeStream(ctx, request, route.Client, effectiveToolSchema(request.Role, snapshot), options, emit)
 }
 
 func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedContext bool) (context.Context, *domain.ContextCompaction) {

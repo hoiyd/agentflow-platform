@@ -2432,6 +2432,11 @@ components:
       type: object
       required: [id, workspace_id, agent_id, conversation_id, status, verification_status, active_runtime_ms, created_at, updated_at]
       properties:
+        mode:
+          allOf:
+            - $ref: '#/components/schemas/ChatMode'
+          readOnly: true
+          description: Frozen execution mode derived from RuntimeSnapshot, independent of Stage availability. Omitted only for records without this metadata.
         knowledge_scope: { $ref: '#/components/schemas/KnowledgeScope' }
         execution_constraint:
           type: string
