@@ -37,6 +37,12 @@ animation is added. Tool-free and explicitly simulated Chat keep their paths.
 the default eager mode exposes all ready definitions. Neither mode changes
 the frozen candidate set or execution authority.
 
+Routing's initial schema estimate and Turn execution share one effective policy:
+Planner always uses eager in every Run mode; other roles use the frozen
+`ToolSchema` configuration, defaulting to eager when absent. Both reuse the
+Tool loop's initial wire plan. This does not reserve space for later discovery:
+each round still passes the existing Context Assembler limits.
+
 Until a round finishes, streamed answer text is provisional: a provider may
 emit commentary before choosing a Tool. On the first Tool-call fragment, any
 already-visible text from that round is retracted with `model.delta` payload
@@ -204,3 +210,8 @@ provider, credentials, production database or quality judge. The Mode test
 executes actual Single, approved Multi Worker and Autonomous Act entry points;
 the recovery test distinguishes same-Stage journal replay from cross-Stage
 Resume refusal. No browser automation or visual claim is included.
+
+`TestEffectiveToolSchemaRoutingMatchesWire` checks the shared adapter's initial
+schema estimate against strict local HTTP requests, including role overrides,
+threshold boundaries and rejection before provider calls. It is not live-model
+quality or full-orchestration evidence.
