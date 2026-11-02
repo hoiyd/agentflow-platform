@@ -2234,7 +2234,10 @@ type Run struct {
 	Id                  string     `json:"id"`
 
 	// KnowledgeScope Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
-	KnowledgeScope     *KnowledgeScope    `json:"knowledge_scope,omitempty"`
+	KnowledgeScope *KnowledgeScope `json:"knowledge_scope,omitempty"`
+
+	// Mode Frozen execution mode derived from RuntimeSnapshot, independent of Stage availability. Omitted only for records without this metadata.
+	Mode               *ChatMode          `json:"mode,omitempty"`
 	StartedAt          *time.Time         `json:"started_at,omitempty"`
 	Status             RunStatus          `json:"status"`
 	UpdatedAt          time.Time          `json:"updated_at"`

@@ -3,7 +3,8 @@ import { archiveAgent, createAgent, listAgents, listSkills, updateAgent, type Ag
 import { isDefaultAgent, type AgentConfigDraft } from "./AgentConfigPanel";
 import type { AgentOperationNotice } from "./ChatDialogs";
 
-export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: () => void) {
+// Agent edits configure the next submission; accepted Run state belongs to the Session.
+export function useAgentManagement(isStreaming: boolean) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
@@ -168,7 +169,6 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
       setIsAgentConfigOpen(false);
       setIsNewAgentFormOpen(false);
       setNewAgentDraft(null);
-      onActiveAgentChange();
       setAgentConfigStatus("New agent created.");
       setAgentOperationNotice({
         title: "Agent created",
@@ -216,7 +216,6 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
       setIsNewAgentFormOpen(false);
       setNewAgentDraft(null);
       setAgentArchiveCandidate(null);
-      onActiveAgentChange();
       setAgentConfigStatus("Agent archived.");
       setAgentOperationNotice({
         title: "Agent archived",
@@ -257,7 +256,6 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
     setActiveAgentId(agentId);
     setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
     setIsAgentDescriptionExpanded(false);
-    onActiveAgentChange();
   }
 
   function openAgentConfig() {

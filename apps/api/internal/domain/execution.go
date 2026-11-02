@@ -16,6 +16,9 @@ const (
 )
 
 type Run struct {
+	// Mode is read metadata derived from RuntimeSnapshot, never a separate
+	// persisted setting or a mode inferred from the current Stage list.
+	Mode string `json:"mode,omitempty"`
 	// KnowledgeScope is read metadata derived from RuntimeSnapshot when HTTP
 	// hides the full Snapshot; it has no separate persisted column.
 	KnowledgeScope *KnowledgeScope `json:"knowledge_scope,omitempty"`
