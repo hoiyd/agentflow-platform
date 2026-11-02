@@ -88,14 +88,14 @@ func TestArtifactServiceOptionalAndFailurePaths(t *testing.T) {
 		t.Fatalf("nil store created service: %#v", service)
 	}
 	var nilService *Service
-	if nilService.ToolBindings() != nil || nilService.ToolNames() != nil {
+	if nilService.ToolBindings() != nil {
 		t.Fatal("nil service exposed artifact tools")
 	}
 
 	fixtureStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
 	service := NewService(fixtureStore, nil)
-	if names := service.ToolNames(); len(names) != 2 || names[0] != ReadToolName || names[1] != SearchToolName {
-		t.Fatalf("artifact tool names = %#v", names)
+	if bindings := service.ToolBindings(); len(bindings) != 2 || bindings[0].Descriptor.Name != ReadToolName || bindings[1].Descriptor.Name != SearchToolName {
+		t.Fatalf("artifact tool bindings = %#v", bindings)
 	}
 	readBinding := service.readBinding()
 	searchBinding := service.searchBinding()

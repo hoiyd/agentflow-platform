@@ -25,13 +25,6 @@ func (s *Service) ToolBindings() []tool.Binding {
 	return []tool.Binding{s.readBinding(), s.searchBinding()}
 }
 
-func (s *Service) ToolNames() []string {
-	if s == nil {
-		return nil
-	}
-	return []string{ReadToolName, SearchToolName}
-}
-
 func (s *Service) readBinding() tool.Binding {
 	return tool.Binding{
 		Descriptor: tool.Descriptor{

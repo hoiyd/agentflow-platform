@@ -317,6 +317,9 @@ func TestTaskStateRuntimeProtocolStartsAtSnapshotV8(t *testing.T) {
 
 func TestTaskStateToolIsAddedToNativeRuntime(t *testing.T) {
 	runtime := &Runtime{taskStates: taskstate.NewService(nil, nil)}
+	if err := runtime.compileHarnessBindings(); err != nil {
+		t.Fatal(err)
+	}
 	if !containsString(runtime.withHarnessTools(nil), taskstate.UpdateToolName) {
 		t.Fatal("native executor did not receive the task state tool")
 	}

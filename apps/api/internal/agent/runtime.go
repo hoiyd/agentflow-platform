@@ -59,6 +59,7 @@ type Runtime struct {
 	knowledgeRetriever    rag.Retriever
 	knowledgeTools        []tool.Binding
 	harnessBindings       []tool.Binding
+	automaticHarnessTools []string
 	skills                *skill.Catalog
 	skillService          *skill.Service
 	checkpoints           checkpoint.Provider
