@@ -69,6 +69,11 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			errs <- rejectRecovery(errors.New("frozen routed worker not found"))
 			return
 		}
+		reason, err := r.persistedSelectionReason(run.ID, router)
+		if err != nil {
+			errs <- rejectRecovery(err)
+			return
+		}
 		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
 		if err != nil {
 			errs <- err
@@ -80,43 +85,26 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		}
 		events <- liveRunEvent(run)
 		prepared := PreparedCollaborationRun{WorkerAgent: workerAgent, Run: run}
-		workerStep, found := latestCompletedCollaborationStep(steps, "worker")
-		workerOutput := ""
-		if found {
-			workerOutput = boundedWorkerHandoff(workerStep)
-		} else {
-			workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)", task, planner.Output, workerAgent.Name, workerAgent.ID)
-			workerOutput, err = r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(task))
-			if err != nil {
-				errs <- err
-				return
-			}
+		if err := r.runCollaborationTail(executionCtx, events, prepared, restored.catalog, task, planner.Output, reason, steps); err != nil {
+			errs <- err
 		}
-		reviewStep, found := latestCompletedCollaborationStep(steps, "reviewer")
-		review := ""
-		if found {
-			review = reviewStep.Output
-		} else {
-			reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, planner.Output, workerOutput)
-			review, err = r.runCollaborationStep(executionCtx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(task))
-			if err != nil {
-				errs <- err
-				return
-			}
-		}
-		finalStep, found := latestCompletedCollaborationStep(steps, "finalizer")
-		final := ""
-		if found {
-			final = finalStep.Output
-		} else {
-			finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, planner.Output, workerOutput, review)
-			final, err = r.runCollaborationStep(executionCtx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(task))
-			if err != nil {
-				errs <- err
-				return
-			}
-		}
-		r.emitFinalDeltas(executionCtx, run.ID, final, events)
 	}()
 	return events, errs
+}
+
+func (r *Runtime) persistedSelectionReason(runID string, router domain.CollaborationStep) (string, error) {
+	events, err := r.store.ListRunEvents(runID)
+	if err != nil {
+		return "", err
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		item := events[i]
+		if item.Type == domain.EventAgentSelectionDecided && item.StageID == router.ID && item.Payload["selected_agent_id"] == router.AgentID {
+			reason, _ := item.Payload["reason"].(string)
+			return reason, nil
+		}
+	}
+	// Older records without typed selection evidence retain the frozen worker,
+	// but cannot supply a reason. Do not parse display text or reroute.
+	return "", nil
 }
