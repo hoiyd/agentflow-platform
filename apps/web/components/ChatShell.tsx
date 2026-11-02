@@ -76,7 +76,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     }
   });
   const {
-    runState, setRunState, isStreaming, isContinuingRun, isResumingRun, isCancelingRun,
+    runState, isStreaming, isContinuingRun, isResumingRun, isCancelingRun,
     continuePlan: handleContinuePlan, resume: handleResumeAutonomous, cancel: handleCancelRun
   } = session;
   const {
@@ -96,7 +96,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     updateAgentConfigDraft, updateNewAgentDraft, toggleAgentConfigTool, toggleNewAgentTool,
     handleSaveAgentConfig, handleOpenNewAgentForm, handleCancelNewAgent, handleCancelAgentConfig,
     handleCreateAgent, handleArchiveAgent, confirmArchiveAgent, cancelArchiveAgent
-  } = useAgentManagement(isStreaming, () => setRunState(null));
+  } = useAgentManagement(isStreaming);
 
   const { conversationRequests, activateConversation, refreshConversations, loadConversation, refreshTaskState,
     taskState, taskStateError, isTaskStateLoading, clearTaskState } = useConversationHistory({

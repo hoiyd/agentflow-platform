@@ -15,7 +15,9 @@ import (
 )
 
 func hideRunSnapshot(run *domain.Run) {
+	run.Mode = ""
 	if run.RuntimeSnapshot != nil {
+		run.Mode = run.RuntimeSnapshot.Mode
 		run.ExecutionConstraint = run.RuntimeSnapshot.ExecutionConstraint
 		run.KnowledgeScope = run.RuntimeSnapshot.KnowledgeScope
 	}

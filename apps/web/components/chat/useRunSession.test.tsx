@@ -38,11 +38,20 @@ it("blocks both resume commands and plan continuation while hydration is pending
   expect(result.current.runState?.status).toBe("failed_recoverable");
 });
 
-it("allows loaded-empty generic recovery and reloads the authoritative status", async () => {
-  questions.listClarifications.mockResolvedValue([]);
+it("blocks recovery until empty hydration commits, then reloads the authoritative status", async () => {
+  let finishHydration!: (items: []) => void;
+  questions.listClarifications.mockImplementation(() => new Promise(resolve => { finishHydration = resolve; }));
   const {result,onReload} = mountSession();
   await waitFor(() => expect(questions.listClarifications).toHaveBeenCalled());
   api.resumeRun.mockImplementation(async (_input, emit) => emit({type:"done",run_id:"run-1",status:"completed"}));
+  expect(result.current.clarification.ready).toBe(false);
+  await act(async () => { await result.current.resume("resume"); });
+  expect(api.resumeRun).not.toHaveBeenCalled();
+  expect(onReload).not.toHaveBeenCalled();
+  expect(result.current.runState?.status).toBe("failed_recoverable");
+
+  await act(async () => finishHydration([]));
+  await waitFor(() => expect(result.current.clarification.isReady("run-1", "failed_recoverable")).toBe(true));
   await act(async () => { await result.current.resume("resume"); });
   expect(api.resumeRun).toHaveBeenCalledTimes(1);
   expect(onReload).toHaveBeenCalledWith("conversation-1","resuming");

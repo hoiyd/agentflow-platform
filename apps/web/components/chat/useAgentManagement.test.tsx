@@ -20,15 +20,13 @@ it("keeps agent selection and failed edits inside the agent workbench", async ()
     agent("agent_writer", "Writer")
   ]);
   vi.mocked(updateAgent).mockRejectedValue(new Error("Update denied"));
-  const onActiveAgentChange = vi.fn();
-  const { result } = renderHook(() => useAgentManagement(false, onActiveAgentChange));
+  const { result } = renderHook(() => useAgentManagement(false));
 
   await act(async () => { await result.current.refreshAgents(); });
   expect(result.current.activeAgentId).toBe("agent_planner");
 
   act(() => result.current.selectAgent("agent_writer"));
   expect(result.current.activeAgent?.name).toBe("Writer");
-  expect(onActiveAgentChange).toHaveBeenCalledOnce();
 
   await act(async () => { await result.current.handleSaveAgentConfig(); });
   expect(result.current.agentsError).toBe("Update denied");
@@ -41,7 +39,7 @@ it("keeps frozen profile bindings editable when the skill catalog fails", async 
     { ...agent("template_writer", "Writer"), is_template: true, skills: ["knowledge-answer"] }
   ]);
   vi.mocked(listSkills).mockRejectedValue(new Error("Catalog unavailable"));
-  const { result } = renderHook(() => useAgentManagement(false, vi.fn()));
+  const { result } = renderHook(() => useAgentManagement(false));
   await act(async () => { await result.current.refreshAgents(); await result.current.refreshSkills(); });
   expect(result.current.skillsError).toBe("Catalog unavailable");
   expect(result.current.agentsError).toBe("");
@@ -55,15 +53,13 @@ it("keeps frozen profile bindings editable when the skill catalog fails", async 
 it("never selects templates, including after archiving the last owned Agent", async () => {
   const template = { ...agent("template_writer", "Writer template"), is_template: true };
   vi.mocked(listAgents).mockResolvedValue([template]);
-  const onChange = vi.fn();
-  const { result } = renderHook(() => useAgentManagement(false, onChange));
+  const { result } = renderHook(() => useAgentManagement(false));
   await act(async () => { await result.current.refreshAgents(); });
   expect(result.current.activeAgentId).toBe("");
   expect(result.current.workspaceAgents).toEqual([]);
   expect(result.current.agentTemplates).toEqual([template]);
   act(() => result.current.selectAgent(template.id));
   expect(result.current.activeAgent).toBeUndefined();
-  expect(onChange).not.toHaveBeenCalled();
 
   vi.mocked(listAgents).mockResolvedValue([template, agent("owned", "Owned")]);
   await act(async () => { await result.current.refreshAgents(); });
@@ -85,7 +81,7 @@ it("copies the complete template only on request and preserves the draft on crea
   };
   vi.mocked(listAgents).mockResolvedValue([template]);
   vi.mocked(createAgent).mockRejectedValueOnce(new Error("Creation denied"));
-  const { result } = renderHook(() => useAgentManagement(false, vi.fn()));
+  const { result } = renderHook(() => useAgentManagement(false));
   await act(async () => { await result.current.refreshAgents(); });
   act(() => result.current.handleOpenNewAgentForm());
   expect(result.current.newAgentTemplateId).toBe("");

@@ -13,14 +13,7 @@ import (
 )
 
 func TestModelRequirementsEstimateVisibleNotDeferredSchemas(t *testing.T) {
-	var bindings []tool.Binding
-	for i := range 20 {
-		bindings = append(bindings, tool.Binding{Descriptor: tool.Descriptor{Name: fmt.Sprintf("report_%02d", i), Description: strings.Repeat("Describe report fields. ", 100), Parameters: tool.ObjectSchema(nil, nil)}, Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil }})
-	}
-	catalog, err := tool.NewCatalog(bindings...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	catalog := modelToolSchemaCatalog(t)
 	snapshot := testRuntimeSnapshot()
 	snapshot.ContextAssembly.ContextWindowTokens = 128000
 	snapshot.ToolSchema = &domain.ToolSchemaConfig{Mode: "lazy", SchemaTokenThreshold: 2048}
@@ -31,4 +24,17 @@ func TestModelRequirementsEstimateVisibleNotDeferredSchemas(t *testing.T) {
 	if !lazy.ToolCalling || lazy.EstimatedInputTokens >= 2048 || eager.EstimatedInputTokens < 2048 {
 		t.Fatalf("routing estimate counted deferred Schemas: lazy=%#v eager=%#v", lazy, eager)
 	}
+}
+
+func modelToolSchemaCatalog(t *testing.T) *tool.Catalog {
+	t.Helper()
+	var bindings []tool.Binding
+	for i := range 20 {
+		bindings = append(bindings, tool.Binding{Descriptor: tool.Descriptor{Name: fmt.Sprintf("report_%02d", i), Description: strings.Repeat("Describe report fields. ", 100), Parameters: tool.ObjectSchema(nil, nil)}, Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil }})
+	}
+	catalog, err := tool.NewCatalog(bindings...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/planning"
@@ -125,6 +124,10 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 	if request.GenerateTitle {
 		title = SummarizeTitle(ctx, scoped, dependencies.Runtime, request.RunID, request.ConversationID, request.UserInput, request.Assistant)
 	}
+	return completionChunk(completed, message, title, invalidCitationIDs, invalidWebCitationIDs), nil
+}
+
+func completionChunk(completed domain.Run, message domain.Message, title string, invalidCitationIDs, invalidWebCitationIDs []string) domain.ChatChunk {
 	resultURL := ""
 	if completed.CompletionContract != nil && completed.CompletionContract.Output != nil {
 		resultURL = "/api/runs/" + completed.ID + "/result"
@@ -139,11 +142,11 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 		Status:                string(completed.Status),
 		VerificationStatus:    string(completed.VerificationStatus),
 		MessageID:             message.ID,
-		Citations:             citations,
+		Citations:             message.Citations,
 		InvalidCitationIDs:    invalidCitationIDs,
-		WebCitations:          webCitations,
+		WebCitations:          message.WebCitations,
 		InvalidWebCitationIDs: invalidWebCitationIDs,
-	}, nil
+	}
 }
 
 func Resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, runID, question, output string) (domain.Run, error) {
@@ -198,20 +201,19 @@ func completionQuestion(scoped store.WorkspaceStore, run domain.Run, question st
 	if strings.TrimSpace(question) != "" || run.CompletionContract == nil && !planOnly {
 		return question, nil
 	}
+	return storedCompletionQuestion(scoped, run, question)
+}
+
+func storedCompletionQuestion(scoped store.WorkspaceStore, run domain.Run, question string) (string, error) {
 	messages, err := scoped.ListMessages(run.ConversationID)
 	if err != nil {
 		return "", err
-	}
-	for _, message := range messages {
-		if message.Role == "user" && !message.CreatedAt.After(run.CreatedAt) {
-			question = message.Content
-		}
 	}
 	items, err := scoped.ListRunEvents(run.ID)
 	if err != nil {
 		return "", err
 	}
-	return clarification.AddAnswers(question, items)
+	return questionFromHistory(run, question, messages, items)
 }
 
 type VerificationResult struct {

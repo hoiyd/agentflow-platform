@@ -38,7 +38,8 @@ vi.mock("./chat/ChatChrome", () => ({
   ToolsPanel: () => null
 }));
 vi.mock("./chat/ChatWorkspace", () => ({
-  ChatWorkspace: ({ messages, planDraft, runStatus, isStreaming, isCanceling, clarificationLoading, clarificationError, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
+  ChatWorkspace: ({ messages, chatMode, planDraft, runStatus, isStreaming, isCanceling, clarificationLoading, clarificationError, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
+    chatMode: string;
     planDraft: string;
     messages: Array<{ content: string }>; runStatus: string; isStreaming: boolean; isCanceling: boolean;
     onContinue: () => void; onResume: (input?: string) => void; onCancel: () => void;
@@ -46,7 +47,7 @@ vi.mock("./chat/ChatWorkspace", () => ({
     taskStateLoading: boolean;
     clarificationLoading?: boolean; clarificationError?: string;
   }) => (
-    <div>{messages.map((message, index) => <p data-testid="message" key={index}>{message.content}</p>)}<output>{runStatus}</output><output>{planDraft}</output>
+    <div><output aria-label="Restored mode">{chatMode}</output>{messages.map((message, index) => <p data-testid="message" key={index}>{message.content}</p>)}<output>{runStatus}</output><output>{planDraft}</output>
       <output aria-label="Command state">{isStreaming ? "busy" : "idle"}</output>
       <output aria-label="Cancel state">{isCanceling ? "canceling" : "idle"}</output>
       <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onContinue()}>Continue</button><button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onResume()}>Resume</button><button onClick={onCancel}>Cancel run</button>
@@ -61,16 +62,53 @@ vi.mock("./chat/ChatWorkspace", () => ({
 let submitFromComposer: (event: React.FormEvent) => void;
 let newConversationFromSidebar: () => void;
 vi.mock("./chat/ChatComposer", () => ({
-  ChatComposer: ({ input, error, onInputChange, onSubmit }: {
+  ChatComposer: ({ input, error, onInputChange, onSubmit, onAgentChange, activeAgentId }: {
+    activeAgentId: string; onAgentChange: (id: string) => void;
     input: string; error: string; onInputChange: (value: string) => void; onSubmit: (event: React.FormEvent) => void;
   }) => {
     submitFromComposer = onSubmit;
-    return <form onSubmit={onSubmit}><input aria-label="Prompt" onChange={(event) => onInputChange(event.target.value)} value={input} /><button>Send</button><output aria-label="Error">{error}</output></form>;
+    return <form onSubmit={onSubmit}><button type="button" onClick={() => onAgentChange("writer")}>Select Writer</button><output aria-label="Selected agent">{activeAgentId}</output><input aria-label="Prompt" onChange={(event) => onInputChange(event.target.value)} value={input} /><button>Send</button><output aria-label="Error">{error}</output></form>;
   }
 }));
 vi.mock("./chat/ChatDialogs", () => ({ ChatDialogs: () => null }));
 
 afterEach(cleanup);
+
+// Failed/empty Stage reads are not mode declarations. Agent selection configures
+// the next command and must not discard accepted Run facts before admission.
+for (const mode of ["single", "multi_agent", "autonomous"]) {
+  for (const stageRead of ["empty", "unknown", "failed"]) {
+    it(`restores frozen ${mode} mode with ${stageRead} Stages`, async () => {
+      setupAPI();
+      api.listRuns.mockResolvedValue([{id:"saved", conversation_id:"a", status:"completed", mode}]);
+      if (stageRead === "failed") api.listCollaborationSteps.mockRejectedValue(new Error("stages unavailable"));
+      else api.listCollaborationSteps.mockResolvedValue(stageRead === "empty" ? [] : [{id:"s", role:"unknown-role", status:"completed"}]);
+      render(<ChatShell initialConversationId="a" />);
+      await screen.findByText("completed");
+      expect(screen.getByLabelText("Restored mode").textContent).toBe(mode);
+      if (stageRead === "failed") expect(screen.getByLabelText("Error").textContent).toContain("stages unavailable");
+    });
+  }
+}
+
+it("keeps the accepted Run when selecting the next Agent and rejecting Submit", async () => {
+  setupAPI();
+  api.listRuns.mockResolvedValue([{id:"saved", conversation_id:"a", status:"completed", mode:"single"}]);
+  api.listAgents.mockResolvedValue(["planner", "writer"].map(id => ({id, name:id, tools:[], skills:[], is_template:false})));
+  api.streamChat.mockRejectedValue(new Error("not admitted"));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("completed");
+  fireEvent.click(screen.getByRole("button", {name:"Select Writer"}));
+  expect(screen.getByLabelText("Selected agent").textContent).toBe("writer");
+  expect(screen.getByText("completed")).toBeTruthy();
+  expect(screen.getByText("A baseline")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox", {name:"Prompt"}), {target:{value:"next task"}});
+  fireEvent.click(screen.getByRole("button", {name:"Send"}));
+  await screen.findByText("not admitted");
+  expect(api.streamChat.mock.calls[0][0]).toMatchObject({agent_id:"writer", mode:"single"});
+  expect(screen.getByText("completed")).toBeTruthy();
+  expect(screen.getByRole("textbox", {name:"Prompt"}).getAttribute("value")).toBe("next task");
+});
 
 it("shares one clarification hydration authority between Workbench and session commands", async () => {
   setupAPI();

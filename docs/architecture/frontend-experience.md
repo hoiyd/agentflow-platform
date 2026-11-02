@@ -87,6 +87,10 @@ remain stable across normal laptop and wide-monitor viewports.
   leaves the previous catalog visible, reports the error and unlocks all toggles.
 - Status must remain visible outside the composer footer and must not disappear
   when mode tabs or trace panels change.
+- Agent selection, creation and archiving configure the next submission without
+  clearing the accepted Run or Trace. Only the Session owns submission cleanup
+  and rejection rollback. History restores mode from the Run's frozen `mode`;
+  Stage-based inference is limited to older records without that metadata.
 
 ## Scrolling and Responsive Constraints
 

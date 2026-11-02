@@ -69,6 +69,9 @@ flowchart TD
 including checkpoint provider, routes, embedding client and Tool manager. Missing
 required capabilities are construction errors, not inferred Store methods or
 post-construction setters. `app` installs Task State, Artifact and Knowledge bindings.
+Stage checkpoint persistence belongs to the injected provider; `RuntimeStore`
+requires only Tool-effect listing for its direct recovery checks. Test fixtures
+retain explicit services and add known defaults only for omitted dependencies.
 
 The provider adapter sends individual requests; it cannot create a Tool Executor
 or redefine persistence, authorization or completion. Skills enter through the

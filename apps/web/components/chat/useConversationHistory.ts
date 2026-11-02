@@ -190,7 +190,10 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
     ].filter(Boolean);
     // Successful history reads do not acknowledge or dismiss execution errors.
     if (errors.length > 0) setError(errors.join("; "));
-    if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
+    // Frozen mode is authoritative; only legacy records need Stage inference.
+    if (run.mode) {
+      handleChatModeChange(run.mode, true);
+    } else if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
       handleChatModeChange("autonomous", true);
     } else if (steps.length > 0) {
       handleChatModeChange("multi_agent", true);

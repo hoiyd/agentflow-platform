@@ -69,6 +69,17 @@ Chat and Replay resume its latest applied receipt. Finished stages/output are
 reused. Uncertain effects or newer committed writes without a finished recovery
 boundary fail closed: this feature does not promise arbitrary side-effect replay
 or global exactly-once execution. Stop closes the suspended Stage as well as Run.
+An already saved assistant candidate is reused only through its Run-linked message
+receipt, never by matching conversation text alone. Only the latest primary receipt
+is eligible; an invalid binding or mismatched output fails closed without falling
+back to historical candidates. Contracted candidates require the original question
+and subject hash; older uncontracted receipts without either field still require
+matching Run, Workspace, Conversation and assistant-message identity. New and reused
+candidates share the completion gate and SSE `done` fields, including structured-output
+`result_url` and citation validation metadata. Reuse preserves the message ID and
+enforces any Completion Contract before completion. Resume does not regenerate the
+title or enqueue another user turn for Memory.
+
 Clarification counts as a Tool call; Resume consumes additional model calls from
 the same ledger. Question/answer/state events publish only after their transaction commits;
 `clarification.answered` is durable, not a live-only progress update.

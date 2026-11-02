@@ -214,11 +214,7 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 		streaming = true
 	}
 	if toolCalling {
-		schema := domain.ToolSchemaConfig{Mode: "eager"}
-		if snapshot.ToolSchema != nil {
-			schema = *snapshot.ToolSchema
-		}
-		estimated += toolloop.InitialSchemaTokens(request.Catalog, schema)
+		estimated += toolloop.InitialSchemaTokens(request.Catalog, effectiveToolSchema(request.Role, snapshot))
 	}
 	maxInput := snapshot.ContextAssembly.ContextWindowTokens - snapshot.ContextAssembly.OutputReserveTokens - snapshot.ContextAssembly.SafetyMarginTokens
 	if maxInput > 0 && estimated > maxInput {
@@ -229,6 +225,14 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 		Streaming: streaming, EstimatedInputTokens: estimated,
 		MaxOutputTokens: snapshot.ContextAssembly.OutputReserveTokens,
 	}
+}
+
+func effectiveToolSchema(role string, snapshot *domain.RuntimeSnapshot) domain.ToolSchemaConfig {
+	// Planner stages keep all ready schemas visible in every Run mode.
+	if role == "planner" || snapshot.ToolSchema == nil {
+		return domain.ToolSchemaConfig{Mode: "eager"}
+	}
+	return *snapshot.ToolSchema
 }
 
 func publishModelRouteDecision(ctx context.Context, request turnpkg.Request, decision routing.Decision, routeErr error) error {
