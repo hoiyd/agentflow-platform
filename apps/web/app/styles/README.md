@@ -12,7 +12,8 @@ legacy stylesheet underneath a second override file.
 | `workbench/selection-menu.css`, `disabled-control-note.css` | Shared pickers and disabled-control notes |
 | `workbench/home*.css` | Product home, recordings and capability inventory |
 | `workbench/navigation.css`, `shell.css` | Sidebar navigation, top bar and task status |
-| `workbench/chat.css`, `markdown.css`, `generation-evidence.css` | Chat layout, rendered content, reasoning and partial output |
+| `workbench/chat.css` | Workspace grid, shared side-panel tracks/rows and their breakpoints |
+| `workbench/markdown.css`, `generation-evidence.css` | Rendered content, reasoning and partial output |
 | `workbench/composer.css`, `agent-toolbar.css`, `agent-dialog.css` | Composer, Agent/Skill selection, Agent creation/configuration |
 | `workbench/verification.css` | Completion-policy dialog |
 | `workbench/project-guidance.css` | Project instructions selection, bounded file browser and frozen Replay instructions |
@@ -36,6 +37,8 @@ legacy stylesheet underneath a second override file.
 
 - Search the owning module before adding a rule; amend it instead of creating
   another override layer. Shared primitives belong in `foundation.css`.
+- Side-panel features own their internals, not Workspace geometry. Shared panel
+  sizes and content-row placement use local variables in `chat.css`.
 - Preserve import and conditional-rule order. Some inherited breakpoint rules
   precede their feature's base rules intentionally to preserve the existing
   cascade; do not move them to the end without checking computed styles.

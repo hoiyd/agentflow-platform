@@ -31,14 +31,6 @@
 
 .task-state-toggle.active { box-shadow: inset 0 -2px 0 var(--accent); }
 
-.chat-workspace.with-task-state {
-  grid-template-columns: minmax(0, 1fr) minmax(350px, 420px);
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.chat-workspace.with-task-state > .conversation-column,
-.chat-workspace.with-task-state > .task-state-panel { grid-row: 1; }
-
 .task-state-panel {
   min-width: 0;
   min-height: 0;
