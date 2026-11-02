@@ -73,6 +73,12 @@ Clarification counts as a Tool call; Resume consumes additional model calls from
 the same ledger. Question/answer/state events publish only after their transaction commits;
 `clarification.answered` is durable, not a live-only progress update.
 
+Runtime recovery separates pre-claim validation/continuation selection from
+post-claim checkpoint restoration and mode execution. Only a successful claim
+owns failure settlement; validation rejection cannot fail another execution's
+Stage. Single replays committed output, Multi retains plan approval or delegates
+to collaboration recovery, and Autonomous restores its iteration before continuing.
+
 ## Trust and evidence
 
 Answers are user data, never system instructions or action approval; they cannot
