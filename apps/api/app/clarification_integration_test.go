@@ -3,8 +3,10 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -25,16 +27,44 @@ import (
 // Failure inventory: malformed/unbound answers, duplicate/conflicting submit,
 // legacy Resume bypass, reload/restart, protocol loss, and budget reset.
 // The HTTP handler, Runtime, Binding, generated schema and Postgres are real.
+// Completion failure inventory: recovered candidates must retain their message
+// identity and serialized result/citation fields without a second save; rejected
+// verification must not complete, and passing verification must precede completion.
+// Resume must not regenerate a title or sync another user turn to Memory.
+// A malformed latest receipt/hash or a newer mismatched candidate must reject
+// without saving, verifying or falling back to a historical matching answer,
+// including Runs without a Completion Contract.
+// Corrupt persisted handoff data and a rejected completion write must also
+// preserve the candidate without emitting done or leaving the Run running.
 func TestProductionDurableClarification(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart"} {
+		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart", "verified_happy", "verified_completed_restart", "output_happy", "output_completed_restart", "output_generic_completed_restart", "ordinary_output", "binding_latest_mismatch", "binding_malformed_latest", "binding_malformed_hash", "verified_binding_latest_mismatch", "verified_binding_malformed_latest", "verified_binding_malformed_hash", "binding_missing_primary", "verified_binding_missing_primary", "binding_invalid_handoff", "binding_completion_write_failure"} {
 			t.Run(mode+"/"+scenario, func(t *testing.T) {
+				ordinary := scenario == "ordinary_output"
+				structured := ordinary || strings.HasPrefix(scenario, "output_")
+				contracted := structured || strings.HasPrefix(scenario, "verified_")
+				if structured && mode != "single" {
+					t.Skip("structured completion boundary is exercised in Single")
+				}
+				scenario = strings.TrimPrefix(strings.TrimPrefix(scenario, "output_"), "verified_")
+				bindingFault := strings.TrimPrefix(scenario, "binding_")
+				if bindingFault == scenario {
+					bindingFault = ""
+				} else {
+					if mode != "single" {
+						t.Skip("candidate binding recovery boundary is exercised in Single")
+					}
+					scenario = "completed_restart"
+				}
 				generic := strings.HasPrefix(scenario, "generic_")
 				scenario = strings.TrimPrefix(scenario, "generic_")
 				if (scenario == "legacy_text" || scenario == "legacy_invalid") && mode != "autonomous" {
 					t.Skip("legacy text ask is an Autonomous protocol")
 				}
 				task := "clarification-gate: prepare a report, audience unspecified"
+				if ordinary {
+					task = "structured-output-gate"
+				}
 				if scenario == "legacy_text" || scenario == "legacy_invalid" {
 					task = "clarification-gate-legacy: prepare a report, audience unspecified"
 					if scenario == "legacy_invalid" {
@@ -50,7 +80,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				t.Setenv("BROWSER_FIXTURE_KEY", "fixture-only")
 				t.Setenv("EMBEDDING_API_KEY", "fixture-only")
 				t.Setenv("TAVILY_API_KEY", "")
-				routes, _ := json.Marshal(map[string]any{"routes": []any{map[string]any{"id": "clarification-fixture", "model": "fixture-model", "base_url": providerServer.URL, "credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 20, "context_window_tokens": 128000, "max_output_tokens": 8192, "priority": 100, "capabilities": map[string]bool{"tool_calling": true, "streaming": true, "structured_output": true}, "pricing": map[string]string{"source": "fixture"}}}})
+				routes, _ := json.Marshal(map[string]any{"routes": []any{map[string]any{"id": "clarification-fixture", "model": "fixture-model", "base_url": providerServer.URL, "credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 20, "context_window_tokens": 128000, "max_output_tokens": 8192, "priority": 100, "capabilities": map[string]any{"tool_calling": true, "streaming": true, "structured_output": true, "structured_output_format": "openai_json_schema"}, "pricing": map[string]string{"source": "fixture"}}}})
 				route := filepath.Join(root, "routes.json")
 				if err := os.WriteFile(route, routes, 0600); err != nil {
 					t.Fatal(err)
@@ -122,7 +152,31 @@ func TestProductionDurableClarification(t *testing.T) {
 				}
 				var agent domain.Agent
 				call("POST", "/api/agents", map[string]any{"name": "Clarification fixture", "routing_hints": map[string]any{"capabilities": []string{"report"}, "task_examples": []string{"clarification-gate: prepare a report, audience unspecified"}}, "system_prompt": "Complete the report. Ask for required missing information.", "memory_enabled": false, "retrieval_enabled": false, "tools": []string{}}, 201, &agent)
-				payload := call("POST", "/api/chat", map[string]string{"agent_id": agent.ID, "mode": mode, "message": task}, 200, nil)
+				request := map[string]any{"agent_id": agent.ID, "mode": mode, "message": task}
+				if contracted {
+					spec := domain.VerifierSpec{ID: "report", Type: domain.VerifierTextConstraints, Required: true, Config: map[string]any{"required_phrases": []string{"Engineering leads"}}}
+					contract := &domain.CompletionContract{Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 1, OnExhausted: domain.VerificationFailRun}, Verifiers: []domain.VerifierSpec{spec}}
+					if structured {
+						contract.Verifiers[0].Type = domain.VerifierJSONSchema
+						contract.Verifiers[0].Config = map[string]any{"schema": map[string]any{"type": "object"}}
+						contract.Output = &domain.StructuredOutputConfig{Mode: "local", VerifierID: spec.ID}
+						if ordinary {
+							contract.Output.Mode = "strict"
+							contract.Verifiers[0].Config = map[string]any{"schema": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"summary": map[string]any{"type": "string"}, "facts": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"summary", "facts"}}}
+						}
+					}
+					request["completion_contract"] = contract
+				}
+				payload := call("POST", "/api/chat", request, 200, nil)
+				if ordinary {
+					done := clarificationDoneJSON(t, payload)
+					if done["status"] != "completed" || done["verification_status"] != "passed" || done["result_url"] != "/api/runs/"+done["run_id"].(string)+"/result" || done["title"] != "Fixture conversation" {
+						t.Fatalf("ordinary completion protocol: %s", payload)
+					}
+					call("GET", done["result_url"].(string), nil, 200, nil)
+					t.Logf("ref1101-02 ordinary SSE: %s", payload)
+					return
+				}
 				if scenario == "legacy_invalid" {
 					runs, err := application.store.ListRuns()
 					if err != nil || len(runs) != 1 || runs[0].Status != domain.RunFailed {
@@ -199,6 +253,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				call("POST", path+"/"+q.ID+"/answers", answer, 200, nil)
 				answer.Answers[answerField] = "Managers"
 				call("POST", path+"/"+q.ID+"/answers", answer, 409, nil)
+				candidateID := ""
 
 				if scenario == "claim_restart" || scenario == "corrupt" || scenario == "corrupt_identity" || scenario == "completed_restart" || scenario == "unsafe_restart" {
 					db, err := sql.Open("pgx", database)
@@ -213,6 +268,9 @@ func TestProductionDurableClarification(t *testing.T) {
 						}
 						if scenario == "completed_restart" {
 							output := "Report for Engineering leads."
+							if structured {
+								output = `{"summary":"Report for Engineering leads. [S99] [W99]"}`
+							}
 							// Seed only the durable completion boundary lost between execution and
 							// application completion; subsequent recovery is real production code.
 							turnID := "fixture-completed-turn"
@@ -240,8 +298,72 @@ func TestProductionDurableClarification(t *testing.T) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								if _, err = application.store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: run.ConversationID, Type: domain.EventCitationResolved, Payload: map[string]any{"message_id": candidate.ID}}); err != nil {
+								candidateID = candidate.ID
+								binding := map[string]any{"message_id": candidate.ID, "protocol_version": domain.RAGCitationProtocolVersion}
+								if bindingFault == "missing_primary" {
+									binding["protocol_version"] = domain.WebCitationProtocolVersion
+								}
+								if contracted || bindingFault == "malformed_hash" {
+									events, err := application.store.ListRunEvents(run.ID)
+									if err != nil {
+										t.Fatal(err)
+									}
+									question, err := clarification.AddAnswers(task, events)
+									if err != nil {
+										t.Fatal(err)
+									}
+									data, _ := json.Marshal(struct{ RunID, MessageID, Question, Output string }{run.ID, candidate.ID, question, output})
+									binding["verification_question"] = question
+									binding["verification_subject_hash"] = fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+								}
+								if bindingFault == "malformed_hash" {
+									binding["verification_subject_hash"] = "sha256:corrupt"
+								}
+								if structured {
+									binding["invalid_source_ids"] = []string{"S99"}
+								}
+								if _, err = application.store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: run.ConversationID, Type: domain.EventCitationResolved, Payload: binding}); err != nil {
 									t.Fatal(err)
+								}
+								if bindingFault == "invalid_handoff" {
+									if _, err = application.store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: run.ConversationID, Type: domain.EventRunResumed, Payload: map[string]any{"kind": "clarification", "clarification": "corrupt persisted handoff"}}); err != nil {
+										t.Fatal(err)
+									}
+								}
+								if bindingFault == "completion_write_failure" {
+									_, err = db.ExecContext(t.Context(), `CREATE FUNCTION reject_fixture_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.status = 'completed' THEN RAISE EXCEPTION 'fixture completion write rejected'; END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER reject_fixture_completion BEFORE UPDATE ON runs FOR EACH ROW EXECUTE FUNCTION reject_fixture_completion();`)
+									if err != nil {
+										t.Fatal(err)
+									}
+								}
+								if structured {
+									if _, err = application.store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: run.ConversationID, Type: domain.EventCitationResolved, Payload: map[string]any{"message_id": candidate.ID, "protocol_version": domain.WebCitationProtocolVersion, "invalid_source_ids": []string{"W99"}}}); err != nil {
+										t.Fatal(err)
+									}
+								}
+								if bindingFault == "malformed_latest" || bindingFault == "latest_mismatch" {
+									latest := map[string]any{"protocol_version": domain.RAGCitationProtocolVersion}
+									if bindingFault == "latest_mismatch" {
+										newer, err := application.store.AddMessageWithSources(run.ConversationID, "assistant", "Newer candidate, not the recovered Turn output.", nil, nil)
+										if err != nil {
+											t.Fatal(err)
+										}
+										latest["message_id"] = newer.ID
+										if contracted {
+											question := binding["verification_question"].(string)
+											data, _ := json.Marshal(struct{ RunID, MessageID, Question, Output string }{run.ID, newer.ID, question, newer.Content})
+											latest["verification_question"] = question
+											latest["verification_subject_hash"] = fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+										}
+									}
+									if _, err = application.store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: run.ConversationID, Type: domain.EventCitationResolved, Payload: latest}); err != nil {
+										t.Fatal(err)
+									}
 								}
 							}
 						}
@@ -295,6 +417,41 @@ func TestProductionDurableClarification(t *testing.T) {
 					resumeBody = map[string]string{"user_input": ""}
 				}
 				payload = call("POST", resumePath, resumeBody, 200, nil)
+				if bindingFault != "" {
+					current, _, err := application.store.GetRun(run.ID)
+					if err != nil || current.Status != domain.RunFailed || !strings.Contains(payload, "event: error") || strings.Contains(payload, "event: done") {
+						t.Fatalf("invalid candidate binding did not fail closed: %+v %v %s", current, err, payload)
+					}
+					messages, err := application.store.ListMessages(run.ConversationID)
+					wantCandidates := 1
+					if bindingFault == "latest_mismatch" {
+						wantCandidates = 2
+					}
+					candidates := 0
+					for _, message := range messages {
+						if message.Role == "assistant" {
+							candidates++
+						}
+					}
+					if err != nil || candidates != wantCandidates {
+						t.Fatalf("invalid binding resaved output: candidates=%d %v", candidates, err)
+					}
+					evidence, err := application.store.ListVerificationEvidence(run.ID)
+					if err != nil || len(evidence) != 0 {
+						t.Fatalf("invalid binding reached verification: %+v %v", evidence, err)
+					}
+					items, err := application.store.ListRunEvents(run.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, item := range items {
+						if item.Type == domain.EventRunCompleted {
+							t.Fatal("invalid binding completed Run")
+						}
+					}
+					t.Logf("ref1101-02 binding fault=%s contracted=%t run=%s original_message=%s status=%s candidates=%d SSE=%s", bindingFault, contracted, run.ID, candidateID, current.Status, candidates, payload)
+					return
+				}
 				if scenario == "unsafe_restart" {
 					unchanged, _, err := application.store.GetRun(run.ID)
 					if err != nil || unchanged.Status != domain.RunFailedRecoverable || !strings.Contains(payload, "event: error") {
@@ -338,9 +495,58 @@ func TestProductionDurableClarification(t *testing.T) {
 					}
 				}
 				final, _, err := application.store.GetRun(run.ID)
-				if err != nil || final.Status != domain.RunCompleted {
+				wantStatus := domain.RunCompleted
+				if structured && scenario == "happy" {
+					wantStatus = domain.RunFailed // The fixture's resumed prose is not JSON.
+				}
+				if err != nil || final.Status != wantStatus {
 					t.Fatalf("not completed: %+v %v", final, err)
 				}
+				done := clarificationDoneJSON(t, payload)
+				if done["run_id"] != run.ID || done["conversation_id"] != run.ConversationID || done["agent_id"] != final.AgentID || done["status"] != string(final.Status) || done["message_id"] == nil || done["title"] != nil {
+					t.Fatalf("clarification completion protocol: %s", payload)
+				}
+				if candidateID != "" && done["message_id"] != candidateID {
+					t.Fatalf("replaced durable candidate %s: %s", candidateID, payload)
+				}
+				if structured {
+					if done["result_url"] != "/api/runs/"+run.ID+"/result" {
+						t.Fatalf("missing structured result_url: %s", payload)
+					}
+					if candidateID != "" {
+						if fmt.Sprint(done["invalid_citation_ids"]) != "[S99]" || fmt.Sprint(done["invalid_web_citation_ids"]) != "[W99]" {
+							t.Fatalf("lost candidate citation protocol: %s", payload)
+						}
+						call("GET", done["result_url"].(string), nil, 200, nil)
+					}
+				}
+				if contracted {
+					items, err := application.store.ListRunEvents(run.ID)
+					if err != nil {
+						t.Fatal(err)
+					}
+					verified := int64(0)
+					completed := 0
+					for _, item := range items {
+						if item.Type == domain.EventVerificationPassed {
+							verified = item.Sequence
+						}
+						if item.Type == domain.EventRunCompleted {
+							completed++
+							if verified == 0 || verified >= item.Sequence {
+								t.Fatal("completed before verification")
+							}
+						}
+					}
+					wantVerification := "passed"
+					if wantStatus == domain.RunFailed {
+						wantVerification = "failed"
+					}
+					if done["verification_status"] != wantVerification || (wantStatus == domain.RunFailed && completed != 0) || (wantStatus == domain.RunCompleted && completed != 1) {
+						t.Fatalf("verification settlement: %v completions=%d", done, completed)
+					}
+				}
+				call("POST", resumePath, resumeBody, 409, nil)
 				frozen, _ := json.Marshal(final.RuntimeSnapshot)
 				if !bytes.Equal(snapshot, frozen) {
 					t.Fatal("resume replaced Snapshot")
@@ -409,10 +615,29 @@ func TestProductionDurableClarification(t *testing.T) {
 				if strings.Contains(wire.Body.String(), "clarification continuation lost") {
 					t.Fatal(wire.Body.String())
 				}
-				evidence := map[string]any{"schema": "durable-clarification-evidence-v1", "mode": mode, "scenario": scenario, "recovery_route": resumePath, "run_id": run.ID, "snapshot": final.RuntimeSnapshot, "clarifications": questions, "checks": []string{"real HTTP/runtime/binding/Postgres", "application restart", "same Run/Snapshot", "reasoning and call identity preserved", "idempotent answer", "invariant projection"}, "limitations": []string{"deterministic provider, not live model compliance"}}
+				evidence := map[string]any{"schema": "durable-clarification-evidence-v1", "mode": mode, "scenario": scenario, "recovery_route": resumePath, "run_id": run.ID, "snapshot": final.RuntimeSnapshot, "completion_contract": final.CompletionContract, "done": done, "input": task, "clarifications": questions, "checks": []string{"real HTTP/runtime/binding/Postgres", "application restart", "same Run/Snapshot", "reasoning and call identity preserved", "idempotent answer", "invariant projection"}, "limitations": []string{"deterministic provider, not live model compliance", "completed_restart seeds the crash boundary and candidate receipt"}}
 				encoded, _ := json.Marshal(evidence)
 				t.Log(string(encoded))
 			})
 		}
 	}
+}
+
+func clarificationDoneJSON(t *testing.T, payload string) map[string]any {
+	t.Helper()
+	var done map[string]any
+	count := 0
+	for _, frame := range strings.Split(payload, "\n\n") {
+		if !strings.HasPrefix(frame, "event: done\n") {
+			continue
+		}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.SplitN(frame, "\n", 2)[1], "data: ")), &done); err != nil {
+			t.Fatalf("done JSON: %v %s", err, frame)
+		}
+		count++
+	}
+	if count != 1 || done["type"] != "done" {
+		t.Fatalf("expected exactly one completion: %s", payload)
+	}
+	return done
 }
