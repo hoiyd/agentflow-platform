@@ -77,6 +77,11 @@ The provider adapter sends individual requests; it cannot create a Tool Executor
 or redefine persistence, authorization or completion. Skills enter through the
 existing Context and Tool paths, not a second permission or workflow system.
 
+`turnContextSessions` assembles Context source loaders from narrow read/consume
+capabilities. `runtimeTurnModel` retains routing, compaction timing and model/Tool
+dispatch; `contextassembly` retains selection, trust and token budgets. Mutable
+loaders re-read sources for each request, including Tool continuations.
+
 ## Main Call Paths
 
 ### Chat and Completion

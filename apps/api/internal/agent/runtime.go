@@ -41,6 +41,7 @@ type Runtime struct {
 	tools                 *tool.Manager
 	trace                 *eventpkg.Recorder
 	turnEngine            *turnpkg.Engine
+	contextSessions       turnContextSessions
 	routerMode            string
 	contextAssemblyConfig domain.ContextAssemblyConfig
 	contextCompactor      *contextcompaction.Compactor
@@ -197,6 +198,13 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 	}
 	if err := runtime.compileHarnessBindings(); err != nil {
 		return nil, fmt.Errorf("compile harness Tools: %w", err)
+	}
+	runtime.contextSessions = turnContextSessions{
+		store: options.Store, sink: runtime.runEventSink(), guidance: options.ProjectGuidance, steering: options.Inbox,
+		skills: runtime.skillService, knowledgeReads: len(options.KnowledgeTools) > 0,
+	}
+	if options.TaskStates != nil {
+		runtime.contextSessions.taskState = options.TaskStates
 	}
 	if _, err := runtime.currentCatalog(""); err != nil {
 		return nil, fmt.Errorf("assemble runtime Tools: %w", err)

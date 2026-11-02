@@ -41,6 +41,10 @@ func (r *Runtime) freezeProjectGuidance(ctx context.Context, conversation string
 }
 
 func (r *Runtime) validateProjectGuidance(ctx context.Context, run domain.Run) error {
+	return validateProjectGuidance(ctx, r.projectGuidance, run)
+}
+
+func validateProjectGuidance(ctx context.Context, validator guidanceValidator, run domain.Run) error {
 	if run.RuntimeSnapshot == nil || run.RuntimeSnapshot.ProjectGuidance == nil {
 		return nil
 	}
@@ -48,8 +52,8 @@ func (r *Runtime) validateProjectGuidance(ctx context.Context, run domain.Run) e
 	if err := projectguidance.ValidateSnapshot(frozen); err != nil {
 		return err
 	}
-	if frozen.WorkspaceID != run.WorkspaceID || r.projectGuidance == nil {
+	if frozen.WorkspaceID != run.WorkspaceID || validator == nil {
 		return fmt.Errorf("frozen project instructions authority is unavailable")
 	}
-	return r.projectGuidance.Validate(ctx, run.WorkspaceID, frozen)
+	return validator.Validate(ctx, run.WorkspaceID, frozen)
 }

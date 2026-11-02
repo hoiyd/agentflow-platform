@@ -64,7 +64,7 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 	}
 
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
-	items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "What was the exact release-2026-08 error?")
+	items := runtime.contextSessions.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "What was the exact release-2026-08 error?")
 
 	wantMessage := "message:" + oldMessage.ID
 	wantEvent := "event:" + previousEvent.ID
@@ -91,7 +91,7 @@ func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
-	if items := runtime.retrieveSessionHistory(context.Background(), "missing", "conv", "release-42"); items != nil {
+	if items := runtime.contextSessions.retrieveSessionHistory(context.Background(), "missing", "conv", "release-42"); items != nil {
 		t.Fatalf("missing run returned history: %#v", items)
 	}
 
@@ -102,7 +102,7 @@ func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "the and what please"); items != nil {
+	if items := runtime.contextSessions.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "the and what please"); items != nil {
 		t.Fatalf("noise-only query returned history: %#v", items)
 	}
 	events, err := fixtureStore.ListRunEvents(run.ID)
@@ -123,7 +123,7 @@ func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
 	}
 	want := errors.New("message history unavailable")
 	runtime := newRuntimeForTest(RuntimeOptions{Store: sessionHistoryErrorStore{Store: fixtureStore, messageErr: want}}, newLocalFallbackOpenAIClientForTest())
-	if items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "recover release-42"); items != nil {
+	if items := runtime.contextSessions.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "recover release-42"); items != nil {
 		t.Fatalf("failed search returned history: %#v", items)
 	}
 	events, err := fixtureStore.ListRunEvents(run.ID)
