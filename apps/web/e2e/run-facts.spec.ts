@@ -73,31 +73,49 @@ test("Agent changes preserve accepted Run facts and only configure the next subm
 });
 
 for (const mode of ["single", "multi_agent", "autonomous"] as const) {
-  test(`history restores frozen ${mode} mode despite empty, unknown or failed Stage reads`, async ({page, request}, info) => {
-    await page.goto("/workspace");
-    const workspace = await defaultWorkspaceID(page);
-    const agent = await createWorkspaceChatAgent(page, workspace, `Frozen ${mode}`);
-    const headers = {"X-Workspace-ID":workspace, Origin:"http://127.0.0.1:13000"};
-    const created = await request.post(`${api}/api/conversations`, {headers, data:{title:`Frozen ${mode} fixture`}});
-    expect(created.status()).toBe(201);
-    const conversation = await created.json();
-    const seeded = await request.post(`${api}/api/chat`, {headers, data:{conversation_id:conversation.id, agent_id:agent.id, mode, message:"Frozen mode recovery fixture"}});
-    expect(seeded.ok()).toBe(true);
-    expect(await seeded.text()).not.toContain("event: error");
-    const runs = await (await request.get(`${api}/api/runs`, {headers})).json();
-    const run = runs.find((item:{conversation_id:string}) => item.conversation_id === conversation.id);
-    expect(run.mode).toBe(mode);
-    expect(run).not.toHaveProperty("runtime_snapshot");
-    const label = mode === "single" ? "Direct Single agent" : mode === "multi_agent" ? "Coordinate Multi-agent" : "Autonomous Bounded loop";
-    for (const degradation of ["empty", "unknown", "failed"]) {
-      await page.route(`**/api/runs/${run.id}/collaboration_steps`, route => route.fulfill(degradation === "failed"
+  for (const degradation of ["empty", "unknown", "failed"] as const) {
+    test(`history restores frozen ${mode} mode despite ${degradation} Stage reads`, async ({page, request}, info) => {
+      await page.goto("/workspace");
+      const workspace = await defaultWorkspaceID(page);
+      const agent = await createWorkspaceChatAgent(page, workspace, `Frozen ${mode} ${degradation} ${info.repeatEachIndex}`);
+      const headers = {"X-Workspace-ID":workspace, Origin:"http://127.0.0.1:13000"};
+      const created = await request.post(`${api}/api/conversations`, {headers, data:{title:`Frozen ${mode} fixture`}});
+      expect(created.status()).toBe(201);
+      const conversation = await created.json();
+      const seeded = await request.post(`${api}/api/chat`, {headers, data:{conversation_id:conversation.id, agent_id:agent.id, mode, message:"Frozen mode recovery fixture"}});
+      expect(seeded.ok()).toBe(true);
+      expect(await seeded.text()).not.toContain("event: error");
+      const runs = await (await request.get(`${api}/api/runs`, {headers})).json();
+      const run = runs.find((item:{conversation_id:string}) => item.conversation_id === conversation.id);
+      expect(run.mode).toBe(mode);
+      expect(run).not.toHaveProperty("runtime_snapshot");
+      const label = mode === "single" ? "Direct Single agent" : mode === "multi_agent" ? "Coordinate Multi-agent" : "Autonomous Bounded loop";
+      // Keep one fault and one interceptor per context, including explicit reload.
+      // Projection and messages remain real; no routing-pattern churn during reads.
+      const stageURL = `${api}/api/runs/${run.id}/collaboration_steps`;
+      const projectionURL = `${api}/api/runs/${run.id}/projection`;
+      await page.route(stageURL, route => route.fulfill(degradation === "failed"
         ? {status:503, json:{error:"Synthetic Stage read failure"}}
-        : {json:degradation === "empty" ? [] : [{id:"unknown", run_id:run.id, role:"unknown-role", status:"completed", output:""}]}), {times:1});
-      await page.goto(`/workspace?conversation=${conversation.id}`);
-      await expect(page.getByRole("link", {name:"View trace", exact:true})).toHaveAttribute("href", `/runs/${run.id}`);
-      await expect(page.getByRole("region", {name:"Chat mode"}).getByRole("button", {name:label, exact:true})).toHaveClass("active");
-      if (degradation === "failed") await expect(page.locator(".composer .error")).toContainText("Failed to load run trace");
-    }
-    await info.attach(`frozen-${mode}-evidence.json`, {contentType:"application/json", body:JSON.stringify({workspace_id:workspace, conversation_id:conversation.id, run, checks:["empty Stage list", "unknown Stage role", "failed Stage read", "page reload"], limitations:["Stage reads deliberately degraded", "real Run/Snapshot persisted through production composition", "controlled provider"]}, null, 2)});
-  });
+        : {json:degradation === "empty" ? [] : [{id:"unknown", run_id:run.id, role:"unknown-role", status:"completed", output:""}]}));
+      for (const navigation of ["open", "reload"] as const) {
+        await test.step(`${navigation} with ${degradation} Stage reads`, async () => {
+          const reads = Promise.all([
+            page.waitForResponse(response => response.url() === stageURL && response.request().method() === "GET", {timeout:15_000}),
+            page.waitForResponse(response => response.url() === projectionURL && response.request().method() === "GET", {timeout:15_000})
+          ]);
+          if (navigation === "open") await page.goto(`/workspace?conversation=${conversation.id}`);
+          else await page.reload();
+          const [stages, projection] = await reads;
+          expect(stages.status()).toBe(degradation === "failed" ? 503 : 200);
+          expect(projection.status()).toBe(200);
+          expect((await projection.json()).run).toMatchObject({run_id:run.id, status:run.status});
+          await expect(page.getByRole("link", {name:"View trace", exact:true})).toHaveAttribute("href", `/runs/${run.id}`);
+          await expect(page.getByRole("region", {name:"Chat mode"}).getByRole("button", {name:label, exact:true})).toHaveClass("active");
+          await expect(page.getByText("Frozen mode recovery fixture", {exact:true})).toBeVisible();
+          if (degradation === "failed") await expect(page.locator(".composer .error")).toContainText("Failed to load run trace");
+        });
+      }
+      await info.attach(`frozen-${mode}-${degradation}-evidence.json`, {contentType:"application/json", body:JSON.stringify({workspace_id:workspace, conversation_id:conversation.id, run, degradation, repeat:info.repeatEachIndex, checks:["initial navigation and explicit reload", "real Projection response matches persisted Run", "frozen mode and messages survive degraded Stage read"], limitations:["only Stage reads are injected", "real Run/Snapshot persisted through production composition", "controlled provider"]}, null, 2)});
+    });
+  }
 }
