@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
+import type { RunEvent } from "../lib/api-types";
 import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 // Failure inventory: withdrawal must affect unfiltered search after reload;
 // stale edits must retain the draft and show an actionable conflict, not clobber
-// a newer document. Exercise the real UI, API, index and disposable Postgres.
+// a newer document. Late title telemetry may append, but cannot rewrite evidence
+// already observed. Exercise the real UI, API, index and disposable Postgres.
 test("Document lifecycle edits are durable, conditional and gate retrieval", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
@@ -19,13 +21,26 @@ test("Document lifecycle edits are durable, conditional and gate retrieval", asy
   expect(created.status()).toBe(201);
   const original = await created.json();
   await createWorkspaceChatAgent(page, workspace, `Lifecycle reader ${testInfo.repeatEachIndex}`, { retrieval_enabled: true, tools: ["knowledge_search", "knowledge_read"] });
-  await page.getByPlaceholder("Ask AgentFlow anything...").fill("rag-filter-gate ROLLBACK-742");
+  await page.getByPlaceholder("Ask AgentFlow anything...").fill("rag-filter-gate ROLLBACK-742 lifecycle-title-gate");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   const trace = page.getByRole("link", { name: "View trace", exact: true });
   await expect(trace).toBeVisible();
   const runID = (await trace.getAttribute("href"))!.split("/").at(-1)!;
   await expect.poll(async () => (await (await page.request.get(`${api}/api/runs/${runID}`, { headers })).json()).status).toBe("completed");
-  const replayBefore = await (await page.request.get(`${api}/api/runs/${runID}/replay`, { headers })).json();
+  // The real title request starts after run.completed; hold only its provider
+  // response so the two Replay reads deterministically straddle its settlement.
+  const readReplay = async () => {
+    const response = await page.request.get(`${api}/api/runs/${runID}/replay`, { headers });
+    expect(response.status()).toBe(200);
+    return response.json();
+  };
+  await expect.poll(async () => (await readReplay()).run_events.at(-1)?.type).toBe("model.request_prepared");
+  const replayBefore = await readReplay();
+  const pendingTitle: RunEvent = replayBefore.run_events.at(-1);
+  expect(pendingTitle.type).toBe("model.request_prepared");
+  expect(pendingTitle.payload.record_id).toEqual(expect.any(String));
+  const observedSequence = pendingTitle.sequence;
+  expect(replayBefore.run.status).toBe("completed");
   expect(replayBefore.runtime_snapshot.knowledge_scope).toBeUndefined();
   expect(replayBefore.run_events.some((event: { type: string; payload: { tool_name?: string } }) => event.type === "tool.completed" && event.payload.tool_name === "knowledge_read")).toBe(true);
   await page.getByRole("button", { name: "Knowledge", exact: true }).click();
@@ -47,9 +62,20 @@ test("Document lifecycle edits are durable, conditional and gate retrieval", asy
     return response.json();
   };
   expect((await search()).items).toEqual([]);
-  const replayAfter = await page.request.get(`${api}/api/runs/${runID}/replay`, { headers });
-  expect(replayAfter.status()).toBe(200);
-  expect((await replayAfter.json()).run_events).toEqual(replayBefore.run_events);
+  expect((await page.request.post(`${api}/__fixture/release`)).status()).toBe(204);
+  await expect.poll(async () => (await readReplay()).run_events.some((event: { type: string; payload: { record_id?: string } }) =>
+    event.type === "model.attempt_finished" && event.payload.record_id === pendingTitle.payload.record_id)).toBe(true);
+  const replayAfter = await readReplay();
+  // A completed Run can still receive title/Memory telemetry. Compare the
+  // observed immutable prefix, not the length of an append-only event stream.
+  expect(replayAfter.run_events.filter((event: RunEvent) => event.sequence <= observedSequence)).toEqual(replayBefore.run_events);
+  expect(replayAfter.runtime_snapshot).toEqual(replayBefore.runtime_snapshot);
+  expect(replayAfter.run).toMatchObject({ id: runID, status: "completed" });
+  const appendedEvents: RunEvent[] = replayAfter.run_events.filter((event: RunEvent) => event.sequence > observedSequence);
+  expect(appendedEvents).toEqual([expect.objectContaining({
+    type: "model.attempt_finished",
+    payload: expect.objectContaining({ record_id: pendingTitle.payload.record_id, model_call_id: pendingTitle.payload.model_call_id, status: "completed" })
+  })]);
   await page.reload();
   await page.getByRole("button", { name: "Knowledge", exact: true }).click();
   await page.getByRole("tab", { name: /^Documents/ }).click();
@@ -78,8 +104,9 @@ test("Document lifecycle edits are durable, conditional and gate retrieval", asy
   await expect(lifecycle).toContainText("Expired");
   expect(errors).toEqual([]);
   await testInfo.attach("document-lifecycle-evidence.json", { body: JSON.stringify({ schema: "document-lifecycle-browser-v1", workspace, original, withdrawn, expired, run_id: runID,
-    outcomes: ["withdrawal persists across reload", "unfiltered recall excludes withdrawn/expired rows", "stale write rejected without discarding draft", "embedding count unchanged"],
-    limitations: ["synthetic documents; production Go API + disposable Postgres", "controlled embedding transport; no live model quality claim"] }, null, 2), contentType: "application/json" });
+    observed_sequence: observedSequence, pending_title_request: pendingTitle, appended_events: appendedEvents,
+    outcomes: ["withdrawal persists across reload", "unfiltered recall excludes withdrawn/expired rows", "stale write rejected without discarding draft", "embedding count unchanged", "observed historical events and Snapshot unchanged despite late title telemetry"],
+    limitations: ["synthetic documents; production Go API + disposable Postgres", "controlled title response and embedding transport; no live model quality claim"] }, null, 2), contentType: "application/json" });
 });
 
 test("A delayed lifecycle save cannot replace another selected document", async ({ page }, testInfo) => {
