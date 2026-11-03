@@ -72,10 +72,18 @@ post-construction setters. `app` installs Task State, Artifact and Knowledge bin
 Stage checkpoint persistence belongs to the injected provider; `RuntimeStore`
 requires only Tool-effect listing for its direct recovery checks. Test fixtures
 retain explicit services and add known defaults only for omitted dependencies.
+Harness registration declares automatic inclusion beside each Binding; the
+compiled names serve Snapshot capture and current authorization. Installation
+does not grant Workspace access or activate unbound Skills.
 
 The provider adapter sends individual requests; it cannot create a Tool Executor
 or redefine persistence, authorization or completion. Skills enter through the
 existing Context and Tool paths, not a second permission or workflow system.
+
+`turnContextSessions` assembles Context source loaders from narrow read/consume
+capabilities. `runtimeTurnModel` retains routing, compaction timing and model/Tool
+dispatch; `contextassembly` retains selection, trust and token budgets. Mutable
+loaders re-read sources for each request, including Tool continuations.
 
 ## Main Call Paths
 

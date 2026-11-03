@@ -114,6 +114,17 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	f.requests++
 	f.mu.Unlock()
 	if strings.HasPrefix(input.Messages[0].Content, "Generate a concise conversation title.") {
+		for _, message := range input.Messages {
+			if message.Role != "user" || !strings.Contains(message.Content, "lifecycle-title-gate") {
+				continue
+			}
+			select {
+			case <-gate:
+			case <-r.Context().Done():
+				return
+			}
+			break
+		}
 		_ = json.NewEncoder(w).Encode(browserCompletion("Fixture conversation", "stop", nil, nil))
 		return
 	}

@@ -10,18 +10,42 @@ import (
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
-func (r *Runtime) finishCollaboration(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, task, plan, worker string) error {
-	reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, plan, worker)
-	review, err := r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(task))
-	if err != nil {
-		return err
+// Both entry points use the same inputs and ordering; only recovery supplies
+// committed Stages. Admission and checkpoint restoration stay with the caller.
+func (r *Runtime) runCollaborationTail(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, catalog *tool.Catalog, task, plan, reason string, completed []domain.CollaborationStep) error {
+	workerStep, found := latestCompletedCollaborationStep(completed, "worker")
+	worker := boundedWorkerHandoff(workerStep)
+	var err error
+	if !found {
+		input := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)", task, plan, prepared.WorkerAgent.Name, prepared.WorkerAgent.ID)
+		if reason != "" {
+			input += "\nSelection reason: " + reason
+		}
+		worker, err = r.runWorkerStage(ctx, events, prepared, catalog, input, userInputRetrievalQuery(task))
+		if err != nil {
+			return err
+		}
 	}
-	finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, plan, worker, review)
-	final, err := r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(task))
-	if err != nil {
-		return err
+	reviewStep, found := latestCompletedCollaborationStep(completed, "reviewer")
+	review := reviewStep.Output
+	if !found {
+		input := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, plan, worker)
+		review, err = r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), input, userInputRetrievalQuery(task))
+		if err != nil {
+			return err
+		}
+	}
+	finalStep, found := latestCompletedCollaborationStep(completed, "finalizer")
+	final := finalStep.Output
+	if !found {
+		input := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, plan, worker, review)
+		final, err = r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), input, userInputRetrievalQuery(task))
+		if err != nil {
+			return err
+		}
 	}
 	r.emitFinalDeltas(ctx, prepared.Run.ID, final, events)
 	return nil

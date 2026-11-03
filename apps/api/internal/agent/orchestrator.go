@@ -297,14 +297,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 		log.Printf("collaboration_router_decision run_id=%s router_mode=%s selected_agent_id=%s selected_agent_name=%q score=%d confidence=%.2f reason=%q", run.ID, route.Mode, route.Agent.ID, route.Agent.Name, route.Score, route.Confidence, route.Reason)
 
 		prepared := PreparedCollaborationRun{WorkerAgent: route.Agent, Run: run}
-		workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)\nSelection reason: %s", task, plan, route.Agent.Name, route.Agent.ID, route.Reason)
-		worker, err := r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(task))
-		if err != nil {
-			errs <- err
-			return
-		}
-
-		if err := r.finishCollaboration(executionCtx, events, prepared, task, plan, worker); err != nil {
+		if err := r.runCollaborationTail(executionCtx, events, prepared, restored.catalog, task, plan, route.Reason, nil); err != nil {
 			errs <- err
 			return
 		}

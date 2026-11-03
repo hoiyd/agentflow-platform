@@ -18,18 +18,18 @@ import (
 
 func TestIsolatedTurnContextExcludesConversationHistory(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	model := runtimeTurnModel{runtime: &Runtime{}}
-	ctx, _ := model.withContextSession(context.Background(), turn.Request{
+	ctx, _ := (turnContextSessions{}).withSession(context.Background(), turn.Request{
 		History: []domain.Message{{ID: "message-old", Role: "user", Content: "private conversation history"}},
 		Input:   "explicit worker task",
 		Context: turn.Context{
+			Isolated: true,
 			Memories: []domain.RetrievedMemory{{Memory: domain.Memory{ID: "memory-1", Content: "explicit memory"}}},
 			Chunks: []domain.RetrievedDocumentChunk{{
 				Document: domain.Document{ID: "document-1", Title: "Explicit knowledge"},
 				Chunk:    domain.DocumentChunk{ID: "chunk-1", Content: "explicit knowledge"},
 			}},
 		},
-	}, &snapshot, true)
+	}, &snapshot)
 	pack, err := contextassembly.Assemble(ctx, contextassembly.Request{Model: "test", Messages: []contextassembly.Message{
 		{Source: contextassembly.SourceSystem, Role: "system", Content: "worker instructions"},
 		{Source: contextassembly.SourceCurrentInput, Role: "user", Content: "explicit worker task"},

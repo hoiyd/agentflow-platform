@@ -28,6 +28,13 @@ test("Skill invocation intent and dependency readiness survive persistence and s
   expect(invalid.status()).toBe(400);
   expect(await invalid.text()).toContain("skill_dependency_missing");
   const runs = [];
+  // Replay restores accepted Run facts, not the next submission's Agent draft.
+  // Select this fixture explicitly; earlier cases may have created other Agents.
+  const selectAgent = async () => {
+    await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: "Direct Single agent", exact: true }).click();
+    await page.getByRole("button", { name: /^Agent: / }).click();
+    await page.getByRole("option", { name: agent.name, exact: true }).click();
+  };
   await page.getByRole("button", { name: "Tools", exact: true }).click();
   await page.getByRole("checkbox", { name: "Allow calculator in this Workspace", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Allow calculator in this Workspace", exact: true })).not.toBeChecked();
@@ -49,6 +56,7 @@ test("Skill invocation intent and dependency readiness survive persistence and s
     ["Single agent", false, "binding"]
   ] as const) {
     await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    await selectAgent();
     await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: new RegExp(mode) }).click();
     await page.getByPlaceholder("Ask AgentFlow anything...").fill(`${explicit ? "/skill:manual-review " : ""}skill-policy-gate-${marker}: review a report`);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -84,7 +92,7 @@ test("Skill invocation intent and dependency readiness survive persistence and s
   // Change the binding through the real dialog; new Runs change behavior while
   // the already recorded Runs retain their original frozen policy.
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
-  await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: /Single agent/ }).click();
+  await selectAgent();
   await page.getByRole("button", { name: "Configure", exact: true }).click();
   await page.getByRole("button", { name: "Invocation for auto-review: Explicit only", exact: true }).click();
   await page.getByRole("option", { name: "Automatic", exact: true }).click();
@@ -92,7 +100,7 @@ test("Skill invocation intent and dependency readiness survive persistence and s
   await page.getByRole("button", { name: "OK", exact: true }).click();
   await page.reload();
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
-  await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: /Single agent/ }).click();
+  await selectAgent();
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("skill-policy-gate-auto: review a report");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page.locator(".message.assistant").last()).toContainText("Review includes verified facts and open questions.");

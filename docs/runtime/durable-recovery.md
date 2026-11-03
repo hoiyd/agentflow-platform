@@ -255,6 +255,9 @@ returns an error.
   at their existing durable Stage boundaries. Single resumes only a bound
   clarification continuation; it does not restart an arbitrary interrupted Turn.
   Multi-Agent plan approval continues through Continue, not ordinary Resume.
+  Continue and Resume share Worker/Reviewer/Finalizer inputs and ordering.
+  Resume uses the persisted selected Worker and typed selection reason; older
+  records without that evidence omit the reason rather than rerouting.
 - The checkpoint provider captures AgentFlow internal state. Business-specific
   external compensation handlers are not implemented.
 - Multi-instance Worker takeover still requires Lease/Heartbeat/Fencing or a

@@ -15,8 +15,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
-	"agentflow-platform/apps/api/internal/rag"
-	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/progress"
@@ -118,7 +116,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		output := run.CompletionContract.Output
 		ctx = provider.WithStructuredOutput(ctx, provider.StructuredOutput{Mode: output.Mode, Version: output.Version, ContractHash: run.CompletionContract.Hash, Schema: schema})
 	}
-	ctx, compaction := m.withContextSession(ctx, request, &assemblySnapshot, isolatedContext)
+	ctx, compaction := m.runtime.contextSessions.withSession(ctx, request, &assemblySnapshot)
 	if request.ModelMode == turn.ModelModeText {
 		result, executeErr := m.executeText(ctx, request, route.Client)
 		if executeErr == nil || isolatedContext || failure.Describe(executeErr).Code != "context_length_exceeded" {
@@ -132,7 +130,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		if compactErr != nil || advanced == nil || advanced.Generation <= beforeGeneration {
 			return result, executeErr
 		}
-		retryCtx, _ := m.withContextSession(ctx, request, &assemblySnapshot, isolatedContext)
+		retryCtx, _ := m.runtime.contextSessions.withSession(ctx, request, &assemblySnapshot)
 		return m.executeText(retryCtx, request, route.Client)
 	}
 	options := m.runtime.toolExecutionOptions
@@ -146,97 +144,6 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	// Conversation history is trimmed from this new Run's Context.
 	options.PrivateContext = options.PrivateContext || snapshot.PlanOrigin != nil || snapshot.ProjectGuidance != nil
 	return m.executeStream(ctx, request, route.Client, effectiveToolSchema(request.Role, snapshot), options, emit)
-}
-
-func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedContext bool) (context.Context, *domain.ContextCompaction) {
-	history := request.History
-	if isolatedContext {
-		history = nil
-	}
-	var compaction *domain.ContextCompaction
-	if !isolatedContext && snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
-		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {
-			compaction = &latest
-		}
-	}
-	var historySearch []domain.RetrievedSessionHistory
-	if !isolatedContext {
-		historySearch = m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
-	}
-	session := contextassembly.Session{
-		ProjectGuidance: snapshot.ProjectGuidance,
-		AgentID:         request.Agent.ID,
-		Config:          snapshot.ContextAssembly, Sink: request.Sink,
-		History: history, CurrentInput: request.Input,
-		SkillInput: request.SkillInput,
-		Memories:   request.Context.Memories, Knowledge: request.Context.Chunks,
-		HistorySearch: historySearch,
-		Compaction:    compaction,
-	}
-	if snapshot.ProjectGuidance != nil {
-		session.ValidateProjectGuidance = func() error {
-			run, ok, err := m.runtime.store.GetRun(request.RunID)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return fmt.Errorf("project instructions Run is unavailable")
-			}
-			return m.runtime.validateProjectGuidance(ctx, run)
-		}
-	}
-	if !isolatedContext && m.runtime.inbox != nil {
-		session.LoadSteering = func() ([]domain.RunInput, error) {
-			return m.runtime.inbox.ConsumeSteering(ctx, request.RunID, request.StepID, request.TurnID)
-		}
-	}
-	if request.Role != "planner" && (len(request.Agent.Skills) > 0 || strings.HasPrefix(strings.TrimSpace(request.SkillInput), "/skill:")) {
-		if bound, err := skill.Bound(snapshot, request.Agent.ID); err == nil {
-			for _, item := range bound {
-				session.Skills = append(session.Skills, skill.Metadata(item))
-			}
-		}
-		session.LoadSkills = func() ([]domain.SkillSnapshot, error) { return m.runtime.skillService.Active(ctx, snapshot) }
-	}
-	if !isolatedContext && m.runtime.taskStates != nil {
-		session.LoadTaskState = func() (domain.TaskState, bool, error) {
-			return m.runtime.taskStates.Get(request.ConversationID)
-		}
-	}
-	if len(m.runtime.knowledgeTools) > 0 {
-		session.LoadKnowledgeReads = func() ([]domain.KnowledgeToolReadResult, error) {
-			run, ok, err := m.runtime.store.GetRun(request.RunID)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, eligibility.ErrSourceUnavailable
-			}
-			events, err := m.runtime.store.ListRunEvents(request.RunID)
-			if err != nil {
-				return nil, err
-			}
-			// Assembly runs again for every Tool round. Recheck even this Turn's
-			// paired observations before sending a continuation to the provider.
-			if err := eligibility.ValidateSources(run.RuntimeSnapshot, run.WorkspaceID, rag.RunCitationReservations(events), func(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
-				return m.runtime.store.GetDocumentInWorkspace(run.WorkspaceID, id)
-			}); err != nil {
-				return nil, err
-			}
-			reads := []domain.KnowledgeToolReadResult{}
-			for _, item := range events {
-				// This Turn already receives its own paired Tool observations.
-				if item.TurnID == request.TurnID {
-					continue
-				}
-				if read, ok := rag.KnowledgeReadFromEvent(item); ok {
-					reads = append(reads, read)
-				}
-			}
-			return reads, nil
-		}
-	}
-	return contextassembly.WithSession(ctx, session), compaction
 }
 
 func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, schema domain.ToolSchemaConfig, options tool.ExecutorOptions, emit func(turn.ModelEvent)) (turn.Result, error) {
