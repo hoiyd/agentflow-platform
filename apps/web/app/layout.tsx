@@ -38,6 +38,7 @@ import "./styles/workbench/trace-detail.css";
 import "./styles/workbench/evidence-comparison.css";
 import "./styles/workbench/runtime-diagnostics.css";
 import "./styles/workbench/recovery-summary.css";
+import "./styles/workbench/file-undo.css";
 import "./styles/workbench/task-state-replay.css";
 import "./styles/workbench/operator-attention.css";
 import "./styles/knowledge/layout.css";

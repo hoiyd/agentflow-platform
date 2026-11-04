@@ -95,7 +95,30 @@ type EffectReconciliationContext struct {
 type SideEffectReconciliation struct {
 	RetryWithSameKey func(context.Context, EffectReconciliationContext) (any, error)
 	Compensate       func(context.Context, EffectReconciliationContext) error
+	// Preview is required to undo an already committed effect. Verification is
+	// query-only: it must never repeat the compensation's external write.
+	PreviewCompensation func(context.Context, EffectReconciliationContext) (CompensationPreview, error)
+	VerifyCompensation  func(context.Context, EffectReconciliationContext) error
 }
+
+// CompensationPreview contains metadata only, never the retained before image.
+type CompensationPreview struct {
+	Available         bool      `json:"available"`
+	UnavailableReason string    `json:"unavailable_reason,omitempty"`
+	Resource          string    `json:"resource,omitempty"`
+	BeforeHash        string    `json:"before_hash,omitempty"`
+	AfterHash         string    `json:"after_hash,omitempty"`
+	BeforeBytes       int       `json:"before_bytes"`
+	AfterBytes        int       `json:"after_bytes"`
+	ExpiresAt         time.Time `json:"expires_at"`
+}
+
+// CompensationRejected certifies that no compensation publication was attempted.
+// It permits restoring a committed receipt after a pre-write conflict only.
+type CompensationRejected struct{ Err error }
+
+func (e *CompensationRejected) Error() string { return e.Err.Error() }
+func (e *CompensationRejected) Unwrap() error { return e.Err }
 
 type Binding struct {
 	Descriptor        Descriptor

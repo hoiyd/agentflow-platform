@@ -112,11 +112,34 @@ func ReconcileToolEffect(ctx context.Context, catalog *tool.Catalog, target effe
 	}
 	record.Version = max(record.Version, 1)
 	external := command.Action == domain.ToolEffectRetrySameKey || command.Action == domain.ToolEffectCompensate
-	if record.Status != domain.ToolEffectNeedsReconciliation && !(record.Status == domain.ToolEffectReconciling && !external) {
+	committedUndo := record.Status == domain.ToolEffectCommitted && command.Action == domain.ToolEffectCompensate
+	if !committedUndo && record.Status != domain.ToolEffectNeedsReconciliation && !(record.Status == domain.ToolEffectReconciling && !external) {
 		return ToolEffectReconciliationOutcome{}, &ReconciliationError{Code: ReconciliationConflict, Message: "tool effect is not awaiting reconciliation"}
 	}
 	if command.ExpectedVersion != record.Version {
 		return ToolEffectReconciliationOutcome{}, &ReconciliationError{Code: ReconciliationConflict, Message: fmt.Sprintf("tool effect version conflict: expected=%d actual=%d", command.ExpectedVersion, record.Version)}
+	}
+	if committedUndo {
+		preview, err := PreviewCompensation(ctx, catalog, record)
+		if err != nil {
+			return ToolEffectReconciliationOutcome{}, err
+		}
+		if !preview.Available {
+			return ToolEffectReconciliationOutcome{}, &ReconciliationError{Code: ReconciliationConflict, Message: preview.UnavailableReason}
+		}
+	}
+	if command.Action == domain.ToolEffectVerifyCompensation {
+		binding, err := authorizedReconciliationBinding(catalog, record, command.Action)
+		if err != nil {
+			return ToolEffectReconciliationOutcome{}, err
+		}
+		timeout := binding.Policy.Timeout
+		if timeout <= 0 || timeout > tool.DefaultExecutionTimeout {
+			timeout = tool.DefaultExecutionTimeout
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 
 	if external {
@@ -162,6 +185,10 @@ func ReconcileToolEffect(ctx context.Context, catalog *tool.Catalog, target effe
 		}
 		if external && (errors.Is(operationErr, context.DeadlineExceeded) || errors.Is(operationErr, context.Canceled)) {
 			nextStatus = domain.ToolEffectReconciling
+		}
+		var rejected *tool.CompensationRejected
+		if committedUndo && errors.As(operationErr, &rejected) {
+			nextStatus, result = domain.ToolEffectCommitted, record.Result
 		}
 	} else if command.Action == domain.ToolEffectConfirmFailed {
 		errorMessage = command.Reason
@@ -223,7 +250,7 @@ func executeReconciliationAction(ctx context.Context, catalog *tool.Catalog, rec
 		return domain.ToolEffectCommitted, encoded, err
 	case domain.ToolEffectConfirmFailed:
 		return domain.ToolEffectFailed, nil, nil
-	case domain.ToolEffectRetrySameKey, domain.ToolEffectCompensate:
+	case domain.ToolEffectRetrySameKey, domain.ToolEffectCompensate, domain.ToolEffectVerifyCompensation:
 		binding, err := authorizedReconciliationBinding(catalog, record, command.Action)
 		if err != nil {
 			return "", nil, err
@@ -233,6 +260,9 @@ func executeReconciliationAction(ctx context.Context, catalog *tool.Catalog, rec
 			CompensationKey: "tool_compensation_" + hashExecutionIdentity(record.IdempotencyKey),
 			RunID:           record.RunID, StageID: record.StageID, TurnID: record.TurnID,
 			ToolCallID: record.ToolCallID, ToolName: record.ToolName, RequestHash: record.RequestHash,
+		}
+		if command.Action == domain.ToolEffectVerifyCompensation {
+			return domain.ToolEffectCompensated, nil, callEffectCompensation(ctx, binding.Reconciliation.VerifyCompensation, recovery)
 		}
 		if command.Action == domain.ToolEffectRetrySameKey {
 			if !binding.Descriptor.SideEffect.RetryWithSameKey || binding.Reconciliation.RetryWithSameKey == nil {
@@ -272,10 +302,19 @@ func reconciliationBinding(catalog *tool.Catalog, record domain.ToolEffectRecord
 }
 
 func availableReconciliationActions(catalog *tool.Catalog, effect domain.ToolEffectSummary) []domain.ToolEffectReconciliationAction {
+	if effect.Status == domain.ToolEffectCommitted {
+		binding, err := authorizedReconciliationBinding(catalog, domain.ToolEffectRecord{ToolName: effect.ToolName, DefinitionRevision: effect.DefinitionRevision}, domain.ToolEffectCompensate)
+		if err == nil && binding.Reconciliation.PreviewCompensation != nil {
+			return []domain.ToolEffectReconciliationAction{domain.ToolEffectCompensate}
+		}
+	}
 	if effect.Status != domain.ToolEffectNeedsReconciliation && effect.Status != domain.ToolEffectReconciling {
 		return []domain.ToolEffectReconciliationAction{}
 	}
 	actions := []domain.ToolEffectReconciliationAction{domain.ToolEffectConfirmCommitted, domain.ToolEffectConfirmFailed}
+	if _, err := authorizedReconciliationBinding(catalog, domain.ToolEffectRecord{ToolName: effect.ToolName, DefinitionRevision: effect.DefinitionRevision}, domain.ToolEffectVerifyCompensation); err == nil {
+		actions = append(actions, domain.ToolEffectVerifyCompensation)
+	}
 	if effect.Status == domain.ToolEffectReconciling {
 		return actions
 	}
@@ -357,7 +396,7 @@ func validateReconciliationCommand(idempotencyKey string, command ToolEffectReco
 		return &ReconciliationError{Code: ReconciliationInvalid, Message: "result is only valid for confirm_committed"}
 	}
 	switch command.Action {
-	case domain.ToolEffectConfirmCommitted, domain.ToolEffectConfirmFailed, domain.ToolEffectRetrySameKey, domain.ToolEffectCompensate:
+	case domain.ToolEffectConfirmCommitted, domain.ToolEffectConfirmFailed, domain.ToolEffectRetrySameKey, domain.ToolEffectCompensate, domain.ToolEffectVerifyCompensation:
 	default:
 		return &ReconciliationError{Code: ReconciliationInvalid, Message: "unsupported reconciliation action"}
 	}

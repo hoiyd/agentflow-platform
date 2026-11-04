@@ -30,8 +30,9 @@ roots are read-only; this is not cross-process filesystem CAS or exactly-once.
 The root must have no group/other permission bits (normally `0700`); created files
 are `0600`. Only flat, non-hidden `.md`, `.txt`, `.json`, and `.csv` names are
 accepted. Existing executable, binary, linked, sensitive, or oversized targets
-cannot be updated. Subdirectories, shared source-tree updates, undo and deletion
-are excluded. Writable roots cannot overlap another Workspace's configured roots.
+cannot be updated. Subdirectories, shared source-tree updates and deletion are
+excluded. [Conflict-safe Undo](file-undo.md) is separately opt-in for existing
+report modifications. Writable roots cannot overlap another Workspace's configured roots.
 Filenames cannot contain control characters or recognized credential values.
 Existing read-only configurations do not gain write access.
 Keep operational configuration and credentials outside output roots; the root-map
@@ -118,7 +119,8 @@ Unpublished staging files are cleaned up on ordinary completion/cancellation and
 excluded from read Tools. A hard process kill before publication may leave hidden
 staging files; they are not exposed or automatically replayed. After settling the
 related receipts, an operator may remove orphan `.agentflow-*.tmp` files offline.
-This is not a filesystem retention/quota service or automatic undo.
+This is not a general filesystem retention/quota service or automatic undo;
+explicitly retained report changes use the [Undo contract](file-undo.md).
 
 The standard redacted/bounded Tool argument trace can include submitted text;
 hash-only receipts do not promise that prompts/arguments are never retained.

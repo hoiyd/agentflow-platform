@@ -104,6 +104,9 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	if command.Action == domain.ToolEffectCompensate || command.Action == domain.ToolEffectVerifyCompensation {
+		command.Actor = workspaceOwner(r)
+	}
 	outcome, err := reconciliation.ReconcileToolEffect(r.Context(), catalog, scoped, run, idempotencyKey, command)
 	if err != nil {
 		writeToolEffectFailure(w, r, err)

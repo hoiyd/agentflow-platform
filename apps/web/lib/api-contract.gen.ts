@@ -795,6 +795,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/tool-effects/{idempotency_key}/compensation-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getToolCompensationPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/tool-effects/{idempotency_key}/reconcile": {
         parameters: {
             query?: never;
@@ -2184,8 +2203,19 @@ export interface components {
             expires_at?: string;
             expired?: boolean;
         };
+        CompensationPreview: {
+            available: boolean;
+            unavailable_reason?: string;
+            resource?: string;
+            before_hash?: string;
+            after_hash?: string;
+            before_bytes: number;
+            after_bytes: number;
+            /** Format: date-time */
+            expires_at: string;
+        };
         /** @enum {string} */
-        ToolEffectReconciliationAction: "confirm_committed" | "confirm_failed" | "retry_with_same_key" | "compensate";
+        ToolEffectReconciliationAction: "confirm_committed" | "confirm_failed" | "retry_with_same_key" | "compensate" | "verify_compensation";
         ToolEffect: {
             idempotency_key: string;
             /** Format: int64 */
@@ -4042,6 +4072,33 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getToolCompensationPreview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current eligibility and metadata only; never retained before-image text. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompensationPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };

@@ -1,0 +1,73 @@
+.file-undo-panel {
+  margin: 0 0 20px;
+  border-block: 1px solid var(--border);
+  padding: 14px 0;
+}
+.file-undo-panel h2,
+.file-undo-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 680;
+}
+.file-undo-panel h2,
+.file-undo-row,
+.file-undo-row > div,
+.file-undo-dialog > header,
+.file-undo-dialog > footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.file-undo-row {
+  justify-content: space-between;
+  min-height: 48px;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+.file-undo-panel header { margin-bottom: 12px; }
+.file-undo-row strong { font-size: 13px; }
+.file-undo-row code {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+.file-undo-row > div { min-width: 0; }
+.file-undo-row > span { color: var(--success); font-size: 12px; }
+.file-undo-row button { flex: none; }
+.file-undo-row button,
+.file-undo-dialog > footer button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.file-undo-dialog {
+  width: min(660px, calc(100vw - 96px));
+  margin: 10vh auto auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 24px;
+  background: #fff;
+  color: var(--ink);
+}
+.file-undo-dialog::backdrop { background: rgb(20 27 37 / 35%); }
+.file-undo-dialog > header { justify-content: space-between; margin-bottom: 22px; }
+.file-undo-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.file-undo-resource { display: block; overflow-wrap: anywhere; font-size: 14px; }
+.file-undo-versions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 18px 0; }
+.file-undo-versions > div { padding: 0 16px 0 0; }
+.file-undo-versions > div + div { border-left: 1px solid var(--border); padding: 0 0 0 16px; }
+.file-undo-versions dt,
+.file-undo-reason { color: var(--muted-strong); font-size: 12px; font-weight: 600; }
+.file-undo-versions dd { margin: 8px 0 0; font-size: 14px; }
+.file-undo-versions code { display: block; overflow-wrap: anywhere; margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.file-undo-expiry { color: var(--muted); font-size: 12px; }
+.file-undo-reason { display: grid; gap: 7px; margin-top: 18px; }
+.file-undo-reason input { width: 100%; height: 38px; border: 1px solid var(--border-strong); border-radius: 4px; padding: 8px 10px; font: inherit; color: var(--ink); }
+.file-undo-dialog > footer { justify-content: flex-end; margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px; }
+.file-undo-dialog > footer button { min-height: 38px; min-width: 120px; }

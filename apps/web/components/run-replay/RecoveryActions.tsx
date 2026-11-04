@@ -214,5 +214,5 @@ function evidenceLabel(kind: string) {
 
 function actionLabel(action: ToolEffectReconciliationAction, toolName: string) {
 	if (action === "retry_with_same_key" && ["file_write", "file_patch"].includes(toolName)) return "Verify saved file";
-	return ({ confirm_committed: "Confirm committed", confirm_failed: "Confirm failed", retry_with_same_key: "Retry with same key", compensate: "Compensate" } as Record<ToolEffectReconciliationAction, string>)[action];
+	return ({ confirm_committed: "Confirm committed", confirm_failed: "Confirm failed", retry_with_same_key: "Retry with same key", compensate: "Compensate", verify_compensation: "Verify restored file" } as Record<ToolEffectReconciliationAction, string>)[action];
 }

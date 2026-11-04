@@ -45,7 +45,7 @@ func browserFilesystemConfig(t *testing.T, cfg *config.Config, root string) {
 		if err = os.Mkdir(output, 0700); err != nil {
 			t.Fatal(err)
 		}
-		data, _ = json.Marshal(map[string]any{"roots": []filesystem.RootConfig{{ID: "project", WorkspaceID: workspace, Path: project}, {ID: "output", WorkspaceID: workspace, Path: output, WriteAccess: "managed_output"}}})
+		data, _ = json.Marshal(map[string]any{"roots": []filesystem.RootConfig{{ID: "project", WorkspaceID: workspace, Path: project}, {ID: "output", WorkspaceID: workspace, Path: output, WriteAccess: "managed_output", UndoRetentionSeconds: 3600, UndoMaxBytes: 1048576}}})
 	}
 	if err = os.WriteFile(cfg.FilesystemRootsPath, data, 0600); err != nil {
 		t.Fatal(err)

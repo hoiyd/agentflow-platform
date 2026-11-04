@@ -14,7 +14,11 @@ func authorizedReconciliationBinding(catalog *tool.Catalog, record domain.ToolEf
 	if err != nil {
 		return tool.Binding{}, err
 	}
+	if binding.UnavailableReason != "" {
+		return tool.Binding{}, &ReconciliationError{Code: ReconciliationUnavailable, Message: "reconciliation prerequisites are unavailable: " + binding.UnavailableReason}
+	}
 	if (action == domain.ToolEffectRetrySameKey && binding.Reconciliation.RetryWithSameKey == nil) ||
+		(action == domain.ToolEffectVerifyCompensation && binding.Reconciliation.VerifyCompensation == nil) ||
 		(action == domain.ToolEffectCompensate && (binding.Reconciliation.Compensate == nil || binding.Descriptor.Security.Reversibility == policy.Irreversible)) {
 		return tool.Binding{}, &ReconciliationError{Code: ReconciliationUnavailable, Message: "tool does not support this reconciliation action"}
 	}
@@ -35,7 +39,7 @@ func boundedReconciliationAction(ctx context.Context, catalog *tool.Catalog, rec
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
 	}
-	if command.Action != domain.ToolEffectRetrySameKey && command.Action != domain.ToolEffectCompensate {
+	if command.Action != domain.ToolEffectRetrySameKey && command.Action != domain.ToolEffectCompensate && command.Action != domain.ToolEffectVerifyCompensation {
 		return executeReconciliationAction(ctx, catalog, record, command)
 	}
 	type outcome struct {

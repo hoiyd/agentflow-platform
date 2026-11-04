@@ -328,6 +328,15 @@ export async function reconcileToolEffect(
 	);
 }
 
+export async function getToolCompensationPreview(runId: string, key: string, signal?: AbortSignal): Promise<ContractSchemas["CompensationPreview"]> {
+	return apiObject<ContractSchemas["CompensationPreview"]>(
+		`/api/runs/${encodeURIComponent(runId)}/tool-effects/${encodeURIComponent(key)}/compensation-preview`,
+		{ cache: "no-store", signal },
+		{ errorMessage: "Failed to check file undo", includeErrorBody: true },
+		"compensation preview"
+	);
+}
+
 export async function getRunProjection(runId: string, signal?: AbortSignal): Promise<RunProjectionSnapshot> {
   const data = await apiJSON(
     `/api/runs/${runId}/projection`,

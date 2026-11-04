@@ -24,6 +24,7 @@ import { TaskStateChanges } from "./TaskStateChanges";
 import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
 import { SkillEvidencePanel } from "./SkillEvidence";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
+import { FileUndoPanel } from "./FileUndoPanel";
 import { MessageCitations } from "../chat/MarkdownContent";
 import { ToolProgressPanel } from "../chat/ToolProgressPanel";
 import { ClarificationPanel } from "../chat/ClarificationPanel";
@@ -200,6 +201,8 @@ function RunReplayView({ runId, initialEventId }: Props) {
         failures={replay.projection.invariant_failures}
         onInspectEvent={inspectDiagnosticEvent}
       />
+      {replay.tool_effects?.some(effect => ["file_write", "file_patch"].includes(effect.tool_name)) ?
+        <FileUndoPanel key={replay.run.id} runId={replay.run.id} onChanged={refreshReplay} /> : null}
       <SkillEvidencePanel items={replay.projection.skill_evidence ?? []} onInspectEvent={inspectDiagnosticEvent} />
       <ToolProgressPanel items={replay.projection.tool_progress ?? []} runStatus={replay.run.status} />
 

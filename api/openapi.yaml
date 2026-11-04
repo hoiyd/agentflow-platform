@@ -1072,6 +1072,27 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /api/runs/{id}/tool-effects/{idempotency_key}/compensation-preview:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: idempotency_key
+        in: path
+        required: true
+        schema: { type: string, maxLength: 256 }
+    get:
+      operationId: getToolCompensationPreview
+      tags: [Runs]
+      responses:
+        '200':
+          description: Current eligibility and metadata only; never retained before-image text.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompensationPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /api/runs/{id}/tool-effects/{idempotency_key}/reconcile:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -3019,7 +3040,19 @@ components:
         created_at: { type: string, format: date-time }
         expires_at: { type: string, format: date-time }
         expired: { type: boolean }
-    ToolEffectReconciliationAction: { type: string, enum: [confirm_committed, confirm_failed, retry_with_same_key, compensate] }
+    CompensationPreview:
+      type: object
+      required: [available, before_bytes, after_bytes, expires_at]
+      properties:
+        available: { type: boolean }
+        unavailable_reason: { type: string }
+        resource: { type: string }
+        before_hash: { type: string }
+        after_hash: { type: string }
+        before_bytes: { type: integer }
+        after_bytes: { type: integer }
+        expires_at: { type: string, format: date-time }
+    ToolEffectReconciliationAction: { type: string, enum: [confirm_committed, confirm_failed, retry_with_same_key, compensate, verify_compensation] }
     ToolEffect:
       type: object
       required: [idempotency_key, version, run_id, stage_id, tool_call_id, tool_name, request_hash, status, has_result, created_at, updated_at]

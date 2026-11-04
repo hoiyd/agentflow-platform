@@ -258,8 +258,9 @@ returns an error.
   Continue and Resume share Worker/Reviewer/Finalizer inputs and ordering.
   Resume uses the persisted selected Worker and typed selection reason; older
   records without that evidence omit the reason rather than rerouting.
-- The checkpoint provider captures AgentFlow internal state. Business-specific
-  external compensation handlers are not implemented.
+- The checkpoint provider captures AgentFlow internal state. Explicit
+  [report-file compensation](../tools/file-undo.md) is separate; arbitrary
+  external API/database compensation handlers are not implemented.
 - Multi-instance Worker takeover still requires Lease/Heartbeat/Fencing or a
   Postgres ownership lock. This implementation provides single-process durable
   recovery, not distributed exactly-once execution.
