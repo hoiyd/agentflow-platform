@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -28,14 +29,16 @@ type writeStore interface {
 // WriteResult doubles as the pre-publication evidence. No old/new source text,
 // host paths or executable payloads are copied into the durable receipt.
 type WriteResult struct {
-	Root         string `json:"root"`
-	Path         string `json:"path"`
-	RootRevision string `json:"root_revision"`
-	Operation    string `json:"operation"`
-	OldHash      string `json:"old_hash,omitempty"`
-	NewHash      string `json:"new_hash"`
-	FileID       string `json:"file_id"`
-	Bytes        int    `json:"bytes"`
+	Root          string     `json:"root"`
+	Path          string     `json:"path"`
+	RootRevision  string     `json:"root_revision"`
+	Operation     string     `json:"operation"`
+	OldHash       string     `json:"old_hash,omitempty"`
+	NewHash       string     `json:"new_hash"`
+	FileID        string     `json:"file_id"`
+	Bytes         int        `json:"bytes"`
+	UndoExpiresAt *time.Time `json:"undo_expires_at,omitempty"`
+	UndoBytes     int        `json:"undo_bytes,omitempty"`
 }
 
 type writeOperations struct {
@@ -161,6 +164,13 @@ func (s *Service) write(ctx context.Context, operation string, input writeArgume
 	}
 	if operation == "file_patch" {
 		result.Operation = "patch"
+	}
+	if before.exists && root.UndoRetentionSeconds > 0 {
+		expires := s.now().UTC().Add(time.Duration(root.UndoRetentionSeconds) * time.Second)
+		result.UndoExpiresAt, result.UndoBytes = &expires, len(before.content)
+		if err = s.retainBeforeImage(ctx, dir, root, identity, result, before); err != nil {
+			return nil, err
+		}
 	}
 	intent, _ := json.Marshal(result)
 	if err = storage.SaveToolEffectIntent(identity.Key, intent); err != nil {

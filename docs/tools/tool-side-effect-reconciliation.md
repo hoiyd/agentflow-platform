@@ -57,6 +57,14 @@ returned by a later idempotent replay. Supported actions are:
 | `confirm_failed` | The operator verified that the remote effect did not occur. | Operator evidence. |
 | `retry_with_same_key` | Invoke the Binding's dedicated idempotent retry hook. | Frozen `retry_with_same_key` declaration and current matching callback. |
 | `compensate` | Invoke the Binding's dedicated compensation hook. | Frozen `compensate` declaration, current matching callback, and non-irreversible security policy. |
+| `verify_compensation` | Query an uncertain compensation's actual outcome without repeating its write. | Current matching query-only verification hook and grants. |
+
+Bindings with a compensation preview may also undo a **committed** effect.
+The first consumer is [managed report Undo](file-undo.md): an owner-reviewed
+metadata preview precedes the durable claim; a proven pre-write rejection
+restores the committed receipt. This does not make arbitrary terminal effects
+retryable. Compensation verification may settle a pending claim without claiming
+or repeating its write; a mismatch preserves uncertainty.
 
 ## Consistency And Audit
 
@@ -91,8 +99,8 @@ Retry callbacks receive the original idempotency key. Compensation callbacks
 receive a deterministic compensation key derived only from the effect. A new
 operator command ID therefore cannot cause a second logical compensation.
 These hooks must honor those keys because no database transaction can make an
-external API call atomic with local settlement. Callback availability is part
-of the Tool Descriptor definition revision; a changed or legacy revision cannot
+external API call atomic with local settlement. The compensation declaration is
+part of the Tool Descriptor definition revision; a changed or legacy revision cannot
 gain recovery authority retroactively.
 
 ## Execution Boundary
@@ -150,6 +158,7 @@ flowchart LR
     needs_reconciliation -->|confirm_committed| committed
     needs_reconciliation -->|confirm_failed| failed
     needs_reconciliation -->|Claim callback| reconciling
+    committed -->|Explicit previewed compensation| reconciling
     classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
     classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
     classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
@@ -168,7 +177,7 @@ config:
 ---
 flowchart LR
     reconciling -->|Success / confirm_committed| committed
-    reconciling -->|Compensation| compensated
+    reconciling -->|Compensation / verified compensation| compensated
     reconciling -->|confirm_failed| failed
     reconciling -->|Callback error| needs_reconciliation
     reconciling -->|Timeout / cancel / crash| reconciling

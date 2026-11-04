@@ -68,10 +68,11 @@ const (
 type ToolEffectReconciliationAction string
 
 const (
-	ToolEffectConfirmCommitted ToolEffectReconciliationAction = "confirm_committed"
-	ToolEffectConfirmFailed    ToolEffectReconciliationAction = "confirm_failed"
-	ToolEffectRetrySameKey     ToolEffectReconciliationAction = "retry_with_same_key"
-	ToolEffectCompensate       ToolEffectReconciliationAction = "compensate"
+	ToolEffectConfirmCommitted   ToolEffectReconciliationAction = "confirm_committed"
+	ToolEffectConfirmFailed      ToolEffectReconciliationAction = "confirm_failed"
+	ToolEffectRetrySameKey       ToolEffectReconciliationAction = "retry_with_same_key"
+	ToolEffectCompensate         ToolEffectReconciliationAction = "compensate"
+	ToolEffectVerifyCompensation ToolEffectReconciliationAction = "verify_compensation"
 )
 
 // ToolEffectRecord is an idempotency journal for tools that declare external

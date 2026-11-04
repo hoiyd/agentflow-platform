@@ -151,6 +151,11 @@ uses `AGENTFLOW_FILESYSTEM_WRITE_TEST=1` with `filesystem-write.spec.ts`: all mo
 save/read/hash-patch reports, reject conflicts/escapes/read-only roots, preserve
 Effect receipts and reload Replay. A loaded Skill cannot grant a reader writes.
 Retain `filesystem-write-evidence.json` and the synthetic desktop screenshot.
+The same profile also covers [file Undo](../tools/file-undo.md): all modes restore
+and read back the retained report, reload compensation state, reject foreign
+Workspace reads and disable Undo after a later Run changes the file. Separate
+conflict evidence and desktop previews are retained; backend integrations cover
+retention, cancellation, storage faults and uncertain compensation settlement.
 
 ```bash
 AGENTFLOW_TOOL_DISCOVERY_TEST=1 \

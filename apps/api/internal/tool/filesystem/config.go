@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
@@ -29,6 +30,9 @@ type RootConfig struct {
 	WorkspaceID string `json:"workspace_id"`
 	Path        string `json:"path"`
 	WriteAccess string `json:"write_access,omitempty"`
+	// Both values must be explicit. Zero disables before-image retention.
+	UndoRetentionSeconds int   `json:"undo_retention_seconds,omitempty"`
+	UndoMaxBytes         int64 `json:"undo_max_bytes,omitempty"`
 }
 type rootRecord struct {
 	RootConfig
@@ -47,6 +51,7 @@ type Service struct {
 	revision   string
 	store      Store
 	writes     writeOperations
+	now        func() time.Time
 }
 
 func New(configPath string, storage Store) (*Service, error) {
@@ -62,7 +67,7 @@ func New(configPath string, storage Store) (*Service, error) {
 		}
 	}
 	data, _ := json.Marshal(roots)
-	return &Service{configPath: configPath, roots: roots, revision: fmt.Sprintf("filesystem-read-v1:%x", sha256.Sum256(data)), store: storage, writes: defaultWriteOperations()}, nil
+	return &Service{configPath: configPath, roots: roots, revision: fmt.Sprintf("filesystem-read-v1:%x", sha256.Sum256(data)), store: storage, writes: defaultWriteOperations(), now: time.Now}, nil
 }
 
 func loadRoots(path string) ([]rootRecord, error) {
@@ -103,6 +108,11 @@ func loadRoots(path string) ([]rootRecord, error) {
 		seen[key] = true
 		if entry.WriteAccess != "" && entry.WriteAccess != "managed_output" {
 			return nil, errors.New("filesystem writes require managed_output; shared project roots are read-only")
+		}
+		if entry.UndoRetentionSeconds != 0 || entry.UndoMaxBytes != 0 {
+			if entry.WriteAccess != "managed_output" || entry.UndoRetentionSeconds < 1 || entry.UndoRetentionSeconds > 30*24*3600 || entry.UndoMaxBytes < 1 || entry.UndoMaxBytes > 16*1024*1024 {
+				return nil, errors.New("Undo requires managed_output, an explicit retention of 1..2592000 seconds and a per-root byte budget of 1..16777216")
+			}
 		}
 		if entry.WriteAccess == "managed_output" {
 			if err := validateOutputDirectory(entry.Path); err != nil {

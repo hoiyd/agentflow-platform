@@ -1022,10 +1022,11 @@ func (e TaskStateOperationType) Valid() bool {
 
 // Defines values for ToolEffectReconciliationAction.
 const (
-	Compensate       ToolEffectReconciliationAction = "compensate"
-	ConfirmCommitted ToolEffectReconciliationAction = "confirm_committed"
-	ConfirmFailed    ToolEffectReconciliationAction = "confirm_failed"
-	RetryWithSameKey ToolEffectReconciliationAction = "retry_with_same_key"
+	Compensate         ToolEffectReconciliationAction = "compensate"
+	ConfirmCommitted   ToolEffectReconciliationAction = "confirm_committed"
+	ConfirmFailed      ToolEffectReconciliationAction = "confirm_failed"
+	RetryWithSameKey   ToolEffectReconciliationAction = "retry_with_same_key"
+	VerifyCompensation ToolEffectReconciliationAction = "verify_compensation"
 )
 
 // Valid indicates whether the value is a known member of the ToolEffectReconciliationAction enum.
@@ -1038,6 +1039,8 @@ func (e ToolEffectReconciliationAction) Valid() bool {
 	case ConfirmFailed:
 		return true
 	case RetryWithSameKey:
+		return true
+	case VerifyCompensation:
 		return true
 	default:
 		return false
@@ -1413,6 +1416,18 @@ type CollaborationStep struct {
 	RunId          string    `json:"run_id"`
 	Status         string    `json:"status"`
 	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// CompensationPreview defines model for CompensationPreview.
+type CompensationPreview struct {
+	AfterBytes        int       `json:"after_bytes"`
+	AfterHash         *string   `json:"after_hash,omitempty"`
+	Available         bool      `json:"available"`
+	BeforeBytes       int       `json:"before_bytes"`
+	BeforeHash        *string   `json:"before_hash,omitempty"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	Resource          *string   `json:"resource,omitempty"`
+	UnavailableReason *string   `json:"unavailable_reason,omitempty"`
 }
 
 // CompletionContract defines model for CompletionContract.

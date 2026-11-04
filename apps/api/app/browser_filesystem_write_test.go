@@ -39,11 +39,15 @@ func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input b
 			if message.Role == "tool" {
 				var result struct {
 					Result struct {
-						NewHash string `json:"new_hash"`
+						NewHash     string `json:"new_hash"`
+						ContentHash string `json:"content_hash"`
 					} `json:"result"`
 				}
-				if json.Unmarshal([]byte(message.Content), &result) == nil && result.Result.NewHash != "" && hash == "" {
+				if json.Unmarshal([]byte(message.Content), &result) == nil && hash == "" {
 					hash = result.Result.NewHash
+					if hash == "" {
+						hash = result.Result.ContentHash
+					}
 				}
 			}
 		}
@@ -57,6 +61,23 @@ func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input b
 			{"file_write", fmt.Sprintf(`{"root":"output","path":%q,"content":"Stale","expected_hash":%q}`, path, strings.Repeat("a", 64)), `"code":"filesystem_write_conflict"`},
 			{"file_patch", fmt.Sprintf(`{"root":"output","path":%q,"expected_hash":%q,"old_text":"Original","new_text":"Verified"}`, path, hash), `"operation":"patch"`},
 			{"file_read", fmt.Sprintf(`{"root":"output","path":%q}`, path), "Verified report evidence."},
+		}
+		if strings.Contains(task, "filesystem-write-undo-verify-") {
+			path = "report-0.md"
+			for i := range 3 {
+				if strings.Contains(task, fmt.Sprintf("filesystem-write-undo-verify-%d", i)) {
+					path = fmt.Sprintf("report-%d.md", i)
+				}
+			}
+			sequence = []struct{ name, args, want string }{{"file_read", fmt.Sprintf(`{"root":"output","path":%q}`, path), "Original report evidence."}}
+			content = "Original report verified after undo."
+		}
+		if strings.Contains(task, "filesystem-write-later-change") {
+			sequence = []struct{ name, args, want string }{
+				{"file_read", `{"root":"output","path":"report.md"}`, "Verified report evidence."},
+				{"file_patch", fmt.Sprintf(`{"root":"output","path":"report.md","expected_hash":%q,"old_text":"Verified","new_text":"Later"}`, hash), `"operation":"patch"`},
+			}
+			content = "Later report saved."
 		}
 		if denied {
 			sequence = sequence[:1]

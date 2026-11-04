@@ -65,10 +65,11 @@ func PrepareToolEffectReconciliation(existing domain.ToolEffectRecord, mutation 
 	if mutation.ExpectedVersion != existing.Version {
 		return mutation, &ToolEffectVersionConflict{Expected: mutation.ExpectedVersion, Actual: existing.Version}
 	}
-	if existing.Status != domain.ToolEffectNeedsReconciliation && existing.Status != domain.ToolEffectReconciling {
+	committedUndo := existing.Status == domain.ToolEffectCommitted && mutation.Action == domain.ToolEffectCompensate && mutation.Event.Type == domain.EventToolEffectReconciliationStarted
+	if !committedUndo && existing.Status != domain.ToolEffectNeedsReconciliation && existing.Status != domain.ToolEffectReconciling {
 		return mutation, &ToolEffectStateConflict{Status: string(existing.Status)}
 	}
-	if mutation.Event.Type == domain.EventToolEffectReconciliationStarted && existing.Status != domain.ToolEffectNeedsReconciliation {
+	if mutation.Event.Type == domain.EventToolEffectReconciliationStarted && !committedUndo && existing.Status != domain.ToolEffectNeedsReconciliation {
 		return mutation, &ToolEffectStateConflict{Status: string(existing.Status)}
 	}
 	if mutation.Event.Type != domain.EventToolEffectReconciliationStarted &&
@@ -103,6 +104,9 @@ func validToolEffectSettlement(mutation domain.ToolEffectReconciliation) bool {
 			mutation.Event.Payload["outcome"] == "pending" && mutation.Event.Payload["command_hash"] != nil && mutation.Event.Payload["command_hash"] != ""
 	}
 	if mutation.Event.Type == domain.EventToolEffectReconciliationFailed {
+		if mutation.Action == domain.ToolEffectCompensate && mutation.NextStatus == domain.ToolEffectCommitted && len(mutation.Result) > 0 {
+			return true
+		}
 		return (mutation.NextStatus == domain.ToolEffectNeedsReconciliation || mutation.NextStatus == domain.ToolEffectReconciling) && len(mutation.Result) == 0
 	}
 	if mutation.Event.Type != domain.EventToolEffectReconciled {
@@ -113,7 +117,7 @@ func validToolEffectSettlement(mutation domain.ToolEffectReconciliation) bool {
 		return mutation.NextStatus == domain.ToolEffectCommitted && len(mutation.Result) > 0
 	case domain.ToolEffectConfirmFailed:
 		return mutation.NextStatus == domain.ToolEffectFailed && len(mutation.Result) == 0
-	case domain.ToolEffectCompensate:
+	case domain.ToolEffectCompensate, domain.ToolEffectVerifyCompensation:
 		return mutation.NextStatus == domain.ToolEffectCompensated && len(mutation.Result) == 0
 	default:
 		return false

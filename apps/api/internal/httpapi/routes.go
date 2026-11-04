@@ -92,6 +92,7 @@ func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/runs/{id}/artifacts/{artifact_id}/search", h.searchToolArtifact)
 	mux.HandleFunc("GET /api/runs/{id}/tool-effects", h.listToolEffects)
 	mux.HandleFunc("POST /api/runs/{id}/tool-effects/{idempotency_key}/reconcile", h.reconcileToolEffect)
+	mux.HandleFunc("GET /api/runs/{id}/tool-effects/{idempotency_key}/compensation-preview", h.toolCompensationPreview)
 	mux.HandleFunc("GET /api/runs/{id}/episode", h.getEpisodeReport)
 	mux.HandleFunc("GET /api/runs/{id}/collaboration_steps", h.listCollaborationSteps)
 }

@@ -75,6 +75,9 @@ func (c *Catalog) Register(binding Binding) error {
 	if binding.Descriptor.SideEffect.Compensate != (binding.Reconciliation.Compensate != nil) {
 		return fmt.Errorf("tool %q compensation capability and callback must match", name)
 	}
+	if (binding.Reconciliation.PreviewCompensation != nil || binding.Reconciliation.VerifyCompensation != nil) && !binding.Descriptor.SideEffect.Compensate {
+		return fmt.Errorf("tool %q compensation preview/verification require a compensation callback", name)
+	}
 	if binding.Descriptor.SideEffect.Compensate && binding.Descriptor.Security.Reversibility == policy.Irreversible {
 		return fmt.Errorf("tool %q irreversible side effect cannot declare compensation", name)
 	}

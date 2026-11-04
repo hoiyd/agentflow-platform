@@ -25,6 +25,13 @@ func (s *Service) writeBindings() []tool.Binding {
 		Scope:      policy.Scope{Resources: []policy.ResourceScope{{Kind: policy.ResourceFilesystem, Name: "project_outputs", Access: policy.AccessWrite}}},
 		SideEffect: policy.SideEffectExternalWrite, Reversibility: policy.Irreversible, Audit: policy.AuditFull,
 	})
+	undoEnabled := false
+	for _, root := range s.roots {
+		undoEnabled = undoEnabled || root.UndoRetentionSeconds > 0
+	}
+	if undoEnabled {
+		capability.Reversibility = policy.Compensatable
+	}
 	bindings := []tool.Binding{}
 	for _, name := range []string{"file_write", "file_patch"} {
 		properties := map[string]any{
@@ -57,6 +64,12 @@ func (s *Service) writeBindings() []tool.Binding {
 				return s.write(ctx, operation, input)
 			},
 			Reconciliation: tool.SideEffectReconciliation{RetryWithSameKey: s.verifyPublished},
+		}
+		if undoEnabled {
+			binding.Descriptor.SideEffect.Compensate = true
+			binding.Reconciliation.Compensate = s.compensateFile
+			binding.Reconciliation.PreviewCompensation = s.previewFileUndo
+			binding.Reconciliation.VerifyCompensation = s.verifyFileUndo
 		}
 		if len(s.roots) == 0 {
 			binding.UnavailableReason = "filesystem_unconfigured"
