@@ -29,14 +29,34 @@ const (
 var namePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 type Catalog struct {
-	packages map[string]domain.SkillSnapshot
+	packages       map[string]domain.SkillSnapshot
+	blocked        map[string]string
+	reviewRoots    []string
+	reviewManifest string
+	reviewGuards   []func(string) error
 }
 
 func (c *Catalog) List() []domain.SkillMetadata {
+	view, err := c.reviewedView()
+	if err != nil {
+		items := []domain.SkillMetadata{}
+		for _, item := range c.packages {
+			metadata := Metadata(item)
+			metadata.ReviewReason = "skill_review_manifest_invalid"
+			items = append(items, metadata)
+		}
+		slices.SortFunc(items, func(a, b domain.SkillMetadata) int { return strings.Compare(a.Name, b.Name) })
+		return items
+	}
+	if view != c {
+		return view.List()
+	}
 	items := []domain.SkillMetadata{}
 	if c != nil {
 		for _, item := range c.packages {
-			items = append(items, Metadata(item))
+			metadata := Metadata(item)
+			metadata.ReviewReason = c.blocked[item.Name]
+			items = append(items, metadata)
 		}
 	}
 	slices.SortFunc(items, func(a, b domain.SkillMetadata) int { return strings.Compare(a.Name, b.Name) })
@@ -52,6 +72,13 @@ func Metadata(item domain.SkillSnapshot) domain.SkillMetadata {
 }
 
 func (c *Catalog) Freeze(names, effectiveTools []string) ([]domain.SkillSnapshot, error) {
+	view, err := c.reviewedView()
+	if err != nil {
+		return nil, err
+	}
+	if view != c {
+		return view.Freeze(names, effectiveTools)
+	}
 	items := []domain.SkillSnapshot{}
 	seen := map[string]bool{}
 	for _, name := range names {
@@ -59,6 +86,9 @@ func (c *Catalog) Freeze(names, effectiveTools []string) ([]domain.SkillSnapshot
 			continue
 		}
 		seen[name] = true
+		if c != nil && c.blocked[name] != "" {
+			return nil, skillError(c.blocked[name], fmt.Sprintf("Skill %q needs operator review of its current package hash", name))
+		}
 		if c == nil {
 			return nil, skillError("skill_unavailable", "Skill catalog is not configured")
 		}

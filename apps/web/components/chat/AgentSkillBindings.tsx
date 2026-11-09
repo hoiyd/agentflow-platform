@@ -19,7 +19,7 @@ export function AgentSkillBindings({ draft, skills, tools, disabled, error, onCh
       return <div className="agent-skill-row" key={name}>
         <div className="agent-skill-copy">
           <label>
-            <input checked={bound} disabled={disabled} type="checkbox" onChange={() => {
+            <input checked={bound} disabled={disabled || (!bound && Boolean(item?.review_reason))} type="checkbox" onChange={() => {
               const policies = { ...draft.skill_policies };
               delete policies[name];
               onChange({ skills: bound ? selected.filter(value => value !== name) : [...selected, name], ...(bound && draft.skill_policies?.[name] ? { skill_policies: policies } : {}) });
@@ -28,7 +28,7 @@ export function AgentSkillBindings({ draft, skills, tools, disabled, error, onCh
           </label>
           {item ? <small>{item.description}</small> : null}
           {status.dependencies.map(dependency => <small key={dependency.name} className={dependency.ready ? "" : "error-text"}>{dependency.description}</small>)}
-          {!item ? <small className="error-text">{status.reason}</small> : null}
+          {!item || item.review_reason ? <small className="error-text">{status.reason}</small> : null}
         </div>
         <SelectionMenu label={`Invocation for ${name}`} searchable={false} className="skill-policy-select"
           value={status.policy} disabled={disabled || !bound || !item || item.invocation_policy === "explicit_only"}

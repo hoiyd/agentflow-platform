@@ -45,6 +45,7 @@ type SkillMetadata struct {
 	RequiredTools    []string              `json:"required_tools,omitempty"`
 	InvocationPolicy SkillInvocationPolicy `json:"invocation_policy,omitempty"`
 	ToolDependencies []SkillToolDependency `json:"tool_dependencies,omitempty"`
+	ReviewReason     string                `json:"review_reason,omitempty"`
 }
 
 // SkillSnapshot contains bounded text frozen with a Run. Resume never reads

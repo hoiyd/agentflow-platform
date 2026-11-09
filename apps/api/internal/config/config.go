@@ -33,6 +33,8 @@ type Config struct {
 	// TrustedSkillDirectories lists operator-trusted installation roots (CSV).
 	// Immediate SKILL.md packages are discovered; normally ../../.agents/skills from apps/api.
 	TrustedSkillDirectories string
+	// Empty retains trusted-directory behavior; a path enables exact-hash review.
+	SkillReviewManifestPath string
 	EmbeddingBaseURL        string
 	EmbeddingModel          string
 	EmbeddingDimensions     int
@@ -236,6 +238,7 @@ func Load() Config {
 		Port:                              getEnv("PORT", "8080"),
 		ModelRouteConfigPath:              getEnv("MODEL_ROUTE_CONFIG_PATH", ""),
 		TrustedSkillDirectories:           getEnv("TRUSTED_SKILL_DIRS", ""),
+		SkillReviewManifestPath:           getEnv("SKILL_REVIEW_MANIFEST_PATH", ""),
 		EmbeddingBaseURL:                  getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
 		EmbeddingModel:                    getEnv("EMBEDDING_MODEL", "embeddinggemma"),
 		EmbeddingDimensions:               getIntEnv("EMBEDDING_DIMENSIONS", 1536),
