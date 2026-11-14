@@ -2519,6 +2519,9 @@ type SkillMetadata struct {
 	Name             string                 `json:"name"`
 	RequiredTools    *[]string              `json:"required_tools,omitempty"`
 
+	// ReviewReason Operator review gate rejection; absent means no review block, not Tool authorization.
+	ReviewReason *string `json:"review_reason,omitempty"`
+
 	// ToolDependencies Current Workspace readiness only, not per-call execution authorization.
 	ToolDependencies *[]SkillToolDependency `json:"tool_dependencies,omitempty"`
 }

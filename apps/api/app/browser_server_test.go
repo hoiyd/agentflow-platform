@@ -86,6 +86,12 @@ func TestBrowserServer(t *testing.T) {
 	cfg.DatabaseURL = pgfixture.DatabaseURL(t)
 	cfg.ModelRouteConfigPath, cfg.ToolConfigPath = routePath, filepath.Join(root, "tools.json")
 	cfg.TrustedSkillDirectories = filepath.Dir(skillDir)
+	if os.Getenv("AGENTFLOW_SKILL_POLICY_TEST") == "1" {
+		cfg.SkillReviewManifestPath = filepath.Join(root, "skill-reviews.json")
+		if err := browserSkillReviews(cfg.TrustedSkillDirectories, cfg.SkillReviewManifestPath); err != nil {
+			t.Fatal(err)
+		}
+	}
 	cfg.EmbeddingBaseURL, cfg.EmbeddingModel, cfg.EmbeddingDimensions = providerServer.URL, "fixture-embedding", 1536
 	cfg.MemoryAdaptiveExtractionMode, cfg.ContextCompactionMode = "off", "off"
 	// Discovery has its own opt-in gate; ordinary fixtures keep eager contracts.
@@ -180,6 +186,9 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if os.Getenv("AGENTFLOW_SKILL_POLICY_TEST") == "1" {
+		controls.HandleFunc("POST /__fixture/skills/review", browserSkillReviewControl(cfg.TrustedSkillDirectories, cfg.SkillReviewManifestPath))
+	}
 	if mcpControls != nil {
 		controls.HandleFunc("/__fixture/mcp", func(w http.ResponseWriter, r *http.Request) {
 			mcpControls.ServeHTTP(w, r)

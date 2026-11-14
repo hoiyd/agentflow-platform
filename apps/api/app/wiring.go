@@ -243,7 +243,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	knowledgeAccess := workspaceStore.CheckKnowledgeAccess
 	retrievalPipeline := rag.NewRetrievalPipelineWithReranker(appStore, reranker).WithWorkspaceAccess(knowledgeAccess)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline).WithWorkspaceAccess(knowledgeAccess)
-	skills, err := skill.LoadRoots(splitCSV(cfg.TrustedSkillDirectories))
+	skills, err := skill.LoadReviewedRoots(splitCSV(cfg.TrustedSkillDirectories), cfg.SkillReviewManifestPath, filesystemTools.ValidateGuidanceConfig)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("load trusted Skills: %w", err)
 	}

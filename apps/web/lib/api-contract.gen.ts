@@ -1688,6 +1688,8 @@ export interface components {
             name: string;
             description: string;
             hash: string;
+            /** @description Operator review gate rejection; absent means no review block, not Tool authorization. */
+            review_reason?: string;
             required_tools?: string[];
             invocation_policy?: components["schemas"]["SkillInvocationPolicy"];
             /** @description Current Workspace readiness only, not per-call execution authorization. */

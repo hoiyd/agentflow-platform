@@ -2380,6 +2380,9 @@ components:
         name: { type: string }
         description: { type: string }
         hash: { type: string }
+        review_reason:
+          type: string
+          description: Operator review gate rejection; absent means no review block, not Tool authorization.
         required_tools:
           type: array
           items: { type: string }

@@ -11,6 +11,14 @@ const reasonLabels: Record<string, string> = {
 
 export function skillReadiness(skill: SkillInfo | undefined, agent: SkillAgent, tools: ToolInfo[] = []) {
   if (!skill) return { ready: false, policy: "explicit_only" as const, dependencies: [], reason: "Unavailable in trusted catalog" };
+  if (skill.review_reason) {
+    const reasons: Record<string, string> = {
+      skill_review_required: "Package needs operator review",
+      skill_review_changed: "Package changed; operator review required",
+      skill_review_manifest_invalid: "Review configuration unavailable; contact the operator"
+    };
+    return { ready: false, policy: "explicit_only" as const, dependencies: [], reason: reasons[skill.review_reason] ?? skill.review_reason };
+  }
   const dependencies = (skill.required_tools ?? []).map(name => {
     const declared = skill.tool_dependencies?.find(item => item.name === name);
     const live = tools.find(item => item.name === name);

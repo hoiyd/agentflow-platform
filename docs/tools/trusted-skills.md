@@ -1,5 +1,8 @@
 # Trusted Skills
 
+Directory trust can optionally require [exact-content operator review](skill-package-review.md)
+before new bindings/Runs. This does not change frozen Skill content or Tool grants.
+
 Use [Skill Checker](skill-checker.md) to check installed packages before
 trust/binding. Format-valid text can still rely on unsupported execution or
 invocation semantics; Skill Checker is read-only and does not grant permissions.
