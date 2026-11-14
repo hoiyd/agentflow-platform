@@ -259,11 +259,13 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	})
 
 	clarifications := observableClarifications{Store: workspaceStore, publish: appStore.publishCommitted}
+	toolApprovals := observableToolApprovals{Store: workspaceStore, publish: appStore.publishCommitted}
 	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
 		ProjectGuidance: projectGuidance,
 		PlanningSources: filesystemTools,
 		Inbox:           workspaceStore,
 		Clarifications:  clarifications,
+		ToolApprovals:   toolApprovals,
 		Store:           appStore,
 		EmbeddingClient: embeddingClient,
 		ModelRoutes:     modelRoutes,
@@ -321,6 +323,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
 		Inbox:          workspaceStore,
 		Clarifications: clarifications,
+		ToolApprovals:  toolApprovals,
 		Store:          appStore,
 		Tools:          agentRuntime,
 		AgentRuntime:   agentRuntime,

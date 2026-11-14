@@ -16,7 +16,7 @@ func commandScope(r *http.Request, workspace string) runcommands.Scope {
 }
 
 func (h *Handler) runCommands() runcommands.Commands {
-	return runcommands.Commands{Store: h.store, Runtime: h.agentRuntime, Capacity: h.runController, Verification: h.verification, Memory: h.memories, Clarifications: h.clarifications,
+	return runcommands.Commands{Store: h.store, Runtime: h.agentRuntime, Capacity: h.runController, Verification: h.verification, Memory: h.memories, Clarifications: h.clarifications, ToolApprovals: h.toolApprovals,
 		AfterRelease: func(ctx context.Context, scope runcommands.Scope, conversation string) {
 			h.scheduleFollowup(ctx, scope, conversation, false)
 		},
@@ -68,8 +68,8 @@ func (h *Handler) executeRunCommand(w http.ResponseWriter, r *http.Request, exec
 			begin()
 			writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 		},
-		Event: func(event domain.RunEvent) { writeUnifiedRunEvent(w, flusher, event) },
-		Done:  func(chunk domain.ChatChunk) { writeSSE(w, "done", chunk); flusher.Flush() },
+		Event: func(event domain.RunEvent) { begin(); writeUnifiedRunEvent(w, flusher, event) },
+		Done:  func(chunk domain.ChatChunk) { begin(); writeSSE(w, "done", chunk); flusher.Flush() },
 	})
 	if err == nil {
 		return

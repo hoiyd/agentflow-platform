@@ -111,9 +111,10 @@ narrow `allow` rules for `web_search` and [Run-scoped Web fetch](web-fetch.md).
 Search still requires a Tavily credential; both require Workspace grants and
 Agent allowlist entries. The task-state audit event must be persisted
 before the handler executes. Irreversible calls cannot use plain `allow`; they need at
-least explicit `allow_and_log` authorization. `ask` and `human_only` are
-reserved in the first version and return a typed `approval_required` result
-until a durable approval flow exists.
+least explicit `allow_and_log` authorization. An explicit `ask` rule for
+`file_patch` supports [durable exact-call approval](tool-approval.md).
+Other `ask` consumers and `human_only` remain blocked with `approval_required`;
+approval never expands a Binding's scope or overrides a deny.
 
 ## Operator Configuration
 

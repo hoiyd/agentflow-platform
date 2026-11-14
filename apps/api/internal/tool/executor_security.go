@@ -27,6 +27,9 @@ func (e *Executor) evaluateSecurity(ctx context.Context, request ExecutionReques
 		Tool: request.Tool, Declared: binding.Descriptor.Security, RequestedScope: requestedScope,
 		AvailableCredentialScopes: request.CredentialScopes,
 	})
+	if policy.CanRequestApproval(request.Tool, decision) && request.ApprovalID != "" && e.consumeApproval != nil {
+		decision.Allowed, decision.Action, decision.Reason = true, policy.ActionAllowAndLog, "durable_approval_requires_claim"
+	}
 	if decision.Allowed && policy.TransmitsData(decision.Capability) && (e.privateData.Load() || policy.UsesPrivateResources(binding.Descriptor.Security)) {
 		decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "private_context_egress_denied"
 	}

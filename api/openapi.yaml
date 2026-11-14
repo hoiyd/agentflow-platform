@@ -705,6 +705,72 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/runs/{id}/tool-approvals:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: listToolApprovals
+      tags: [Runs]
+      responses:
+        '200':
+          description: Owner-scoped exact-call approval decisions, without protocol checkpoints or claim tokens.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ToolApproval'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/runs/{id}/tool-approvals/{approval_id}/decision:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: approval_id
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      operationId: decideToolApproval
+      tags: [Runs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ToolApprovalDecision'}
+      responses:
+        '200':
+          description: Durable approval receipt; approval does not mean the side effect succeeded.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ToolApproval'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+
+  /api/runs/{id}/tool-approvals/{approval_id}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: approval_id
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      operationId: resumeToolApproval
+      tags: [Runs]
+      description: Admit the original Run, revalidate current authority and consume a single exact-call execution claim. Retains the Run budget and provider continuation.
+      responses:
+        '200':
+          description: Unified Run SSE stream; post-admission failures are typed stream errors.
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+
   /api/runs/{id}/clarifications:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -2138,6 +2204,37 @@ components:
           maxItems: 6
           uniqueItems: true
           items: {type: string, minLength: 1, maxLength: 500}
+    ToolApproval:
+      type: object
+      required: [id, run_id, conversation_id, workspace_id, owner_id, turn_id, tool_call_id, tool, arguments, arguments_hash, definition_revision, policy_hash, snapshot_hash, version, status, created_at, expires_at]
+      properties:
+        id: {type: string}
+        run_id: {type: string}
+        conversation_id: {type: string}
+        workspace_id: {type: string}
+        owner_id: {type: string}
+        stage_id: {type: string}
+        turn_id: {type: string}
+        tool_call_id: {type: string}
+        tool: {type: string}
+        arguments: {type: object, additionalProperties: true}
+        arguments_hash: {type: string}
+        definition_revision: {type: string}
+        policy_hash: {type: string}
+        snapshot_hash: {type: string}
+        version: {type: integer, format: int64}
+        status: {type: string, enum: [pending, approved, rejected, revoked, expired, canceled, claimed, consumed]}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        decided_at: {type: string, format: date-time}
+    ToolApprovalDecision:
+      type: object
+      additionalProperties: false
+      required: [version, decision, idempotency_key]
+      properties:
+        version: {type: integer, format: int64, minimum: 1}
+        decision: {type: string, enum: [approve, reject, revoke]}
+        idempotency_key: {type: string, minLength: 1, maxLength: 128}
     Clarification:
       type: object
       required: [id, run_id, conversation_id, turn_id, version, status, questions, created_at, expires_at]

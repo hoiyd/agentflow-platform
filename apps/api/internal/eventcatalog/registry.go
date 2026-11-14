@@ -179,6 +179,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventRunRevisionRequested}, DurableFact, optional, "event.TracePayload", transition("run"), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventRunCanceled, domain.EventRunCompleted, domain.EventRunFailed}, DurableFact, optional, "event.RunStatusPayload", terminal("run", domain.EventRunCreated), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventClarificationAnswered}, DurableFact, optional, "event.TracePayload", none, "replay", "live_ui")
+	add([]domain.RunEventType{domain.EventToolApprovalRequested, domain.EventToolApprovalDecided, domain.EventToolApprovalConsumed}, DurableFact, turn, "event.TracePayload", none, "replay", "live_ui")
 	add([]domain.RunEventType{domain.EventRunProgress}, LiveOnly, optional, "event.RunProgressPayload", none, "live_ui")
 	add([]domain.RunEventType{domain.EventPlanRecorded}, DurableFact, optional, "event.PlanPayload", none, "planning", "replay")
 	add([]domain.RunEventType{domain.EventAgentSelectionDecided}, DurableFact, stage, "event.AgentSelectionPayload", none, "replay")
@@ -248,6 +249,8 @@ func producerFor(eventType domain.RunEventType) string {
 		return "app/runcompletion"
 	case domain.EventClarificationAnswered:
 		return "clarification"
+	case domain.EventToolApprovalRequested, domain.EventToolApprovalDecided, domain.EventToolApprovalConsumed:
+		return "approval"
 	case domain.EventToolDiscoveryUpdated:
 		return "agent/toolloop"
 	case domain.EventAgentSelectionDecided:

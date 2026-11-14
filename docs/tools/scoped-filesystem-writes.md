@@ -64,8 +64,9 @@ Add `file_write` and `file_patch` to operator `enabled_tools`, with an exact
 
 Restart the API, allow the Tools in the owning Workspace and bind them to an
 owned Agent. Enable `file_read` separately for verification. Neither Agent prompts,
-Skills nor owner toggles can expand the operator root map. `ask` still returns an
-approval requirement; this feature does not implement interactive approval.
+Skills nor owner toggles can expand the operator root map. An explicit `ask`
+rule for `file_patch` supports [durable approval](tool-approval.md); other
+write consumers still require their existing operator authorization.
 
 - `file_write` with `root`, `path`, `content` **creates only**. Existing targets
   return `filesystem_write_conflict` without changing bytes.

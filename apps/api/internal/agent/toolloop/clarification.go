@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 // Continuation retains completed observations and the pending call. Resume
@@ -20,6 +21,7 @@ type Continuation struct {
 	NextRound     int
 	ToolSlots     map[string]int
 	PendingCallID string
+	Approval      *tool.ExecutionRequest
 }
 
 func (c *Continuation) RestoreSources() error {
@@ -31,7 +33,14 @@ func (c *Continuation) RestoreSources() error {
 		c.Messages[i].ReferenceID = c.References[i]
 	}
 	last := c.Messages[len(c.Messages)-1]
-	if last.Role != "assistant" || len(last.ToolCalls) != 1 || last.ToolCalls[0].ID != c.PendingCallID || last.ToolCalls[0].Function.Name != clarification.ToolName {
+	if last.Role != "assistant" || len(last.ToolCalls) != 1 || last.ToolCalls[0].ID != c.PendingCallID {
+		return clarification.ErrInvalid
+	}
+	if c.Approval != nil {
+		if c.Approval.CallID != c.PendingCallID || c.Approval.Tool != "file_patch" || last.ToolCalls[0].Function.Name != c.Approval.Tool {
+			return clarification.ErrInvalid
+		}
+	} else if last.ToolCalls[0].Function.Name != clarification.ToolName {
 		return clarification.ErrInvalid
 	}
 	return nil

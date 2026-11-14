@@ -2,8 +2,8 @@ package runcommands
 
 import (
 	"context"
-	"errors"
 
+	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
@@ -32,6 +32,9 @@ func (c Commands) ResumeClarification(ctx context.Context, scope Scope, runID, i
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
 		return commandError(Conflict, clarification.ErrConflict)
 	}
+	if err := c.rejectUnboundToolApproval(ctx, scope, run); err != nil {
+		return err
+	}
 	if _, ok := c.Runtime.(clarificationRuntime); !ok {
 		return commandError(Conflict, clarification.ErrConflict)
 	}
@@ -55,6 +58,9 @@ func (c Commands) ResumeClarification(ctx context.Context, scope Scope, runID, i
 
 // Caller already owns the Conversation lease; generic Resume shares this path.
 func (c Commands) resumeClarification(ctx context.Context, scope Scope, scoped store.WorkspaceStore, run domain.Run, id string, observer Observer) error {
+	if err := c.rejectUnboundToolApproval(ctx, scope, run); err != nil {
+		return err
+	}
 	runID := run.ID
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
 		return commandError(Conflict, clarification.ErrConflict)
@@ -70,7 +76,7 @@ func (c Commands) resumeClarification(ctx context.Context, scope Scope, scoped s
 	}
 	answer, err := consume(events, errs, observer)
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if turn.IsWaiting(err) {
 			return c.paused(scoped, runID, observer)
 		}
 		current, _, loadErr := scoped.GetRun(runID)

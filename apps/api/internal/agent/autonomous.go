@@ -9,7 +9,6 @@ import (
 	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
-	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -558,7 +557,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 	}
 	result, err := r.turnEngine.Execute(ctx, request, forwardReasoning(events))
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if turnpkg.IsWaiting(err) {
 			return "", err
 		}
 		if ctx.Err() != nil {

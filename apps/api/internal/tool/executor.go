@@ -25,6 +25,8 @@ const (
 )
 
 type ExecutionRequest struct {
+	// Set only by the trusted restored continuation, never model arguments.
+	ApprovalID         string          `json:"-"`
 	CallID             string          `json:"call_id,omitempty"`
 	RunID              string          `json:"run_id,omitempty"`
 	StageID            string          `json:"stage_id,omitempty"`
@@ -92,6 +94,8 @@ type ToolEffectJournal interface {
 }
 
 type ExecutorOptions struct {
+	// ConsumeApproval validates and atomically consumes one admitted exact-call claim.
+	ConsumeApproval func(context.Context, ExecutionRequest) error
 	// PlanOnly comes from the persisted Run restriction, never Tool arguments.
 	PlanOnly bool
 	// Authorize checks current Workspace grants immediately before each call.
@@ -117,6 +121,7 @@ type ExecutorOptions struct {
 }
 
 type Executor struct {
+	consumeApproval     func(context.Context, ExecutionRequest) error
 	planOnly            bool
 	authorize           func(context.Context, ExecutionRequest, policy.Scope) error
 	catalog             *Catalog
@@ -150,9 +155,10 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	}
 	securityPolicy := catalog.SecurityPolicy()
 	executor := &Executor{
-		planOnly:  options.PlanOnly,
-		authorize: options.Authorize,
-		catalog:   catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
+		consumeApproval: options.ConsumeApproval,
+		planOnly:        options.PlanOnly,
+		authorize:       options.Authorize,
+		catalog:         catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
 		credentialScopes: append([]string(nil), options.CredentialScopes...),
 		effectJournal:    options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
 		artifactGovernor: newResultArtifactGovernor(options),
@@ -247,6 +253,16 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		}
 	}
 	effectKey := ""
+	if request.ApprovalID != "" {
+		if e.consumeApproval == nil {
+			result.Error = executionError(ErrorApprovalRequired, "Durable Tool approval claim is unavailable", nil)
+			return result
+		}
+		if err := e.consumeApproval(ctx, request); err != nil {
+			result.Error = executionError(ErrorApprovalRequired, "Tool approval no longer authorizes this exact execution", err)
+			return result
+		}
+	}
 	if binding.Descriptor.RequiresJournal() {
 		var execute bool
 		effectKey, execute, result = e.beginSideEffect(request, binding.Descriptor.JournalMode(), result)

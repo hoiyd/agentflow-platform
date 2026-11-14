@@ -133,6 +133,12 @@ type Decision struct {
 
 func (d Decision) AuditRequired() bool { return d.Allowed && d.Action == ActionAllowAndLog }
 
+// Phase A has one real consumer. human_only and deny never become approvable;
+// discovery is not authorization and the Executor still requires a durable claim.
+func CanRequestApproval(name string, d Decision) bool {
+	return name == "file_patch" && d.RuleID != "" && d.Action == ActionAsk && d.Reason == "human_approval_required" && d.Capability.Approval != ApprovalHumanOnly
+}
+
 func DefaultPolicy() Policy {
 	return Policy{
 		Version: CurrentVersion, DefaultAction: ActionAllow,
