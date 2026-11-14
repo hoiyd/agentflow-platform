@@ -111,9 +111,9 @@ narrow `allow` rules for `web_search` and [Run-scoped Web fetch](web-fetch.md).
 Search still requires a Tavily credential; both require Workspace grants and
 Agent allowlist entries. The task-state audit event must be persisted
 before the handler executes. Irreversible calls cannot use plain `allow`; they need at
-least explicit `allow_and_log` authorization. An explicit `ask` rule for
-`file_patch` supports [durable exact-call approval](tool-approval.md).
-Other `ask` consumers and `human_only` remain blocked with `approval_required`;
+least explicit `allow_and_log` authorization. `approval_required` routes eligible
+registered Bindings through [durable exact-call approval](tool-approval.md).
+`human_only` remains blocked;
 approval never expands a Binding's scope or overrides a deny.
 
 ## Operator Configuration
@@ -168,7 +168,7 @@ snapshots remain readable through Replay.
 
 ## Decisions and Replay
 
-The evaluator returns `allow`, `allow_and_log`, `ask`, `deny`, or `human_only`.
+The evaluator returns `allow`, `allow_and_log`, `approval_required`, `deny`, or `human_only`.
 Every production call records `tool.policy_evaluated` between `tool.started`
 and its terminal Tool event. Replay exposes policy version, rule ID, action,
 fixed reason, classifications, and scope counts. It deliberately omits resource

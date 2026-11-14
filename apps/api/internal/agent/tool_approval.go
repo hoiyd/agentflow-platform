@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/availability"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -22,7 +23,7 @@ type toolApprovalCheckpoint struct {
 }
 
 func (r *Runtime) toolApprovalBoundary(request turn.Request) func(context.Context, tool.ExecutionRequest, toolloop.Continuation) error {
-	if r.toolApprovals == nil || request.Role != "" && request.Role != "act" && request.Role != "worker" {
+	if r.toolApprovals == nil {
 		return nil
 	}
 	return func(ctx context.Context, call tool.ExecutionRequest, c toolloop.Continuation) error {
@@ -82,9 +83,15 @@ func (r *Runtime) validateToolApproval(ctx context.Context, run domain.Run, reco
 	if !ok {
 		return approval.ErrConflict
 	}
-	decision := policy.Evaluate(current.SecurityPolicy(), policy.Request{Tool: call.Tool, Declared: binding.Descriptor.Security, RequestedScope: binding.Descriptor.Security.Scope})
-	if !policy.CanRequestApproval(call.Tool, decision) {
+	ctx = eventpkg.WithScope(ctx, eventpkg.Scope{ConversationID: run.ConversationID, RunID: run.ID, StageID: call.StageID, TurnID: call.TurnID})
+	scope, err := binding.RequestedScope(ctx, validated.Arguments)
+	if err != nil {
+		return err
+	}
+	call.CredentialScopes = append(append([]string(nil), r.toolExecutionOptions.CredentialScopes...), current.WorkspaceMCPCredentialScopes()...)
+	decision := policy.Evaluate(current.SecurityPolicy(), policy.Request{Tool: call.Tool, Declared: binding.Descriptor.Security, RequestedScope: scope, AvailableCredentialScopes: call.CredentialScopes})
+	if !policy.CanRequestApproval(decision) {
 		return approval.ErrConflict
 	}
-	return r.authorizeTool(run.ID, agent)(ctx, call, binding.Descriptor.Security.Scope)
+	return r.authorizeTool(run.ID, agent)(ctx, call, scope)
 }

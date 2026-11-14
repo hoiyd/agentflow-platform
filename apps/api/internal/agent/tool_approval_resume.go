@@ -54,7 +54,7 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 			return err
 		}
 		for _, step := range steps {
-			if step.ID == record.StageID {
+			if step.ID == record.StageID && step.AgentID != "" {
 				agent, ok = findAgentByID(restored.candidateAgents, step.AgentID)
 				if !ok {
 					return approval.ErrConflict
@@ -103,6 +103,12 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 	request.Catalog = restored.catalog
 	if restored.mode == ChatModeMultiAgent {
 		request.Catalog, err = catalogForAgent(restored.catalog, agent)
+		if err != nil {
+			return err
+		}
+	}
+	if request.Role == "planner" {
+		request.Catalog, err = r.clarificationCatalog(restored.catalog)
 		if err != nil {
 			return err
 		}
@@ -186,6 +192,14 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 	}
 	if restored.mode == ChatModeAutonomous {
 		return r.resumeClarificationAutonomous(ctx, run, step, restored, release, events)
+	}
+	if step.Role == "planner" {
+		waiting, err := r.transitionRun(run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"source": "plan_approval"})
+		if err != nil {
+			return err
+		}
+		events <- liveRunEvent(waiting)
+		return nil
 	}
 	steps, err = r.store.ListCollaborationSteps(runID)
 	if err != nil {

@@ -37,7 +37,7 @@ func (c *Continuation) RestoreSources() error {
 		return clarification.ErrInvalid
 	}
 	if c.Approval != nil {
-		if c.Approval.CallID != c.PendingCallID || c.Approval.Tool != "file_patch" || last.ToolCalls[0].Function.Name != c.Approval.Tool {
+		if c.Approval.CallID != c.PendingCallID || c.Approval.Tool == "" || last.ToolCalls[0].Function.Name != c.Approval.Tool {
 			return clarification.ErrInvalid
 		}
 	} else if last.ToolCalls[0].Function.Name != clarification.ToolName {

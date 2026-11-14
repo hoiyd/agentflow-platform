@@ -46,7 +46,7 @@ func TestPostgresToolApprovalAtomicFailures(t *testing.T) {
 		}
 		return run, domain.ToolApproval{RunID: run.ID, ConversationID: conv.ID, TurnID: "real-turn", ToolCallID: "real-call", Tool: "file_patch", Arguments: json.RawMessage(`{"root":"output","path":"report.md","old_text":"old","new_text":"new"}`), ArgumentsHash: "args", DefinitionRevision: "definition", PolicyHash: "policy", SnapshotHash: "snapshot"}
 	}
-	for _, scenario := range []string{"missing_identity", "wrong_turn", "wrong_call", "wrong_stage", "invalid_checkpoint", "oversized", "pause_rollback", "decision_rollback", "claim_rollback", "consume_rollback", "wrong_owner", "stale_claim", "binding_drift", "epoch_drift", "late_cancel", "late_expiry", "invalid_decision", "unknown_record", "corrupt_record"} {
+	for _, scenario := range []string{"missing_identity", "wrong_tool", "wrong_turn", "wrong_call", "wrong_stage", "invalid_checkpoint", "oversized", "pause_rollback", "decision_rollback", "claim_rollback", "consume_rollback", "wrong_owner", "stale_claim", "binding_drift", "epoch_drift", "late_cancel", "late_expiry", "invalid_decision", "unknown_record", "corrupt_record"} {
 		t.Run(scenario, func(t *testing.T) {
 			run, record := makePause()
 			checkpoint := json.RawMessage(`{"version":1}`)
@@ -55,6 +55,8 @@ func TestPostgresToolApprovalAtomicFailures(t *testing.T) {
 				record.TurnID = ""
 			case "wrong_turn":
 				record.TurnID = "invented"
+			case "wrong_tool":
+				record.Tool = "calculator"
 			case "wrong_call":
 				record.ToolCallID = "invented"
 			case "wrong_stage":

@@ -22,9 +22,10 @@ func browserToolApprovalConfig(t *testing.T, cfg *config.Config) {
 	}
 	for i := range tools.SecurityPolicy.Rules {
 		if tools.SecurityPolicy.Rules[i].Tool == "file_patch" {
-			tools.SecurityPolicy.Rules[i].Action = policy.ActionAsk
+			tools.SecurityPolicy.Rules[i].Action = policy.ActionApprovalRequired
 		}
 	}
+	tools.SecurityPolicy.Rules = append(tools.SecurityPolicy.Rules, policy.Rule{ID: "browser-approval-calculator", Tool: "calculator", Action: policy.ActionApprovalRequired, Capability: tool.CalculatorTool().Descriptor.Security})
 	if err = tool.SaveConfig(cfg.ToolConfigPath, tools); err != nil {
 		t.Fatal(err)
 	}

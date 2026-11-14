@@ -26,13 +26,13 @@ export function ToolApprovalPanel({ items, busy, recoverable, conversationHref, 
       const actionable = active && (item.status === "pending" || resumable);
       return <article key={item.id}>
         <header><ShieldCheck aria-hidden="true" size={17} /><strong>{labels[item.status] ?? item.status}</strong><code>{item.tool}</code></header>
-        <p className="tool-approval-target">{String(item.arguments.root ?? "")} / {String(item.arguments.path ?? "")}</p>
-        <dl className="tool-approval-change">
-          <div><dt>Replace</dt><dd>{String(item.arguments.old_text ?? "")}</dd></div>
-          <div><dt>With</dt><dd>{String(item.arguments.new_text ?? "")}</dd></div>
-        </dl>
+        {Object.keys(item.arguments).length ? <dl className="tool-approval-arguments" aria-label={`Arguments for ${item.tool}`}>
+          {Object.entries(item.arguments).map(([name, value]) => <div key={name}>
+            <dt>{name}</dt><dd><pre>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</pre></dd>
+          </div>)}
+        </dl> : <p className="tool-approval-empty">No arguments</p>}
         <details><summary>Exact call and approval boundary</summary>
-          <pre>{JSON.stringify({ arguments: item.arguments, call: item.tool_call_id, turn: item.turn_id, stage: item.stage_id,
+          <pre>{JSON.stringify({ call: item.tool_call_id, turn: item.turn_id, stage: item.stage_id,
             arguments_hash: item.arguments_hash, definition: item.definition_revision, policy: item.policy_hash, snapshot: item.snapshot_hash }, null, 2)}</pre>
         </details>
         <footer><span>Expires {new Date(item.expires_at).toLocaleString()}</span>

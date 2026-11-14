@@ -84,7 +84,7 @@ type ApprovalMode = domain.ToolApprovalMode
 
 const (
 	ApprovalNone      ApprovalMode = "none"
-	ApprovalAsk       ApprovalMode = "ask"
+	ApprovalRequired  ApprovalMode = "approval_required"
 	ApprovalHumanOnly ApprovalMode = "human_only"
 )
 
@@ -103,11 +103,11 @@ type Capability = domain.ToolCapability
 type Action = domain.ToolPolicyAction
 
 const (
-	ActionAllow       Action = "allow"
-	ActionAllowAndLog Action = "allow_and_log"
-	ActionAsk         Action = "ask"
-	ActionDeny        Action = "deny"
-	ActionHumanOnly   Action = "human_only"
+	ActionAllow            Action = "allow"
+	ActionAllowAndLog      Action = "allow_and_log"
+	ActionApprovalRequired Action = "approval_required"
+	ActionDeny             Action = "deny"
+	ActionHumanOnly        Action = "human_only"
 )
 
 // Rule is operator-owned. Capability is the maximum authority granted to the
@@ -133,10 +133,24 @@ type Decision struct {
 
 func (d Decision) AuditRequired() bool { return d.Allowed && d.Action == ActionAllowAndLog }
 
-// Phase A has one real consumer. human_only and deny never become approvable;
-// discovery is not authorization and the Executor still requires a durable claim.
-func CanRequestApproval(name string, d Decision) bool {
-	return name == "file_patch" && d.RuleID != "" && d.Action == ActionAsk && d.Reason == "human_approval_required" && d.Capability.Approval != ApprovalHumanOnly
+// Only an evaluated approval policy can pause for consent. Tool names do not
+// grant authority; deny, human_only and failed scope/credential checks stay blocked.
+func CanRequestApproval(d Decision) bool {
+	return IsApprovalRequired(d.Action) && d.Reason == "human_approval_required" && d.Capability.Approval != ApprovalHumanOnly
+}
+
+// IsApprovalRequired accepts the old config spelling without rewriting frozen
+// policy/definition hashes. New declarations and evaluated decisions use the
+// explicit approval_required name; neither spelling is an execution grant.
+func IsApprovalRequired(action Action) bool {
+	return action == ActionApprovalRequired || action == "ask"
+}
+
+func effectiveApprovalMode(mode ApprovalMode) ApprovalMode {
+	if mode == "ask" {
+		return ApprovalRequired
+	}
+	return mode
 }
 
 func DefaultPolicy() Policy {
@@ -243,7 +257,7 @@ func ValidateCapability(capability Capability) error {
 	if !oneOf(capability.Visibility, VisibilityRun, VisibilityUser, VisibilityOperator) {
 		return fmt.Errorf("unsupported visibility %q", capability.Visibility)
 	}
-	if !oneOf(capability.Approval, ApprovalNone, ApprovalAsk, ApprovalHumanOnly) {
+	if !oneOf(effectiveApprovalMode(capability.Approval), ApprovalNone, ApprovalRequired, ApprovalHumanOnly) {
 		return fmt.Errorf("unsupported approval mode %q", capability.Approval)
 	}
 	if !oneOf(capability.Audit, AuditBasic, AuditFull) {
@@ -352,6 +366,9 @@ func Evaluate(policy Policy, request Request) Decision {
 }
 
 func decisionForAction(decision Decision, action Action, capability Capability) Decision {
+	if IsApprovalRequired(action) {
+		action = ActionApprovalRequired
+	}
 	decision.Action = action
 	switch action {
 	case ActionAllow, ActionAllowAndLog:
@@ -364,7 +381,7 @@ func decisionForAction(decision Decision, action Action, capability Capability) 
 			return decision
 		}
 		decision.Allowed, decision.Reason = true, "policy_allowed"
-	case ActionAsk, ActionHumanOnly:
+	case ActionApprovalRequired, ActionHumanOnly:
 		decision.Reason = "human_approval_required"
 	default:
 		decision.Action, decision.Reason = ActionDeny, "policy_denied"
@@ -376,7 +393,7 @@ func capabilityContains(maximum, requested Capability) bool {
 	maximum, requested = NormalizeCapability(maximum), NormalizeCapability(requested)
 	return maximum.Source == requested.Source && maximum.SideEffect == requested.SideEffect &&
 		maximum.Rate == requested.Rate && maximum.Reversibility == requested.Reversibility &&
-		maximum.Visibility == requested.Visibility && maximum.Approval == requested.Approval &&
+		maximum.Visibility == requested.Visibility && effectiveApprovalMode(maximum.Approval) == effectiveApprovalMode(requested.Approval) &&
 		maximum.Audit == requested.Audit && scopeContains(maximum.Scope, requested.Scope)
 }
 
@@ -456,7 +473,7 @@ func containsStrings(maximum, requested []string) bool {
 }
 
 func validAction(action Action) bool {
-	return oneOf(action, ActionAllow, ActionAllowAndLog, ActionAsk, ActionDeny, ActionHumanOnly)
+	return IsApprovalRequired(action) || oneOf(action, ActionAllow, ActionAllowAndLog, ActionDeny, ActionHumanOnly)
 }
 
 func oneOf[T comparable](value T, allowed ...T) bool {

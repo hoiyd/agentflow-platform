@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test("exact-call approval survives reload and executes once across runtime modes", async ({ page, request }) => {
-  test.skip(process.env.AGENTFLOW_TOOL_APPROVAL_TEST !== "1", "requires operator ask policy and isolated output roots");
+  test.skip(process.env.AGENTFLOW_TOOL_APPROVAL_TEST !== "1", "requires operator approval policy and isolated output roots");
   test.setTimeout(120_000);
   await page.goto("/workspace");
   const workspace = await defaultWorkspaceID(page);
@@ -32,6 +32,7 @@ test("exact-call approval survives reload and executes once across runtime modes
       if (mode === "Single agent") await test.info().attach("tool-approval-pending-desktop.png", { body: await page.screenshot(), contentType: "image/png" });
       await panel.getByRole("button", { name: "Approve once & continue", exact: true }).click();
       await expect(page.locator(".message.assistant").last()).toContainText("Report edit verified.");
+      await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
       const approvals = await (await request.get(`http://127.0.0.1:18080/api/runs/${run}/tool-approvals`, { headers })).json();
       expect(approvals).toHaveLength(1);
       expect(approvals[0].status).toBe("consumed");
@@ -53,9 +54,49 @@ test("exact-call approval survives reload and executes once across runtime modes
     await test.info().attach("tool-approval-evidence.json", {
       body: JSON.stringify({ schema: "tool-approval-browser-evidence-v1", workspace_id: workspace, cases: evidence,
         checks: ["real UI/HTTP/Runtime/Binding/Postgres", "no patch before approval", "reload", "exact approved patch", "single receipt", "duplicate resume rejected", "frozen Snapshot", "Replay evidence"],
-        limitations: ["deterministic provider", "managed-output file_patch only", "not external exactly-once"] }, null, 2),
+        limitations: ["deterministic provider", "this scenario exercises managed-output file_patch", "not external exactly-once"] }, null, 2),
       contentType: "application/json"
     });
+  } finally {
+    await request.delete(`http://127.0.0.1:18080/api/agents/${agent.id}`, { headers });
+  }
+});
+
+test("a configured non-file Tool uses the same durable approval and argument view", async ({ page, request }) => {
+  test.skip(process.env.AGENTFLOW_TOOL_APPROVAL_TEST !== "1", "requires isolated operator approval policy");
+  await page.goto("/workspace");
+  await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: /Single agent/ }).click();
+  const workspace = await defaultWorkspaceID(page);
+  const headers = { "X-Workspace-ID": workspace };
+  const agent = await createWorkspaceChatAgent(page, workspace, "Calculation reviewer", { tools: ["calculator"] });
+  try {
+    await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    const task = "configured-approval-gate:calculator";
+    await page.getByPlaceholder("Ask AgentFlow anything...").fill(task);
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    const panel = page.getByRole("region", { name: "Tool approvals", exact: true });
+    await expect(panel.getByText("expression", { exact: true })).toBeVisible();
+    await expect(panel.getByText("21 * 2", { exact: true })).toBeVisible();
+    const run = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!.split("/").at(-1)!;
+    await page.reload();
+    await expect(panel.getByText("21 * 2", { exact: true })).toBeVisible();
+    const before = await (await request.get(`http://127.0.0.1:18080/api/runs/${run}/replay`, { headers })).json();
+    expect(before.run_events.some((e: { type: string; payload: { tool_name?: string } }) => e.type === "tool.completed" && e.payload.tool_name === "calculator")).toBe(false);
+    await test.info().attach("tool-approval-generic-desktop.png", { body: await page.screenshot(), contentType: "image/png" });
+    await panel.getByRole("button", { name: "Approve once & continue", exact: true }).click();
+    await expect(page.locator(".message.assistant").last()).toContainText("Configured action verified.");
+    await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+    const after = await (await request.get(`http://127.0.0.1:18080/api/runs/${run}/replay`, { headers })).json();
+    expect(after.run.status).toBe("completed");
+    expect(after.runtime_snapshot).toEqual(before.runtime_snapshot);
+    expect(after.projection.invariant_failures).toEqual([]);
+    expect(after.run_events.filter((e: { type: string; payload: { tool_name?: string } }) => e.type === "tool.completed" && e.payload.tool_name === "calculator")).toHaveLength(1);
+    await test.info().attach("generic-approval-evidence.json", { body: JSON.stringify({
+      schema: "generic-approval-browser-evidence-v1", workspace_id: workspace, run_id: run, input: task,
+      snapshot: after.runtime_snapshot, run_events: after.run_events,
+      checks: ["real calculator Binding", "configuration-driven approval", "generic arguments", "reload", "no execution before consent", "one completed call"],
+      limitations: ["deterministic model", "read-only Tool may be recomputed after a crash"]
+    }, null, 2), contentType: "application/json" });
   } finally {
     await request.delete(`http://127.0.0.1:18080/api/agents/${agent.id}`, { headers });
   }

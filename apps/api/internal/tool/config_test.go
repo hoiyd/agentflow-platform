@@ -1,13 +1,51 @@
 package tool
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
+
+func TestApprovalRequiredConfigRoundTrip(t *testing.T) {
+	// Literal prior config, not current defaults: old spellings remain readable
+	// and stable across save/reload; new configs use the explicit action name.
+	const prior = `{"enabled_tools":["calculator"],"security_policy":{"version":"operator-v1","default_action":"ask","rules":[{"id":"review","tool":"calculator","action":"ask","capability":{"approval_mode":"ask"}}]}}`
+	for _, spelling := range []string{"ask", "approval_required"} {
+		t.Run(spelling, func(t *testing.T) {
+			fixture := strings.ReplaceAll(prior, `"ask"`, `"`+spelling+`"`)
+			path := filepath.Join(t.TempDir(), "tools.json")
+			if err := os.WriteFile(path, []byte(fixture), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before, _ := json.Marshal(cfg.SecurityPolicy)
+			if err = SaveConfig(path, cfg); err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := LoadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			after, _ := json.Marshal(loaded.SecurityPolicy)
+			if !bytes.Equal(before, after) || loaded.SecurityPolicy.DefaultAction != policy.Action(spelling) || loaded.SecurityPolicy.Rules[0].Capability.Approval != policy.ApprovalMode(spelling) {
+				t.Fatalf("policy changed on restart: %s -> %s", before, after)
+			}
+			decision := policy.Evaluate(loaded.SecurityPolicy, policy.Request{Tool: "calculator", Declared: loaded.SecurityPolicy.Rules[0].Capability})
+			if decision.Allowed || decision.Action != "approval_required" || !policy.CanRequestApproval(decision) {
+				t.Fatalf("unexpected decision: %#v", decision)
+			}
+		})
+	}
+}
 
 func TestLoadConfigRejectsUnknownFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tools.json")

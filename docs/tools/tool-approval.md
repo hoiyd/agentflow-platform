@@ -1,27 +1,36 @@
 # Durable Tool Approval
 
-An explicit operator `ask` rule for **`file_patch`** pauses the original Run
-before its Handler executes. Chat shows the target, exact replacement and expiry;
+An operator `approval_required` policy pauses a registered Tool call before its
+Handler executes. Chat shows the Tool, complete arguments and expiry;
 the owner can approve once, reject, revoke an unconsumed approval, or Stop the Run.
 Replay retains the decision and links back to Chat. Refresh/restart does not lose
 the pending call. Plan approval and clarification answers never grant Tool access.
 
 ## Enable
 
-Keep the existing filesystem root, Workspace grant and Agent binding. In the
-operator Tool configuration, change the **existing `file_patch` rule's action**
-from `allow_and_log` to `ask`, retaining its exact capability declaration.
-Do not copy a capability with different reversibility or widen the root map.
-No default permission or environment variable changes are required.
+In the operator Tool configuration, set the relevant rule's `action` to
+`approval_required`, retaining its exact capability declaration. For example,
+`file_write` and `file_patch` use the same approval flow as a calculator or an
+installed MCP Binding. There is no Tool-name allowlist or second approval switch.
+`default_action` also applies to local non-sensitive Tools; sensitive and remote
+Tools still require explicit rules. Defaults and existing local files are unchanged.
 
-Phase A only covers this explicitly configured managed-report consumer.
-`deny` and `human_only` remain blocked; other Bindings, default `ask` without
-an explicit rule, batch approvals and edited-argument approvals are not enabled.
-A batch containing a `file_patch` that requires approval is rejected before any
-call in that batch executes. A corrected call needs its own approval.
-Direct human Undo/reconciliation retains its own authenticated command and receipt
-checks; it does not create another model-call approval. `deny` and `human_only`
-are not overridden by this exception.
+The Tool must already be installed, ready, enabled in the Workspace, and available
+to the Agent and execution mode. Approval cannot add capabilities: an isolated
+Multi-Agent Worker still cannot mutate parent Task State or request parent input.
+Runtime-only discovery retains its own bootstrap policy, not a new operator
+configuration surface in this change. `deny` and `human_only` remain blocked.
+
+Calls needing approval must be sent alone; a mixed batch is rejected before any
+call executes. A corrected call needs fresh approval. Parameter editing and batch
+approvals are not supported. Direct human Undo/reconciliation uses its own
+authenticated command and exact receipt/version checks, not another model-call
+approval; deny, human_only and scope/credential restrictions still apply.
+
+New policy actions and capability approval modes use `approval_required`. The old
+`ask` spelling is still read with the same meaning; stored configurations and frozen
+Snapshots retain their original values/hashes. Explicitly renaming an existing rule
+changes its Policy hash and invalidates pending approval, as any policy edit does.
 
 ## Contract
 
@@ -39,7 +48,7 @@ are not overridden by this exception.
 - Resume rechecks current Agent/Workspace grants, schema, definition, policy,
   frozen context and budget. Any Policy hash change invalidates the approval
   conservatively, even if it appears unrelated to this call.
-  A Run frozen under `allow` cannot execute through a new live `ask` rule;
+  A Run frozen under `allow` cannot execute through a new live `approval_required` rule;
   start a new Run to capture the approval-capable protocol.
 - A transaction claims one execution epoch. Immediately before Effect Journal
   preparation, another transaction rechecks expiry, the approval's immutable
@@ -49,6 +58,10 @@ are not overridden by this exception.
   Consult the Effect receipt. A committed receipt can replay without rewriting;
   a completed Turn/Stage reuses its output. Unknown publication/settlement stays
   behind existing reconciliation. This does not promise external exactly-once.
+- Read-only calls have no write receipt and may be recomputed after a crash.
+  Approved results pass through normal Tool observation handling, including
+  source labeling and control interrupts; approving a question Tool does not
+  answer its questions.
 
 The trusted local configuration is re-read before the execution claim. This is
 not a distributed policy transaction or protection against an operator who can
@@ -71,8 +84,9 @@ background cancellation job; use Stop to close the waiting Run.
 Bound Resume also rejects expired approvals after a crash; it does not silently
 renew consent. Historical decisions, output and Effect receipts remain readable.
 
-Production integration scenarios exercise real HTTP, filesystem Bindings and
-Postgres, with a deterministic provider and explicit crash-window seeding:
+Production integration scenarios exercise real HTTP, filesystem/calculator/Task
+State/clarification/MCP Bindings and Postgres, with a deterministic provider and
+explicit crash-window seeding:
 
 ```bash
 # From apps/api; TEST_DATABASE_URL must be a disposable test database.
@@ -84,4 +98,4 @@ AGENTFLOW_TOOL_APPROVAL_TEST=1 AGENTFLOW_FILESYSTEM_WRITE_TEST=1 \
 ```
 
 No new CLI approval command is included; headless consumers can use the same
-authorized endpoints. Parameter editing and other Binding consumers remain Phase B.
+authorized endpoints. Parameter editing and batch approval remain conditional follow-ups.

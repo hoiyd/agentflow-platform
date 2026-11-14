@@ -30,9 +30,9 @@ func authorizedReconciliationBinding(catalog *tool.Catalog, record domain.ToolEf
 		RequestedScope: binding.Descriptor.Security.Scope,
 	})
 	// These are authenticated, explicit recovery commands over an existing
-	// receipt, not model Tool calls. Phase A ask does not add a second approval
+	// receipt, not model Tool calls. Phase A does not add a second approval
 	// to Undo/verification; deny, human_only and scope mismatches stay blocked.
-	if !decision.Allowed && !policy.CanRequestApproval(record.ToolName, decision) {
+	if !decision.Allowed && !policy.CanRequestApproval(decision) {
 		return tool.Binding{}, &ReconciliationError{Code: ReconciliationUnavailable, Message: "reconciliation denied by tool policy: " + decision.Reason}
 	}
 	return binding, nil

@@ -18,6 +18,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/checkpoint"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
@@ -33,8 +34,8 @@ import (
 // original Tool-call and reasoning protocol, budget, scope and file receipts.
 func TestProductionDurableToolApproval(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "undo", "lazy", "restart", "claim_restart", "consume_restart", "write_restart", "completed_restart", "uncertain_restart", "reject", "cancel", "budget", "expired", "revoke", "policy_changed", "live_ask_drift", "grant_revoked", "stale_args", "snapshot_drift", "root_drift", "prewrite_conflict", "corrupt_checkpoint", "corrupt_protocol", "mixed_batch", "concurrent"} {
-			if mode != "single" && scenario != "happy" && scenario != "restart" && scenario != "claim_restart" && scenario != "write_restart" && scenario != "completed_restart" && scenario != "reject" && scenario != "budget" {
+		for _, scenario := range []string{"happy", "undo", "lazy", "restart", "legacy_policy_restart", "claim_restart", "consume_restart", "write_restart", "completed_restart", "uncertain_restart", "reject", "cancel", "budget", "expired", "revoke", "policy_changed", "live_approval_policy_drift", "grant_revoked", "stale_args", "snapshot_drift", "root_drift", "prewrite_conflict", "corrupt_checkpoint", "corrupt_protocol", "mixed_batch", "legacy_mixed_batch", "concurrent", "generic_calculator", "generic_file_write", "generic_file_read", "generic_update_task_state", "generic_request_user_input", "generic_mcp_docs__read"} {
+			if mode != "single" && !strings.HasPrefix(scenario, "generic_") && scenario != "happy" && scenario != "restart" && scenario != "claim_restart" && scenario != "write_restart" && scenario != "completed_restart" && scenario != "reject" && scenario != "budget" {
 				continue
 			}
 			t.Run(mode+"/"+scenario, func(t *testing.T) { testProductionToolApproval(t, mode, scenario) })
@@ -51,7 +52,7 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	provider := newBrowserProvider()
 	var changedPolicy sync.Once
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if scenario == "live_ask_drift" && r.URL.Path == "/chat/completions" {
+		if scenario == "live_approval_policy_drift" && r.URL.Path == "/chat/completions" {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Error(err)
@@ -72,7 +73,7 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 								}
 								for i := range config.SecurityPolicy.Rules {
 									if config.SecurityPolicy.Rules[i].Tool == "file_patch" {
-										config.SecurityPolicy.Rules[i].Action = policy.ActionAsk
+										config.SecurityPolicy.Rules[i].Action = policy.ActionApprovalRequired
 									}
 								}
 								if err = tool.SaveConfig(path, config); err != nil {
@@ -115,13 +116,42 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		cfg.ToolSchemaMode = "lazy"
 	}
 	browserFilesystemConfig(t, &cfg, root)
+	var mcpControls http.Handler
+	if scenario == "generic_mcp_docs__read" {
+		mcpControls = browserMCPConfig(t, &cfg, root)
+	}
 	tools, err := tool.LoadConfig(cfg.ToolConfigPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := range tools.SecurityPolicy.Rules {
-		if tools.SecurityPolicy.Rules[i].Tool == "file_patch" && scenario != "live_ask_drift" {
-			tools.SecurityPolicy.Rules[i].Action = policy.ActionAsk
+		if !strings.HasPrefix(scenario, "generic_") && tools.SecurityPolicy.Rules[i].Tool == "file_patch" && scenario != "live_approval_policy_drift" {
+			tools.SecurityPolicy.Rules[i].Action = policy.ActionApprovalRequired
+			if strings.HasPrefix(scenario, "legacy_") {
+				tools.SecurityPolicy.Rules[i].Action = "ask"
+			}
+		}
+	}
+	if strings.HasPrefix(scenario, "generic_") {
+		name := configuredApprovalTool(scenario)
+		found := false
+		for i := range tools.SecurityPolicy.Rules {
+			if tools.SecurityPolicy.Rules[i].Tool == name {
+				tools.SecurityPolicy.Rules[i].Action = policy.ActionApprovalRequired
+				found = true
+			}
+		}
+		if !found {
+			var binding tool.Binding
+			switch name {
+			case "calculator":
+				binding = tool.CalculatorTool()
+			case clarification.ToolName:
+				binding = clarification.Binding()
+			default:
+				t.Fatalf("missing real test Binding: %s", name)
+			}
+			tools.SecurityPolicy.Rules = append(tools.SecurityPolicy.Rules, policy.Rule{ID: "configured-approval", Tool: name, Action: policy.ActionApprovalRequired, Capability: binding.Descriptor.Security})
 		}
 	}
 	if err = tool.SaveConfig(cfg.ToolConfigPath, tools); err != nil {
@@ -164,11 +194,18 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	var agent domain.Agent
 	boundTools := []string{"file_write", "file_patch"}
 	task := "tool-approval-gate: revise the managed report"
+	if strings.HasPrefix(scenario, "generic_") {
+		task = "configured-approval-gate:" + configuredApprovalTool(scenario)
+		boundTools = []string{"calculator"}
+		if name := configuredApprovalTool(scenario); name != "calculator" && name != "update_task_state" && name != clarification.ToolName {
+			boundTools = append(boundTools, name)
+		}
+	}
 	if scenario == "prewrite_conflict" {
 		boundTools = append(boundTools, "file_read")
 		task += " prewrite-correction"
 	}
-	if scenario == "mixed_batch" {
+	if strings.HasSuffix(scenario, "mixed_batch") {
 		task += " mixed-approval-batch"
 	}
 	call("POST", "/api/agents", map[string]any{"name": "Approval report editor", "system_prompt": "Edit the report using authorized tools.", "tools": boundTools, "routing_hints": map[string]any{"capabilities": []string{"report"}, "task_examples": []string{"tool-approval-gate: revise the managed report"}}}, 201, &agent)
@@ -186,11 +223,35 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		t.Fatalf("missing Run identity: %s", body)
 	}
 	if mode == "multi_agent" {
-		body = call("POST", "/api/runs/"+runID+"/continue", map[string]any{"plan": "Edit the report after explicit approval."}, 200, nil)
+		var pending []domain.ToolApproval
+		call("GET", "/api/runs/"+runID+"/tool-approvals", nil, 200, &pending)
+		if len(pending) == 0 {
+			body = call("POST", "/api/runs/"+runID+"/continue", map[string]any{"plan": "Edit the report after explicit approval."}, 200, nil)
+		}
 	}
 	var approvals []map[string]any
 	call("GET", "/api/runs/"+runID+"/tool-approvals", nil, 200, &approvals)
-	if scenario == "mixed_batch" {
+	if strings.HasPrefix(scenario, "generic_") {
+		if mode == "multi_agent" && configuredApprovalTool(scenario) == "update_task_state" {
+			// Approval never overrides the isolated Worker's existing prohibition
+			// on writing parent Task State.
+			var replay domain.RunReplay
+			call("GET", "/api/runs/"+runID+"/replay", nil, 200, &replay)
+			if len(approvals) != 0 || len(replay.TaskStateRevisions) != 0 {
+				t.Fatal("approval expanded isolated Worker authority")
+			}
+			return
+		}
+		if mcpControls != nil {
+			assertApprovalMCPCalls(t, mcpControls, 0)
+		}
+		configuredApprovalRun{call: call, root: root, runID: runID, tool: configuredApprovalTool(scenario)}.verify(t)
+		if mcpControls != nil {
+			assertApprovalMCPCalls(t, mcpControls, 1)
+		}
+		return
+	}
+	if strings.HasSuffix(scenario, "mixed_batch") {
 		data, err := os.ReadFile(filepath.Join(root, "output", "approval-report.md"))
 		if err != nil || string(data) != "Original report.\n" || len(approvals) != 0 || !strings.Contains(body, "tool_approval_batch_unsupported") {
 			t.Fatalf("mixed batch was not rejected before effects: %s approvals=%#v err=%v stream=%s", data, approvals, err, body)
@@ -200,10 +261,10 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		}
 		return
 	}
-	if scenario == "live_ask_drift" {
+	if scenario == "live_approval_policy_drift" {
 		data, err := os.ReadFile(filepath.Join(root, "output", "approval-report.md"))
 		if err != nil || string(data) != "Original report.\n" || len(approvals) != 0 {
-			t.Fatalf("live ask bypassed frozen allow: %s approvals=%#v err=%v", data, approvals, err)
+			t.Fatalf("live approval_required bypassed frozen allow: %s approvals=%#v err=%v", data, approvals, err)
 		}
 		return
 	}

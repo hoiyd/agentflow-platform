@@ -96,7 +96,7 @@ func approvalEvent(ctx context.Context, tx *sql.Tx, m *approval.Mutation, kind d
 
 func (s *PostgresStore) SuspendToolApproval(ctx context.Context, record domain.ToolApproval, checkpoint json.RawMessage) (approval.Mutation, error) {
 	m := approval.Mutation{ToolApproval: record}
-	if record.RunID == "" || record.TurnID == "" || record.ToolCallID == "" || record.Tool != "file_patch" || record.ArgumentsHash == "" || record.DefinitionRevision == "" || record.SnapshotHash == "" || record.PolicyHash == "" || len(checkpoint) > approval.MaxCheckpointBytes || !json.Valid(checkpoint) {
+	if record.RunID == "" || record.TurnID == "" || record.ToolCallID == "" || record.Tool == "" || record.ArgumentsHash == "" || record.DefinitionRevision == "" || record.SnapshotHash == "" || record.PolicyHash == "" || len(checkpoint) > approval.MaxCheckpointBytes || !json.Valid(checkpoint) {
 		return m, approval.ErrInvalid
 	}
 	if err := redaction.ValidateValue(checkpoint); err != nil {
@@ -121,9 +121,9 @@ func (s *PostgresStore) SuspendToolApproval(ctx context.Context, record domain.T
 		return m, err
 	}
 	var real bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM run_events WHERE run_id=$1 AND turn_id=$2 AND COALESCE(stage_id,'')=$3 AND type='tool.failed' AND payload->>'tool_call_id'=$4 AND payload->>'tool_name'='file_patch' AND payload->>'error_code'='approval_required' AND payload->>'arguments_hash'=$5 AND payload->>'definition_revision'=$6)
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM run_events WHERE run_id=$1 AND turn_id=$2 AND COALESCE(stage_id,'')=$3 AND type='tool.failed' AND payload->>'tool_call_id'=$4 AND payload->>'tool_name'=$7 AND payload->>'error_code'='approval_required' AND payload->>'arguments_hash'=$5 AND payload->>'definition_revision'=$6)
  AND EXISTS(SELECT 1 FROM run_events WHERE run_id=$1 AND turn_id=$2 AND type='turn.started')
- AND ($3='' OR EXISTS(SELECT 1 FROM collaboration_steps WHERE id=$3 AND run_id=$1))`, record.RunID, record.TurnID, record.StageID, record.ToolCallID, record.ArgumentsHash, record.DefinitionRevision).Scan(&real); err != nil {
+ AND ($3='' OR EXISTS(SELECT 1 FROM collaboration_steps WHERE id=$3 AND run_id=$1))`, record.RunID, record.TurnID, record.StageID, record.ToolCallID, record.ArgumentsHash, record.DefinitionRevision, record.Tool).Scan(&real); err != nil {
 		return m, err
 	}
 	if status != "running" || !real {
