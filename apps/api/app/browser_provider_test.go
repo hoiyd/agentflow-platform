@@ -177,6 +177,12 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		f.reject(w, "selected project guidance was not delivered to the model")
 		return
 	}
+	if f.configuredApprovalResponse(w, input, task) {
+		return
+	}
+	if f.toolApprovalResponse(w, input, task) {
+		return
+	}
 	if f.filesystemResponse(w, input, task) {
 		return
 	}

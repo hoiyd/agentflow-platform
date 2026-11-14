@@ -16,6 +16,7 @@ import "./styles/workbench/shell.css";
 import "./styles/workbench/navigation.css";
 import "./styles/workbench/chat.css";
 import "./styles/workbench/clarification.css";
+import "./styles/workbench/tool-approval.css";
 import "./styles/workbench/markdown.css";
 import "./styles/workbench/generation-evidence.css";
 import "./styles/workbench/tool-progress.css";

@@ -149,7 +149,7 @@ func TestRestoredPrivateEvidenceControlsActualNetworkTool(t *testing.T) {
 }
 
 func TestPromptConsentCannotApproveToolExecution(t *testing.T) {
-	for _, action := range []policy.Action{policy.ActionAsk, policy.ActionHumanOnly} {
+	for _, action := range []policy.Action{policy.ActionApprovalRequired, policy.ActionHumanOnly} {
 		t.Run(string(action), func(t *testing.T) {
 			var executed atomic.Int32
 			f := newLoopFixture(t, domain.RuntimeRunBudget{MaxModelCalls: 3, MaxToolCalls: 1}, func(round int, input wireRequest) any {

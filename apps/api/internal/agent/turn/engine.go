@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
-	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
@@ -131,9 +130,9 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		return result, sinkErr
 	}
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if IsWaiting(err) {
 			result.StopReason = StopWaiting
-			// The clarification store atomically closed this Turn with its checkpoint.
+			// The interrupt store atomically closed this segment with its checkpoint.
 			return result, err
 		}
 		result.StopReason = StopFailed

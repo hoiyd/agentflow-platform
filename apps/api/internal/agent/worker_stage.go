@@ -90,6 +90,9 @@ func boundedWorkerHandoff(step domain.CollaborationStep) string {
 }
 
 func (r *Runtime) failCollaborationStage(ctx context.Context, events chan<- domain.RunEvent, step domain.CollaborationStep, cause error) error {
+	if turnpkg.IsWaiting(cause) {
+		return cause
+	}
 	failed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", cause.Error())
 	if err == nil {
 		emitCollaborationEvent(events, liveStageEvent(failed))

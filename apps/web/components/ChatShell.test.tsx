@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../lib/api", () => api);
 const listClarifications = vi.hoisted(() => vi.fn());
 vi.mock("../lib/clarification-api", () => ({listClarifications}));
+vi.mock("../lib/tool-approval-api", () => ({listToolApprovals:vi.fn(async () => []),decideToolApproval:vi.fn(),resumeToolApproval:vi.fn()}));
 const knowledgeAPI = vi.hoisted(() => ({ listDocuments: vi.fn() }));
 vi.mock("../lib/knowledge-api", () => knowledgeAPI);
 vi.mock("./chat/ChatChrome", () => ({

@@ -124,6 +124,9 @@ func TestBrowserServer(t *testing.T) {
 		browserFilesystemConfig(t, &cfg, root)
 		cfg.RunMaxModelCalls = 24
 	}
+	if os.Getenv("AGENTFLOW_TOOL_APPROVAL_TEST") == "1" {
+		browserToolApprovalConfig(t, &cfg)
+	}
 	if os.Getenv("AGENTFLOW_PROJECT_GUIDANCE_TEST") == "1" {
 		browserProjectGuidanceConfig(t, &cfg, root)
 	}

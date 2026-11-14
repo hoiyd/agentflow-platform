@@ -25,6 +25,7 @@ import (
 )
 
 type Request struct {
+	SuspendApproval      func(context.Context, tool.ExecutionRequest, Continuation) error
 	AgentID              string
 	SchemaConfig         domain.ToolSchemaConfig
 	Sink                 eventpkg.Sink
@@ -89,7 +90,10 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		options.PrivateContext = options.PrivateContext || private
 	}
 	var prepared provider.PreparedChat
-	if request.Continuation != nil {
+	if request.Continuation != nil && request.Continuation.Approval != nil {
+		// The pending call has no observation yet. Execute it before assembling
+		// the next provider request; never ask the model to regenerate its arguments.
+	} else if request.Continuation != nil {
 		prepared, err = model.PrepareFollowup(ctx, request.Continuation.Messages, definitions)
 	} else {
 		prepared, err = model.PrepareAgentChat(ctx, provider.ChatRequest{
@@ -123,6 +127,25 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	rawMessages := append([]provider.Message(nil), prepared.RawMessages...)
 	toolSlots := map[string]int{}
 	firstRound := 1
+	// Normal and approved calls share observation processing. Consent must not
+	// bypass discovery activation, source labeling, or a control Tool's interrupt.
+	observeResults := func(results []tool.ExecutionResult, nextRound int) error {
+		if len(results) == 1 && results[0].Tool == clarification.ToolName && results[0].Error == nil && !results[0].Truncated {
+			return suspend(ctx, request, string(results[0].Arguments), Continuation{Messages: rawMessages, Identity: identity, NextRound: nextRound, ToolSlots: toolSlots, PendingCallID: results[0].CallID})
+		}
+		if err := visibility.activate(ctx, results); err != nil {
+			return err
+		}
+		definitions = visibility.definitions()
+		if err := labelWebSources(request.RunEvents, results); err != nil {
+			return err
+		}
+		for _, result := range results {
+			rawMessages = append(rawMessages, provider.Message{Role: "tool", ToolCallID: result.CallID, Content: marshalResult(result), Source: contextassembly.SourceToolResult, ReferenceID: result.CallID})
+		}
+		prepared, err = model.PrepareFollowup(ctx, rawMessages, definitions)
+		return err
+	}
 	if request.Continuation != nil {
 		identity = request.Continuation.Identity
 		firstRound = request.Continuation.NextRound
@@ -131,6 +154,18 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			toolSlots = map[string]int{}
 		}
 		rawMessages = append([]provider.Message(nil), request.Continuation.Messages...)
+		if pending := request.Continuation.Approval; pending != nil {
+			result := executor.Execute(ctx, *pending)
+			if result.Error != nil && (result.Error.Code == tool.ErrorApprovalRequired || result.PolicyDecision == nil || !result.PolicyDecision.Allowed) {
+				return result.Error
+			}
+			if err := terminalToolError(catalog, result); err != nil {
+				return err
+			}
+			if err := observeResults([]tool.ExecutionResult{result}, firstRound); err != nil {
+				return err
+			}
+		}
 	}
 	for round := firstRound; ; round++ {
 		if err := ctx.Err(); err != nil {
@@ -181,6 +216,9 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		if err := validateClarificationBatch(choice.ToolCalls, request); err != nil {
 			return err
 		}
+		if err := validateApprovalBatch(choice.ToolCalls, catalog); err != nil {
+			return err
+		}
 		calls := append([]provider.ToolCall(nil), choice.ToolCalls...)
 		requests := make([]tool.ExecutionRequest, len(calls))
 		for index := range calls {
@@ -211,28 +249,14 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			return err
 		}
 		for _, result := range results {
+			if len(results) == 1 && requiresApproval(result) && request.SuspendApproval != nil {
+				return suspendApproval(ctx, request, requests[0], result, Continuation{Messages: rawMessages, Identity: identity, NextRound: round + 1, ToolSlots: toolSlots})
+			}
 			if err := terminalToolError(catalog, result); err != nil {
 				return err
 			}
 		}
-		if calls[0].Function.Name == clarification.ToolName && results[0].Error == nil && !results[0].Truncated {
-			return suspend(ctx, request, calls[0].Function.Arguments, Continuation{Messages: rawMessages, Identity: identity, NextRound: round + 1, ToolSlots: toolSlots, PendingCallID: calls[0].ID})
-		}
-		if err := visibility.activate(ctx, results); err != nil {
-			return err
-		}
-		definitions = visibility.definitions()
-		if err := labelWebSources(request.RunEvents, results); err != nil {
-			return err
-		}
-		for _, result := range results {
-			rawMessages = append(rawMessages, provider.Message{
-				Role: "tool", ToolCallID: result.CallID, Content: marshalResult(result),
-				Source: contextassembly.SourceToolResult, ReferenceID: result.CallID,
-			})
-		}
-		prepared, err = model.PrepareFollowup(ctx, rawMessages, definitions)
-		if err != nil {
+		if err := observeResults(results, round+1); err != nil {
 			return err
 		}
 	}

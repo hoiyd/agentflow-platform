@@ -6,6 +6,8 @@ import {
 import { createLatestRequestController } from "../../lib/latest-request";
 import { answerClarification, resumeClarification, type ClarificationAnswerRequest } from "../../lib/clarification-api";
 import { useClarifications } from "./useClarifications";
+import { useToolApprovals } from "./useToolApprovals";
+import { decideToolApproval, resumeToolApproval, type ToolApprovalDecision } from "../../lib/tool-approval-api";
 import { removePendingMessages } from "../../lib/pending-messages";
 import type { CompletionContractInput } from "../../lib/verification";
 import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type RunState } from "./runEventProjection";
@@ -20,7 +22,7 @@ import type { ProjectContext } from "../../lib/project-guidance";
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
-  | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest };
+  | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest; approvalId?:string; approvalDecision?:ToolApprovalDecision };
 type Activity = "idle" | Command["kind"];
 type Workspace = Pick<ReturnType<typeof useConversationWorkspace>,
   "activeId" | "setActiveId" | "setInput" | "setMessages" | "setError" | "applyTitle">;
@@ -45,8 +47,9 @@ export function useRunSession(options: SessionOptions) {
   const cancelInFlight = useRef(false);
   const [runState, setStoredRunState] = useState<RunState | null>(null);
   const clarification = useClarifications(runState?.id ?? "", runState?.status ?? "");
-  const latest = useRef({ options, trace, clarification });
-  useLayoutEffect(() => { latest.current = { options, trace, clarification }; });
+  const toolApprovals = useToolApprovals(runState?.id ?? "", runState?.status ?? "");
+  const latest = useRef({ options, trace, clarification, toolApprovals });
+  useLayoutEffect(() => { latest.current = { options, trace, clarification, toolApprovals }; });
   // Pending display updates; completed history is loaded through message.reasoning.
   const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
   const [partialOutputs, setPartialOutputs] = useState<PartialOutput[]>([]);
@@ -194,6 +197,15 @@ export function useRunSession(options: SessionOptions) {
     const previousOutputCursor = outputCursor.current;
     if (command.kind !== "submitting" && !previousRun?.id) return;
     const recovery = latest.current.clarification;
+    const approvals = latest.current.toolApprovals;
+    if (command.kind !== "submitting" && !approvals.isReady(previousRun?.id, previousRun?.status)) {
+      latest.current.options.workspace.setError(approvals.error || "Loading Tool approval state before recovery...");
+      return;
+    }
+    if (command.kind !== "submitting" && !(command.kind === "resuming" && (command.approvalId || command.questionId)) && approvals.blocking) {
+      latest.current.options.workspace.setError("Resolve the exact Tool approval before continuing this Run.");
+      return;
+    }
     if (command.kind !== "submitting" && !recovery.isReady(previousRun?.id, previousRun?.status)) {
       latest.current.options.workspace.setError(recovery.error
         ? `Cannot continue run: clarification state unavailable: ${recovery.error}`
@@ -220,14 +232,14 @@ export function useRunSession(options: SessionOptions) {
       trace.setPlanDraft(command.plan);
     } else {
       trace.setHumanInputDraft(command.input);
-      setRunState(previousRun ? { ...previousRun, status: "running" } : null);
+      if (!command.approvalDecision || command.approvalDecision.decision === "approve") setRunState(previousRun ? { ...previousRun, status: "running" } : null);
     }
 
     const assistant: DraftMessage = { id: `local-assistant-${crypto.randomUUID()}`, conversation_id: conversationId,
       role: "assistant", content: "", created_at: new Date().toISOString() };
     const drafts: DraftMessage[] = command.kind === "submitting"
       ? [{ ...assistant, id: `local-user-${crypto.randomUUID()}`, role: "user", content: command.content }, assistant]
-      : [assistant];
+      : command.kind === "resuming" && command.approvalDecision && command.approvalDecision.decision !== "approve" ? [] : [assistant];
     workspace.setMessages((items) => [...items, ...drafts]);
     let accepted = false;
     const handle = createHandler({
@@ -256,7 +268,10 @@ export function useRunSession(options: SessionOptions) {
       } else if (command.kind === "continuing") {
         await continueRun({ run_id: runId, plan: command.plan, routing_requirements: command.requirements }, onEvent, request.signal);
       } else {
-        if(command.questionId){
+        if (command.approvalId) {
+          if (command.approvalDecision) await decideToolApproval(runId,command.approvalId,command.approvalDecision,request.signal);
+          if (!command.approvalDecision || command.approvalDecision.decision === "approve") await resumeToolApproval(runId,command.approvalId,onEvent,request.signal);
+        } else if(command.questionId){
           if(command.answer)await answerClarification(runId,command.questionId,command.answer,request.signal);
           await resumeClarification(runId,command.questionId,onEvent,request.signal);
         }else await resumeRun({ run_id: runId, user_input: command.input }, onEvent, request.signal);
@@ -325,7 +340,7 @@ export function useRunSession(options: SessionOptions) {
   }
 
   return {
-    runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel, clarification,
+    runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel, clarification, toolApprovals,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
     submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),
@@ -338,7 +353,8 @@ export function useRunSession(options: SessionOptions) {
       const answer = (input ?? latest.current.trace.humanInputDraft).trim();
       return answer ? execute({ kind: "resuming", input: answer }) : Promise.resolve();
     },
-    resumeClarification:(questionId:string,answer?:ClarificationAnswerRequest)=>execute({kind:"resuming",input:"",questionId,answer})
+    resumeClarification:(questionId:string,answer?:ClarificationAnswerRequest)=>execute({kind:"resuming",input:"",questionId,answer}),
+    resumeToolApproval:(approvalId:string,approvalDecision?:ToolApprovalDecision)=>execute({kind:"resuming",input:"",approvalId,approvalDecision})
   };
 }
 

@@ -38,7 +38,7 @@ func Resolve(storage store.WorkspaceToolStore, workspaceID string, service *tool
 		if item.ExcludedReason == "" {
 			binding, _ := service.Installed(item.Name)
 			decision := policy.Evaluate(service.SecurityPolicy(), policy.Request{Tool: item.Name, Declared: binding.Descriptor.Security, RequestedScope: binding.Descriptor.Security.Scope, AvailableCredentialScopes: binding.Descriptor.Security.Scope.Credentials})
-			if !decision.Allowed {
+			if !decision.Allowed && !policy.CanRequestApproval(decision) {
 				item.ExcludedReason = "policy_denied"
 			}
 		}

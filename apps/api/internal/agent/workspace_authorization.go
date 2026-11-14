@@ -79,7 +79,18 @@ func (r *Runtime) authorizeTool(runID string, agent domain.Agent) func(context.C
 		}
 		decision := policy.Evaluate(catalog.SecurityPolicy(), policy.Request{Tool: call.Tool, Declared: binding.Descriptor.Security, RequestedScope: scope, AvailableCredentialScopes: call.CredentialScopes})
 		if !decision.Allowed {
-			return &availability.DeniedError{Reason: "policy_denied"}
+			if !policy.CanRequestApproval(decision) {
+				return &availability.DeniedError{Reason: "policy_denied"}
+			}
+			// Discovery readiness is not a live approval. A frozen allow cannot
+			// execute through a new approval_required rule; start a new exact protocol.
+			if run.RuntimeSnapshot == nil {
+				return &availability.DeniedError{Reason: "approval_policy_changed"}
+			}
+			frozen := policy.Evaluate(run.RuntimeSnapshot.ToolSecurityPolicy, policy.Request{Tool: call.Tool, Declared: binding.Descriptor.Security, RequestedScope: scope, AvailableCredentialScopes: call.CredentialScopes})
+			if !policy.CanRequestApproval(frozen) {
+				return &availability.DeniedError{Reason: "approval_policy_changed"}
+			}
 		}
 		return nil
 	}

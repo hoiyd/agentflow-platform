@@ -74,6 +74,11 @@ func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/runs/{id}/clarifications/{question_id}/resume", h.resumeClarification)
 		mux.HandleFunc("DELETE /api/runs/{id}/clarifications/{question_id}", h.withdrawClarification)
 	}
+	if h.toolApprovals != nil {
+		mux.HandleFunc("GET /api/runs/{id}/tool-approvals", h.listToolApprovals)
+		mux.HandleFunc("POST /api/runs/{id}/tool-approvals/{approval_id}/decision", h.decideToolApproval)
+		mux.HandleFunc("POST /api/runs/{id}/tool-approvals/{approval_id}/resume", h.resumeToolApproval)
+	}
 	mux.HandleFunc("GET /api/runs", h.listRuns)
 	mux.HandleFunc("GET /api/runs/attention", h.listRunAttention)
 	mux.HandleFunc("GET /api/runs/{id}", h.getRun)

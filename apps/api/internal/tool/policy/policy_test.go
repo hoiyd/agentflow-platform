@@ -1,10 +1,70 @@
 package policy
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+// Failure inventory: either spelling must block unapproved execution; mixed
+// old/new capability spelling must not change authority. Preserve frozen values,
+// reject unknown spellings, and never make human_only or an implicit rule approvable.
+func TestApprovalRequiredTerminology(t *testing.T) {
+	for _, action := range []Action{"approval_required", "ask"} {
+		for _, mode := range []ApprovalMode{"approval_required", "ask"} {
+			t.Run(string(action)+"/"+string(mode), func(t *testing.T) {
+				capability := NormalizeCapability(Capability{Approval: mode})
+				p := Policy{Version: "operator-v1", DefaultAction: "deny", Rules: []Rule{{ID: "review", Tool: "file_patch", Action: action, Capability: capability}}}
+				if err := ValidatePolicy(p); err != nil {
+					t.Fatal(err)
+				}
+				declared := capability
+				declared.Approval = "approval_required"
+				decision := Evaluate(p, Request{Tool: "file_patch", Declared: declared, RequestedScope: declared.Scope})
+				if decision.Allowed || decision.Action != "approval_required" || !CanRequestApproval(decision) {
+					t.Fatalf("approval decision = %#v", decision)
+				}
+				encoded, err := json.Marshal(map[string]any{"action": decision.Action})
+				if err != nil || string(encoded) != `{"action":"approval_required"}` {
+					t.Fatalf("decision wire action = %s, %v", encoded, err)
+				}
+				// Normalization is used in frozen hashes; aliases are interpreted
+				// only during evaluation, not silently rewritten in persisted data.
+				normalized := NormalizePolicy(p)
+				if normalized.Rules[0].Action != action || normalized.Rules[0].Capability.Approval != mode {
+					t.Fatalf("frozen policy spelling was rewritten: %#v", normalized)
+				}
+				p.Rules[0].Action = ActionAllowAndLog
+				if d := Evaluate(p, Request{Tool: "file_patch", Declared: declared, RequestedScope: declared.Scope}); d.Allowed || d.Reason != "approval_policy_not_satisfied" {
+					t.Fatalf("approval mode bypassed: %#v", d)
+				}
+				p.Rules[0].Action = ActionHumanOnly
+				if d := Evaluate(p, Request{Tool: "file_patch", Declared: declared, RequestedScope: declared.Scope}); d.Allowed || CanRequestApproval(d) {
+					t.Fatalf("human_only became approvable: %#v", d)
+				}
+			})
+		}
+	}
+}
+
+// Eligibility comes from the evaluated configuration, not a Tool-name allowlist.
+// Explicit deny/human_only and capability constraints must still win.
+func TestConfiguredApprovalIsToolIndependent(t *testing.T) {
+	for _, name := range []string{"calculator", "file_write", "future_package__custom_action"} {
+		p := Policy{Version: "v1", DefaultAction: ActionApprovalRequired}
+		if d := Evaluate(p, Request{Tool: name}); !CanRequestApproval(d) || d.Allowed {
+			t.Fatalf("default approval for %s = %#v", name, d)
+		}
+		for _, action := range []Action{ActionApprovalRequired, ActionDeny, ActionHumanOnly} {
+			p.Rules = []Rule{{ID: "operator-rule", Tool: name, Action: action}}
+			d := Evaluate(p, Request{Tool: name})
+			if CanRequestApproval(d) != (action == ActionApprovalRequired) || d.Allowed {
+				t.Fatalf("configured approval for %s/%s = %#v", name, action, d)
+			}
+		}
+	}
+}
 
 func TestEvaluateDefaultPolicy(t *testing.T) {
 	tests := []struct {
@@ -53,8 +113,8 @@ func TestEvaluateExplicitCredentialAndIrreversibleRules(t *testing.T) {
 }
 
 func TestEvaluateApprovalActionsRemainBlocked(t *testing.T) {
-	capability := NormalizeCapability(Capability{Approval: ApprovalAsk})
-	for _, action := range []Action{ActionAsk, ActionHumanOnly} {
+	capability := NormalizeCapability(Capability{Approval: ApprovalRequired})
+	for _, action := range []Action{ActionApprovalRequired, ActionHumanOnly} {
 		policy := Policy{Version: "v1", DefaultAction: ActionDeny, Rules: []Rule{{ID: string(action), Tool: "approval_tool", Action: action, Capability: capability}}}
 		decision := Evaluate(policy, Request{Tool: "approval_tool", Declared: capability, RequestedScope: capability.Scope})
 		if decision.Allowed || decision.Action != action || decision.Reason != "human_approval_required" {
@@ -150,7 +210,7 @@ func TestEvaluateFailClosedBranches(t *testing.T) {
 		t.Fatalf("empty Tool decision = %#v", decision)
 	}
 
-	approval := NormalizeCapability(Capability{Approval: ApprovalAsk})
+	approval := NormalizeCapability(Capability{Approval: ApprovalRequired})
 	policy := Policy{Version: "v1", DefaultAction: ActionDeny, Rules: []Rule{{
 		ID: "approval", Tool: "approval_tool", Action: ActionAllow, Capability: approval,
 	}}}

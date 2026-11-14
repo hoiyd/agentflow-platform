@@ -2,13 +2,11 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
-	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/tool"
 )
@@ -125,7 +123,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 	}
 	result, err := r.turnEngine.Execute(ctx, request, nil)
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if turnpkg.IsWaiting(err) {
 			return "", err
 		}
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
