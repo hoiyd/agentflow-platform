@@ -63,13 +63,5 @@ func (c Commands) ResumeToolApproval(ctx context.Context, scope Scope, runID, id
 		}
 		return c.fail(scoped, runID, err, current.Status == domain.RunRunning, observer)
 	}
-	run, _, err = scoped.GetRun(runID)
-	if err != nil {
-		return err
-	}
-	if run.Status == domain.RunCanceled || run.Status == domain.RunWaitingForUser {
-		terminal(observer, run)
-		return nil
-	}
-	return c.completeClarification(ctx, scoped, run, answer, observer)
+	return c.completeResumedTurn(ctx, scoped, runID, answer, observer)
 }

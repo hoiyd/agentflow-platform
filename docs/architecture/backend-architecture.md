@@ -119,6 +119,13 @@ from browser delivery; explicit Stop cancels the Runtime. Writer/capacity releas
 precedes queued follow-up dispatch. See [durable inputs](../runtime/durable-inputs.md).
 The Turn node expands into the [shared model/Tool loop](../tools/bounded-tool-loop.md).
 
+Clarification and exact-call Tool approval retain separate validation, claims and
+failure policies. Their resumed Turns share event forwarding, Stage settlement
+and candidate completion (`agent/resume_*`, `runcommands/resume_completion.go`,
+`runcompletion/resume.go`); completion reuses bound evidence rather than saving a
+second answer. Frontend `useRunInterruptRecords` shares read freshness only, not
+the two protocols' blocking or authorization rules.
+
 ### Retrieval and Ingestion
 
 ```mermaid

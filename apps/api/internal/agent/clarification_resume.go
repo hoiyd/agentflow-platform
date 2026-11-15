@@ -30,7 +30,7 @@ func (r *Runtime) resumeClarification(ctx context.Context, owner, workspace, run
 	}
 	if plan.kind == clarificationResumeCollaboration {
 		resumed, failures := r.ResumeRecoverableCollaboration(ctx, runID)
-		return forwardClarificationResume(resumed, failures, events)
+		return forwardResumedEvents(resumed, failures, events)
 	}
 	committed, err := r.clarifications.ClaimClarification(ctx, owner, workspace, runID, id)
 	if err != nil {
@@ -41,7 +41,7 @@ func (r *Runtime) resumeClarification(ctx context.Context, owner, workspace, run
 	// must not settle another execution's Stage. Pending is a new durable pause.
 	defer func() {
 		if err != nil && !turn.IsWaiting(err) && record.StageID != "" {
-			err = errors.Join(err, r.failResumedClarification(ctx, runID, record.StageID, err))
+			err = errors.Join(err, r.failResumedStage(ctx, runID, record.StageID, err))
 		}
 	}()
 	saved, err := restoreClarificationCheckpoint(committed.Checkpoint, plan.run, record)
@@ -66,11 +66,4 @@ func (r *Runtime) resumeClarification(ctx context.Context, owner, workspace, run
 		return r.resumeClarificationHumanInput(ctx, executionCtx, run, record, plan.restored, release, events)
 	}
 	return r.resumeClarificationTool(ctx, executionCtx, run, record, saved, plan, release, events)
-}
-
-func forwardClarificationResume(resumed <-chan domain.RunEvent, failures <-chan error, events chan<- domain.RunEvent) error {
-	for item := range resumed {
-		events <- item
-	}
-	return <-failures
 }

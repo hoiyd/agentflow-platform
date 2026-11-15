@@ -92,13 +92,5 @@ func (c Commands) resumeClarification(ctx context.Context, scope Scope, scoped s
 		}
 		return c.fail(scoped, runID, commandError(reason, err), failRun, observer)
 	}
-	current, _, err := scoped.GetRun(runID)
-	if err != nil {
-		return err
-	}
-	if current.Status == domain.RunWaitingForUser || current.Status == domain.RunCanceled {
-		terminal(observer, current)
-		return nil
-	}
-	return c.completeClarification(ctx, scoped, current, answer, observer)
+	return c.completeResumedTurn(ctx, scoped, runID, answer, observer)
 }
