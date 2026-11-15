@@ -330,9 +330,21 @@ The Next production build uses `.next-functional`; generated source files are
 restored by the wrapper, even on failure. Do not run builds concurrently in the
 same checkout.
 
-CI runs the compact cross-layer suite as a separate gate. Local development
-should select the affected scenario; `npm test` remains fast component/library
-testing. `test-results/results.json`, per-test `runtime-evidence` attachments,
+CI uses `npm run test:e2e:ci`: one `.next-functional` build serves the profiles in
+[`browser-gates.mjs`](../../scripts/browser-gates.mjs). Usage/reasoning share a
+route-evidence composition; managed writes and planning retain separate file
+state, and identity/approval profiles retain separate policy. Each profile starts
+fresh servers/databases. The build ID must match before reuse. Each profile has
+its own results, attachments and HTML report under `test-results/gates/NAME`;
+`summary.json` records revision, build count/ID, flags, durations and test counts.
+Failed profiles do not prevent later independent profiles from running; a failed
+build or cancellation leaves subsequent profiles explicitly `not_run`. Old gate
+output is cleared before building, so it cannot be uploaded as new evidence.
+
+Local development should select the affected scenario, or run named profiles
+with `bash scripts/test-browser-ci.sh filesystem-write tool-approval` rather than the
+whole CI suite. `npm test` remains fast component/library testing.
+Standalone `test-results/results.json`, per-test `runtime-evidence` attachments,
 provider contract counters, and the HTML report retain identities, inputs,
 frozen configuration, persisted outcomes and limitations. Failure traces use
 only synthetic fixture data; no real provider credentials or operator Skills
