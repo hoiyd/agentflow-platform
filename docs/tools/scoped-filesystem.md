@@ -64,7 +64,7 @@ state/backups and `docs/private` notes; an operator grant cannot override them.
        "source":"local",
        "scope":{"resources":[{"kind":"filesystem","name":"project_files","access":"read"}],"network":{"mode":"none"}},
        "side_effect_class":"none","rate":"run_budgeted","reversibility":"reversible",
-       "visibility":"user","approval_mode":"none","audit_level":"full"
+       "visibility":"run","approval_mode":"none","audit_level":"full"
      }
    }
    ```

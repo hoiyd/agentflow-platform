@@ -21,6 +21,12 @@ Multi-Agent Worker still cannot mutate parent Task State or request parent input
 Runtime-only discovery retains its own bootstrap policy, not a new operator
 configuration surface in this change. `deny` and `human_only` remain blocked.
 
+`enabled_tools` lists enabled Tools, not all supported Bindings. Installing this
+feature does not enable filesystem writes or add approval rules. To use
+`file_patch`, first complete [filesystem configuration and grants](scoped-filesystem-writes.md#enable-and-use),
+then set its rule's `action` to `approval_required`. Keep the Binding's
+`capability.approval_mode` unchanged; the rule action selects approval.
+
 Calls needing approval must be sent alone; a mixed batch is rejected before any
 call executes. A corrected call needs fresh approval. Parameter editing and batch
 approvals are not supported. Direct human Undo/reconciliation uses its own

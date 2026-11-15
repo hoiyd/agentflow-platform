@@ -47,8 +47,9 @@ adding a dedicated private output directory to the same operator root map:
 {"roots":[{"id":"output","workspace_id":"42","path":"/srv/agentflow/reports","write_access":"managed_output"}]}
 ```
 
-Add `file_write` and `file_patch` to operator `enabled_tools`, with an exact
-`allow_and_log` rule for each. Their capability differs from the read Tools:
+Add only the required write Tools to operator `enabled_tools`, with an exact
+`allow_and_log` rule for each. For `file_patch`, use the same capability below
+with its own `tool` and rule `id`. Their capability differs from the read Tools:
 
 ```json
 {
@@ -57,7 +58,7 @@ Add `file_write` and `file_patch` to operator `enabled_tools`, with an exact
     "source":"local",
     "scope":{"resources":[{"kind":"filesystem","name":"project_outputs","access":"write"}],"network":{"mode":"none"}},
     "side_effect_class":"external_write","rate":"run_budgeted","reversibility":"irreversible",
-    "visibility":"user","approval_mode":"none","audit_level":"full"
+    "visibility":"run","approval_mode":"none","audit_level":"full"
   }
 }
 ```
@@ -67,6 +68,8 @@ owned Agent. Enable `file_read` separately for verification. Neither Agent promp
 Skills nor owner toggles can expand the operator root map. An explicit `approval_required`
 rule for either write Tool supports [durable approval](tool-approval.md);
 approval does not change root or Workspace authorization.
+These declarations assume Undo is disabled; enabling Undo requires the matching
+`reversibility: compensatable` grant described in [Conflict-safe Undo](file-undo.md).
 
 - `file_write` with `root`, `path`, `content` **creates only**. Existing targets
   return `filesystem_write_conflict` without changing bytes.
