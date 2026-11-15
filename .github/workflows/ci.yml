@@ -55,12 +55,20 @@ jobs:
       - name: Run tests with coverage
         env:
           EVALUATION_REPORT_DIR: ${{ runner.temp }}/evaluation-reports
-        # Fail stuck packages with goroutine stacks before the job-level timeout.
+        # Give each durable matrix its own bounded process; the combined app
+        # package exceeds 3m under cross-package coverage. Keep all test evidence.
         run: |
           set -o pipefail
           mkdir -p "$EVALUATION_REPORT_DIR"
-          go test -json ./... -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out \
+          go test -json ./... -skip '^TestProductionDurable(ToolApproval|Clarification)$' \
+            -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out \
             | tee "$EVALUATION_REPORT_DIR/backend-tests.json"
+          go test -json ./app -run '^TestProductionDurableClarification$' \
+            -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage-clarification.out \
+            | tee -a "$EVALUATION_REPORT_DIR/backend-tests.json"
+          go test -json ./app -run '^TestProductionDurableToolApproval$' \
+            -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage-tool-approval.out \
+            | tee -a "$EVALUATION_REPORT_DIR/backend-tests.json"
 
       - name: Check promoted failure regressions
         if: success() || failure()
@@ -86,7 +94,7 @@ jobs:
         if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v5
         with:
-          files: apps/api/coverage.out
+          files: apps/api/coverage.out,apps/api/coverage-clarification.out,apps/api/coverage-tool-approval.out
           flags: backend
           name: backend
           fail_ci_if_error: true
@@ -307,6 +315,22 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: scoped-filesystem-read-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Run durable Tool approval gate
+        env:
+          AGENTFLOW_TOOL_APPROVAL_TEST: '1'
+          AGENTFLOW_FILESYSTEM_WRITE_TEST: '1'
+        run: npm run test:e2e -- tool-approval.spec.ts
+      - name: Retain Tool approval evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tool-approval-evidence
           path: |
             apps/web/test-results
             apps/web/playwright-report

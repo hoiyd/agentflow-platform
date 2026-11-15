@@ -61,6 +61,9 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `stage.failed` | durable | 1 | run+stage | agent/turn | `event.StagePayload` | stage:terminal | `stage.started` | run_projection, replay |
 | `stage.started` | durable | 1 | run+stage | agent/turn | `event.StagePayload` | stage:start | `` | run_projection, replay |
 | `task_state.updated` | durable | 1 | run | taskstate | `event.TaskStatePayload` | none | `` | replay |
+| `tool.approval_consumed` | durable | 1 | run+turn | approval | `event.TracePayload` | none | `` | replay, live_ui |
+| `tool.approval_decided` | durable | 1 | run+turn | approval | `event.TracePayload` | none | `` | replay, live_ui |
+| `tool.approval_requested` | durable | 1 | run+turn | approval | `event.TracePayload` | none | `` | replay, live_ui |
 | `tool.completed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
 | `tool.discovery.updated` | durable | 1 | run+turn | agent/toolloop | `event.ToolDiscoveryPayload` | none | `` | tool_discovery, replay |
 | `tool.effect.reconciled` | durable | 1 | run+(stage or turn) | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |

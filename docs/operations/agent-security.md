@@ -15,7 +15,7 @@ only backend authorization and execution boundaries enforce permissions.
 | Private retrieved context is encoded or paraphrased into a query | Deny network Tools after private-context exposure, regardless of query wording |
 | Local read and network call share a parallel batch | Establish the private-data boundary before any batch Handler runs |
 | A later round, Stage or Resume no longer contains the original excerpt | Restore the boundary from durable Run evidence; never downgrade it |
-| Prompt claims the user approved an action | Existing `ask` / `human_only` policy still returns `approval_required` |
+| Prompt claims the user approved an action | `approval_required` / `human_only` policy is not satisfied by prompt text |
 | Private data is used by a permitted local Tool | Allow within existing scope and sandbox restrictions |
 | No private context and a public search query | Permit only with the existing Agent allowlist, credentials and operator rule |
 | Restoring Run evidence fails | Fail closed; do not infer that the Run has no private data |
@@ -81,7 +81,7 @@ and can continue with a permitted local Tool or answer. Existing Tool Trace and
 Run Replay expose the reason, including after reload; no frontend API changes
 or database schema migration are required.
 
-Existing `ask` / `human_only` actions still return `approval_required`. A prompt
+`approval_required` / `human_only` actions still block unapproved execution. A prompt
 claiming user consent is not authorization. There is no new approval workflow,
 declassification action or prompt-level override in this change.
 

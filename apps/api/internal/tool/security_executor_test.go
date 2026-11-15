@@ -163,8 +163,8 @@ func TestExecutorAllowAndLogFailsClosedWithoutDurableAudit(t *testing.T) {
 }
 
 func TestExecutorApprovalActionsReturnTypedBlock(t *testing.T) {
-	capability := policy.NormalizeCapability(policy.Capability{Approval: policy.ApprovalAsk})
-	securityPolicy := policyFor("approval_tool", policy.ActionAsk, capability)
+	capability := policy.NormalizeCapability(policy.Capability{Approval: policy.ApprovalRequired})
+	securityPolicy := policyFor("approval_tool", policy.ActionApprovalRequired, capability)
 	catalog, err := NewCatalogWithPolicy(securityPolicy, Binding{
 		Descriptor: Descriptor{Name: "approval_tool", Parameters: ObjectSchema(nil, nil), Security: capability},
 		Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, errors.New("must not execute") },

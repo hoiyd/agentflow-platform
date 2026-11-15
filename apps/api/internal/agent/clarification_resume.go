@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"agentflow-platform/apps/api/internal/clarification"
+	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -40,7 +40,7 @@ func (r *Runtime) resumeClarification(ctx context.Context, owner, workspace, run
 	// Only a successful claim owns Stage settlement; validation/delegation above
 	// must not settle another execution's Stage. Pending is a new durable pause.
 	defer func() {
-		if err != nil && !errors.Is(err, clarification.Pending) && record.StageID != "" {
+		if err != nil && !turn.IsWaiting(err) && record.StageID != "" {
 			err = errors.Join(err, r.failResumedClarification(ctx, runID, record.StageID, err))
 		}
 	}()

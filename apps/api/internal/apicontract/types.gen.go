@@ -1020,6 +1020,63 @@ func (e TaskStateOperationType) Valid() bool {
 	}
 }
 
+// Defines values for ToolApprovalStatus.
+const (
+	ToolApprovalStatusApproved ToolApprovalStatus = "approved"
+	ToolApprovalStatusCanceled ToolApprovalStatus = "canceled"
+	ToolApprovalStatusClaimed  ToolApprovalStatus = "claimed"
+	ToolApprovalStatusConsumed ToolApprovalStatus = "consumed"
+	ToolApprovalStatusExpired  ToolApprovalStatus = "expired"
+	ToolApprovalStatusPending  ToolApprovalStatus = "pending"
+	ToolApprovalStatusRejected ToolApprovalStatus = "rejected"
+	ToolApprovalStatusRevoked  ToolApprovalStatus = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the ToolApprovalStatus enum.
+func (e ToolApprovalStatus) Valid() bool {
+	switch e {
+	case ToolApprovalStatusApproved:
+		return true
+	case ToolApprovalStatusCanceled:
+		return true
+	case ToolApprovalStatusClaimed:
+		return true
+	case ToolApprovalStatusConsumed:
+		return true
+	case ToolApprovalStatusExpired:
+		return true
+	case ToolApprovalStatusPending:
+		return true
+	case ToolApprovalStatusRejected:
+		return true
+	case ToolApprovalStatusRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolApprovalDecisionDecision.
+const (
+	Approve ToolApprovalDecisionDecision = "approve"
+	Reject  ToolApprovalDecisionDecision = "reject"
+	Revoke  ToolApprovalDecisionDecision = "revoke"
+)
+
+// Valid indicates whether the value is a known member of the ToolApprovalDecisionDecision enum.
+func (e ToolApprovalDecisionDecision) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Reject:
+		return true
+	case Revoke:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ToolEffectReconciliationAction.
 const (
 	Compensate         ToolEffectReconciliationAction = "compensate"
@@ -2698,6 +2755,42 @@ type TaskStateSource struct {
 	TurnId          *string `json:"turn_id,omitempty"`
 }
 
+// ToolApproval defines model for ToolApproval.
+type ToolApproval struct {
+	Arguments          map[string]interface{} `json:"arguments"`
+	ArgumentsHash      string                 `json:"arguments_hash"`
+	ConversationId     string                 `json:"conversation_id"`
+	CreatedAt          time.Time              `json:"created_at"`
+	DecidedAt          *time.Time             `json:"decided_at,omitempty"`
+	DefinitionRevision string                 `json:"definition_revision"`
+	ExpiresAt          time.Time              `json:"expires_at"`
+	Id                 string                 `json:"id"`
+	OwnerId            string                 `json:"owner_id"`
+	PolicyHash         string                 `json:"policy_hash"`
+	RunId              string                 `json:"run_id"`
+	SnapshotHash       string                 `json:"snapshot_hash"`
+	StageId            *string                `json:"stage_id,omitempty"`
+	Status             ToolApprovalStatus     `json:"status"`
+	Tool               string                 `json:"tool"`
+	ToolCallId         string                 `json:"tool_call_id"`
+	TurnId             string                 `json:"turn_id"`
+	Version            int64                  `json:"version"`
+	WorkspaceId        string                 `json:"workspace_id"`
+}
+
+// ToolApprovalStatus defines model for ToolApproval.Status.
+type ToolApprovalStatus string
+
+// ToolApprovalDecision defines model for ToolApprovalDecision.
+type ToolApprovalDecision struct {
+	Decision       ToolApprovalDecisionDecision `json:"decision"`
+	IdempotencyKey string                       `json:"idempotency_key"`
+	Version        int64                        `json:"version"`
+}
+
+// ToolApprovalDecisionDecision defines model for ToolApprovalDecision.Decision.
+type ToolApprovalDecisionDecision string
+
 // ToolArtifact defines model for ToolArtifact.
 type ToolArtifact struct {
 	ContentHash        string     `json:"content_hash"`
@@ -3116,6 +3209,9 @@ type ContinueRunJSONRequestBody = ContinueRunRequest
 
 // ResumeRunJSONRequestBody defines body for ResumeRun for application/json ContentType.
 type ResumeRunJSONRequestBody = ResumeRunRequest
+
+// DecideToolApprovalJSONRequestBody defines body for DecideToolApproval for application/json ContentType.
+type DecideToolApprovalJSONRequestBody = ToolApprovalDecision
 
 // ReconcileToolEffectJSONRequestBody defines body for ReconcileToolEffect for application/json ContentType.
 type ReconcileToolEffectJSONRequestBody = ToolEffectReconciliationCommand

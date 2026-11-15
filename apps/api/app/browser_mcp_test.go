@@ -20,7 +20,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func browserMCPConfig(t *testing.T, cfg *config.Config, root string) http.Handler {
+func browserMCPConfig(t *testing.T, cfg *config.Config, root string, required bool) http.Handler {
 	t.Helper()
 	server := mcp.NewServer(&mcp.Implementation{Name: "public-docs-fixture", Version: "1"}, nil)
 	var calls atomic.Int32
@@ -53,7 +53,7 @@ func browserMCPConfig(t *testing.T, cfg *config.Config, root string) http.Handle
 	t.Setenv("MCP_BROWSER_MISSING_TOKEN", "")
 	cfg.MCPConfigPath = filepath.Join(root, "mcp.json")
 	data, _ := json.Marshal(map[string]any{"servers": []tool.MCPServerConfig{
-		{ID: "docs", URL: host.URL, ReadOnlyTools: []string{"read"}},
+		{ID: "docs", URL: host.URL, ReadOnlyTools: []string{"read"}, Required: required},
 		{ID: "offline", URL: host.URL, ReadOnlyTools: []string{"read"}, BearerTokenEnv: "MCP_BROWSER_MISSING_TOKEN"},
 	}})
 	if err := os.WriteFile(cfg.MCPConfigPath, data, 0600); err != nil {

@@ -1,11 +1,14 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useRunSession } from "./useRunSession";
 
 const api = vi.hoisted(() => ({resumeRun:vi.fn(),continueRun:vi.fn()}));
 const questions = vi.hoisted(() => ({listClarifications:vi.fn(),answerClarification:vi.fn(),resumeClarification:vi.fn()}));
 vi.mock("../../lib/api", async original => ({...await original<typeof import("../../lib/api")>(),...api}));
 vi.mock("../../lib/clarification-api", () => questions);
+const approvals = vi.hoisted(() => ({listToolApprovals:vi.fn(),decideToolApproval:vi.fn(),resumeToolApproval:vi.fn()}));
+vi.mock("../../lib/tool-approval-api", () => approvals);
+beforeEach(() => approvals.listToolApprovals.mockResolvedValue([]));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
 function mountSession() {

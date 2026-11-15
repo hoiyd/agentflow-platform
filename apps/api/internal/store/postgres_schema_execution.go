@@ -19,6 +19,8 @@ var postgresExecutionSchema = []string{
 	`CREATE INDEX IF NOT EXISTS runs_workspace_created_idx ON runs(workspace_id, created_at DESC)`,
 	inboxSchema,
 	clarificationSchema,
+	toolApprovalSchema,
+	`CREATE INDEX IF NOT EXISTS tool_approvals_run_idx ON tool_approvals(run_id)`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS run_clarifications_pending_idx ON run_clarifications(run_id) WHERE status IN('pending','answered')`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS conversation_inputs_key_idx ON conversation_inputs(owner_user_id,conversation_id,(request->>'idempotency_key'))`,
 	`CREATE INDEX IF NOT EXISTS conversation_inputs_conversation_idx ON conversation_inputs(conversation_id,created_at,id)`,

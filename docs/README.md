@@ -63,6 +63,7 @@ These are implementation and operating contracts, not a required reading list.
 - [Knowledge bindings](tools/scoped-knowledge-tools.md), [Web fetch](tools/web-fetch.md), [Web citations](tools/web-source-citations.md)
 - [Workspace MCP connections and operator adapter](tools/mcp-adapter.md)
 - [Scoped filesystem reads](tools/scoped-filesystem.md), [managed writes](tools/scoped-filesystem-writes.md), [conflict-safe Undo](tools/file-undo.md)
+- [Durable exact-call Tool approval](tools/tool-approval.md)
 - [Trusted Skills](tools/trusted-skills.md), [package review](tools/skill-package-review.md), [invocation/readiness](tools/skill-invocation.md), [installation](tools/skill-installation.md), [Checker](tools/skill-checker.md)
 - [Binding contracts and fault tests](tools/tool-contract-testing.md)
 

@@ -11,22 +11,21 @@ import (
 )
 
 func (e *Executor) evaluateSecurity(ctx context.Context, request ExecutionRequest, binding Binding) (policy.Decision, *ExecutionError) {
-	requestedScope := binding.Descriptor.Security.Scope
-	if binding.ResolveScope != nil {
-		resolved, err := resolveToolScope(ctx, binding.ResolveScope, request.Arguments)
-		if err != nil {
-			decision := policy.Decision{
-				Action: policy.ActionDeny, PolicyVersion: e.securityPolicy.Version,
-				Reason: "scope_resolution_failed", Capability: binding.Descriptor.Security,
-			}
-			return decision, executionError(ErrorSecurityScopeInvalid, "Tool security scope could not be resolved", err)
+	requestedScope, scopeErr := binding.RequestedScope(ctx, request.Arguments)
+	if scopeErr != nil {
+		decision := policy.Decision{
+			Action: policy.ActionDeny, PolicyVersion: e.securityPolicy.Version,
+			Reason: "scope_resolution_failed", Capability: binding.Descriptor.Security,
 		}
-		requestedScope = resolved
+		return decision, executionError(ErrorSecurityScopeInvalid, "Tool security scope could not be resolved", scopeErr)
 	}
 	decision := policy.Evaluate(e.securityPolicy, policy.Request{
 		Tool: request.Tool, Declared: binding.Descriptor.Security, RequestedScope: requestedScope,
 		AvailableCredentialScopes: request.CredentialScopes,
 	})
+	if policy.CanRequestApproval(decision) && request.ApprovalID != "" && e.consumeApproval != nil {
+		decision.Allowed, decision.Action, decision.Reason = true, policy.ActionAllowAndLog, "durable_approval_requires_claim"
+	}
 	if decision.Allowed && policy.TransmitsData(decision.Capability) && (e.privateData.Load() || policy.UsesPrivateResources(binding.Descriptor.Security)) {
 		decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "private_context_egress_denied"
 	}
@@ -70,6 +69,15 @@ func resolveToolScope(ctx context.Context, resolver ScopeResolver, arguments jso
 		}
 	}()
 	return resolver(ctx, arguments)
+}
+
+// RequestedScope is shared by normal execution and approval revalidation; both
+// use the same argument-dependent resolver and fail closed on resolver panics.
+func (b Binding) RequestedScope(ctx context.Context, args json.RawMessage) (policy.Scope, error) {
+	if b.ResolveScope == nil {
+		return b.Descriptor.Security.Scope, nil
+	}
+	return resolveToolScope(ctx, b.ResolveScope, args)
 }
 
 func (e *Executor) tracePolicyDecision(ctx context.Context, request ExecutionRequest, decision policy.Decision) error {

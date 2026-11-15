@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/agent/toolloop"
 	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/budget"
-	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
@@ -151,7 +149,11 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	if err != nil {
 		return turn.Result{}, err
 	}
+	if continuation != nil && continuation.Approval != nil {
+		continuation.Approval.ApprovalID = request.ApprovalID
+	}
 	options.Authorize = m.runtime.authorizeTool(request.RunID, request.Agent)
+	options.ConsumeApproval = request.ConsumeApproval
 	systemPrompt := request.SystemPrompt
 	if systemPrompt == "" {
 		systemPrompt = request.Agent.SystemPrompt
@@ -159,6 +161,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
 		Continuation:         continuation,
 		SuspendClarification: m.runtime.clarificationBoundary(request),
+		SuspendApproval:      m.runtime.toolApprovalBoundary(request),
 		AgentID:              request.Agent.ID, SchemaConfig: schema, Sink: request.Sink,
 		CheckSteering: m.checkSteering(ctx, request),
 		SystemPrompt:  systemPrompt, History: request.History, Latest: request.Input,
@@ -198,7 +201,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 				continue
 			}
 			if err != nil {
-				if errors.Is(err, clarification.Pending) {
+				if turn.IsWaiting(err) {
 					return turn.Result{StopReason: turn.StopWaiting}, err
 				}
 				return turn.Result{Output: output.String()}, err

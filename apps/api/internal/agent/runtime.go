@@ -9,6 +9,7 @@ import (
 	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
@@ -35,6 +36,7 @@ type Runtime struct {
 	}
 	inbox                 RuntimeInbox
 	clarifications        clarification.Store
+	toolApprovals         approval.Store
 	store                 RuntimeStore
 	embeddingClient       provider.Client
 	modelRoutes           *routing.Catalog
@@ -120,6 +122,7 @@ type RuntimeOptions struct {
 	}
 	Inbox              RuntimeInbox
 	Clarifications     clarification.Store
+	ToolApprovals      approval.Store
 	Store              RuntimeStore
 	EmbeddingClient    provider.Client
 	ModelRoutes        *routing.Catalog
@@ -173,6 +176,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		projectGuidance:       options.ProjectGuidance,
 		inbox:                 options.Inbox,
 		clarifications:        options.Clarifications,
+		toolApprovals:         options.ToolApprovals,
 		store:                 options.Store,
 		embeddingClient:       options.EmbeddingClient,
 		modelRoutes:           options.ModelRoutes,

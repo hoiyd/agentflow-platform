@@ -517,6 +517,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/tool-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listToolApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/tool-approvals/{approval_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decideToolApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/tool-approvals/{approval_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Admit the original Run, revalidate current authority and consume a single exact-call execution claim. Retains the Run budget and provider continuation. */
+        post: operations["resumeToolApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/clarifications": {
         parameters: {
             query?: never;
@@ -1543,6 +1600,41 @@ export interface components {
             id: string;
             question: string;
             options?: string[];
+        };
+        ToolApproval: {
+            id: string;
+            run_id: string;
+            conversation_id: string;
+            workspace_id: string;
+            owner_id: string;
+            stage_id?: string;
+            turn_id: string;
+            tool_call_id: string;
+            tool: string;
+            arguments: {
+                [key: string]: unknown;
+            };
+            arguments_hash: string;
+            definition_revision: string;
+            policy_hash: string;
+            snapshot_hash: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "revoked" | "expired" | "canceled" | "claimed" | "consumed";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            decided_at?: string;
+        };
+        ToolApprovalDecision: {
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            decision: "approve" | "reject" | "revoke";
+            idempotency_key: string;
         };
         Clarification: {
             id: string;
@@ -3623,6 +3715,89 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listToolApprovals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped exact-call approval decisions, without protocol checkpoints or claim tokens. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolApproval"][];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    decideToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolApprovalDecision"];
+            };
+        };
+        responses: {
+            /** @description Durable approval receipt; approval does not mean the side effect succeeded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolApproval"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    resumeToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unified Run SSE stream; post-admission failures are typed stream errors. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listClarifications: {

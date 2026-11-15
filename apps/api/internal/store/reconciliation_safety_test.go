@@ -302,7 +302,7 @@ func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 }
 
 func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
-	for _, mode := range []string{"denied", "disabled", "credential", "approval"} {
+	for _, mode := range []string{"denied", "disabled", "credential", "human_only"} {
 		t.Run(mode, func(t *testing.T) {
 			target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 				t.Error("unauthorized callback")
@@ -317,8 +317,8 @@ func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 				binding.Descriptor.DefinitionRevision = ""
 				binding.Descriptor.Security.Scope.Credentials = []string{"payments"}
 				securityPolicy.Rules[0].Capability = binding.Descriptor.Security
-			case "approval":
-				securityPolicy.Rules[0].Action = policy.ActionAsk
+			case "human_only":
+				securityPolicy.Rules[0].Action = policy.ActionHumanOnly
 			}
 			var err error
 			catalog, err = tool.NewCatalogWithPolicy(securityPolicy, binding)

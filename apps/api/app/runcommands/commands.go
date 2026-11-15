@@ -54,7 +54,10 @@ type Commands struct {
 	Verification   runcompletion.Verifier
 	Memory         memory.TurnSyncer
 	Clarifications ClarificationReader
-	AfterRelease   func(context.Context, Scope, string)
+	ToolApprovals  interface {
+		ListToolApprovals(context.Context, string, string, string) ([]domain.ToolApproval, error)
+	}
+	AfterRelease func(context.Context, Scope, string)
 }
 
 type Reason string

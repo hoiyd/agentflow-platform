@@ -115,7 +115,9 @@ func (s *PostgresStore) SuspendClarification(ctx context.Context, input domain.C
 	// Close the suspended Turn in the same commit as waiting. A crash after
 	// this transaction cannot leave an orphan Turn on a non-running Run.
 	var closed bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM run_events WHERE run_id=$1 AND turn_id=$2 AND type IN('turn.completed','turn.failed','turn.canceled'))`, c.RunID, c.TurnID).Scan(&closed); err != nil {
+	// A durable approval may reopen the same logical Turn. Close its current
+	// segment, not merely detect a terminal event from an earlier segment.
+	if err = tx.QueryRowContext(ctx, `SELECT type<>'turn.started' FROM run_events WHERE run_id=$1 AND turn_id=$2 AND type IN('turn.started','turn.completed','turn.failed','turn.canceled') ORDER BY sequence DESC LIMIT 1`, c.RunID, c.TurnID).Scan(&closed); err != nil {
 		return c, err
 	}
 	if !closed {

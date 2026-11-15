@@ -357,6 +357,15 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             clarificationLoading={clarification.loading}
             clarificationError={clarification.error}
             onClarificationResume={answerQuestion}
+            toolApprovals={session.toolApprovals.items}
+            approvalLoading={session.toolApprovals.loading}
+            approvalError={session.toolApprovals.error}
+            onApprovalDecision={async (item, decision) => {
+              await session.resumeToolApproval(item.id, decision === "resume" ? undefined : {
+                version: item.version, decision, idempotency_key: `${item.id}-${item.version}-${decision}`
+              });
+              session.toolApprovals.refresh();
+            }}
             agents={agents}
             autonomousProgress={autonomousProgress}
             chatMode={chatMode}

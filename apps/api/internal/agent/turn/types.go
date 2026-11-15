@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/approval"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
@@ -36,15 +38,18 @@ var ErrInvalidRequest = failure.New(failure.Definition{
 })
 
 type Request struct {
-	RunID          string
-	StepID         string
-	TurnID         string
-	ConversationID string
-	Agent          domain.Agent
-	Role           string
-	SystemPrompt   string
-	History        []domain.Message
-	Input          string
+	// Trusted ephemeral capability, never marshaled into a protocol checkpoint.
+	ConsumeApproval func(context.Context, tool.ExecutionRequest) error `json:"-"`
+	ApprovalID      string                                             `json:"-"`
+	RunID           string
+	StepID          string
+	TurnID          string
+	ConversationID  string
+	Agent           domain.Agent
+	Role            string
+	SystemPrompt    string
+	History         []domain.Message
+	Input           string
 	// Original user task for Skill invocation, never generated Stage instructions.
 	SkillInput string
 	ModelMode  ModelMode
@@ -54,6 +59,10 @@ type Request struct {
 	Sink       eventpkg.Sink
 	// Opaque durable Tool continuation, decoded only by the runtime model adapter.
 	Continuation json.RawMessage
+}
+
+func IsWaiting(err error) bool {
+	return errors.Is(err, clarification.Pending) || errors.Is(err, approval.Pending)
 }
 
 type Context struct {

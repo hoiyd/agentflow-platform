@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/apicontract"
+	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
@@ -71,6 +72,7 @@ type VerificationOperations = runcompletion.Verifier
 type Dependencies struct {
 	Inbox          *store.PostgresStore
 	Clarifications clarification.Store
+	ToolApprovals  approval.Store
 	Store          HTTPStore
 	Tools          ToolOperations
 	AgentRuntime   AgentRuntimeOperations
@@ -90,6 +92,7 @@ type Dependencies struct {
 type Handler struct {
 	inbox          *store.PostgresStore
 	clarifications clarification.Store
+	toolApprovals  approval.Store
 	store          HTTPStore
 	tools          ToolOperations
 	agentRuntime   AgentRuntimeOperations
@@ -134,6 +137,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	return &Handler{
 		inbox:          dependencies.Inbox,
 		clarifications: dependencies.Clarifications,
+		toolApprovals:  dependencies.ToolApprovals,
 		store:          dependencies.Store,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,

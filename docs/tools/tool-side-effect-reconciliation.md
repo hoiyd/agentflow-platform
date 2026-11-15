@@ -107,11 +107,14 @@ gain recovery authority retroactively.
 
 Callbacks must be enabled, match the recorded definition revision, and pass
 `policy.Evaluate` using their full declared scope and the current operator
-policy. A missing rule, `ask`/`human_only`, revoked enablement, or unavailable
+policy. A missing rule, `human_only`, revoked enablement, or unavailable
 credential scope fails closed before a claim. There is no credential resolver
 on this path yet; declaring a credential scope does not supply a credential.
 These are explicit operator operations, not model Tool calls, so they do not
 consume a new model Run Budget reservation or reuse a model-supplied grant.
+The authenticated recovery command is an explicit confirmation under
+`approval_required`, independent of Tool name. It is not a model-call approval;
+see [Durable Tool Approval](tool-approval.md).
 
 The callback deadline is the smaller of the request deadline and Binding
 timeout, capped at the shared Tool default of 30 seconds. A buffered completion

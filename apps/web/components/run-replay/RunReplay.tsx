@@ -29,6 +29,8 @@ import { MessageCitations } from "../chat/MarkdownContent";
 import { ToolProgressPanel } from "../chat/ToolProgressPanel";
 import { ClarificationPanel } from "../chat/ClarificationPanel";
 import { useClarifications } from "../chat/useClarifications";
+import { useToolApprovals } from "../chat/useToolApprovals";
+import { ToolApprovalPanel } from "../chat/ToolApprovalPanel";
 import { StructuredResult } from "./StructuredResult";
 import { PlanningPanel } from "./PlanningPanel";
 import { FrozenKnowledgeScope } from "../knowledge/KnowledgeScope";
@@ -53,6 +55,10 @@ function RunReplayView({ runId, initialEventId }: Props) {
   const setSelectedEventId = (id: string) => setSelection({ initialEventId, id });
   const [operationError, setOperationError] = useState("");
   const clarification=useClarifications(runId,replay?.run.status??"");
+  const toolApprovals=useToolApprovals(runId,replay?.run.status??"");
+  const approvalIsLatest = !clarification.items.length || Boolean(toolApprovals.items.length &&
+    new Date(toolApprovals.items.at(-1)!.created_at).getTime() >= new Date(clarification.items.at(-1)!.created_at).getTime());
+  const approvalBlocksRecovery = approvalIsLatest && toolApprovals.blocking;
   const [isResuming, setIsResuming] = useState(false);
   const resumeInFlight = useRef(false);
   const [commands] = useState(createLatestRequestController);
@@ -74,7 +80,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
   if (conversationId) compareParams.set("conversation", conversationId);
   const compareHref = `/evaluations/compare?${compareParams.toString()}`;
   async function handleResumeRecoverable() {
-    if (!replay || replay.run.status !== "failed_recoverable" || !clarification.isReady(replay.run.id, replay.run.status) || resumeInFlight.current) return;
+    if (!replay || replay.run.status !== "failed_recoverable" || !clarification.isReady(replay.run.id, replay.run.status) || !toolApprovals.isReady(replay.run.id, replay.run.status) || approvalBlocksRecovery || resumeInFlight.current) return;
     const request = commands.begin();
     resumeInFlight.current = true;
     setIsResuming(true);
@@ -188,10 +194,12 @@ function RunReplayView({ runId, initialEventId }: Props) {
       <FrozenProjectGuidance snapshot={replay.runtime_snapshot?.project_guidance} />
       {refreshError ? <div className="replay-secondary-error" role="status">Replay refresh unavailable: {refreshError}</div> : null}
 
-		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable" && clarification.ready} />
+		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable" && clarification.ready && toolApprovals.ready && !approvalBlocksRecovery} />
+        {toolApprovals.error ? <div className="error" role="alert">{toolApprovals.error}</div> : null}
+        <ToolApprovalPanel items={toolApprovals.items} conversationHref={chatHref} recoverable={replay.run.status === "failed_recoverable" && approvalIsLatest}/>
         {replay.run.status === "failed_recoverable" && clarification.loading ? <div className="replay-secondary-error" role="status">Loading clarification state before recovery...</div> : null}
         {clarification.error?<div className="error" role="alert">{clarification.error}</div>:null}
-        <ClarificationPanel recoverable={replay.run.status==="failed_recoverable"} items={clarification.items} conversationHref={chatHref}/>
+        <ClarificationPanel recoverable={replay.run.status==="failed_recoverable" && !approvalBlocksRecovery} items={clarification.items} conversationHref={chatHref}/>
 		{replay.recovery_summary?.actions.some((action) => action.kind === "reconcile_tool_effect") ? (
 			<ToolEffectReconciliationPanel onChanged={refreshReplay} runId={replay.run.id} />
 		) : null}

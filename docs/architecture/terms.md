@@ -109,6 +109,9 @@ error. It may make multiple logical Model Calls and Tool Calls: decide on a
 weather Tool -> execute Tool -> generate answer is **one Turn**, not two.
 Single attaches Turns directly to its Run; orchestrated modes also attach them
 to a Stage. Native multi-round Tool continuation stays within the same Turn.
+An [exact-call Tool approval](../tools/tool-approval.md) closes the waiting
+execution segment; Resume reopens its original logical Turn/call identity rather
+than regenerating the call or inserting a user message.
 
 ## Iteration
 

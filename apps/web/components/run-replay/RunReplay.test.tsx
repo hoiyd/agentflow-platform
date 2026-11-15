@@ -9,6 +9,8 @@ const getReplayPageData = vi.hoisted(() => vi.fn());
 const resumeRun = vi.hoisted(() => vi.fn());
 const questions = vi.hoisted(() => ({list:vi.fn<(...args:unknown[]) => Promise<unknown[]>>(async () => []), resume:vi.fn<(...args:unknown[]) => Promise<void>>(async () => {})}));
 vi.mock("../../lib/clarification-api", () => ({listClarifications:questions.list,resumeClarification:questions.resume}));
+const approvals = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<unknown[]>>(async () => []));
+vi.mock("../../lib/tool-approval-api", () => ({listToolApprovals:approvals}));
 const reconciliation = vi.hoisted(() => ({ refresh: null as null | (() => Promise<void>) }));
 vi.mock("../../lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../lib/api")>(), resumeRun
@@ -30,6 +32,18 @@ afterEach(() => {
   resumeRun.mockReset();
   questions.list.mockReset().mockResolvedValue([]);
   questions.resume.mockReset();
+  approvals.mockReset().mockResolvedValue([]);
+});
+
+// Read-side failure inventory: historical approvals remain evidence but must not
+// offer recovery for a newer clarification pause or hide that pause's recovery.
+it("does not offer approval recovery over a newer clarification", async () => {
+  approvals.mockResolvedValue([{ id: "approval-old", tool: "file_patch", status: "consumed", arguments: {}, created_at: "2026-11-01T00:00:00Z", expires_at: "2026-11-01T00:30:00Z" }]);
+  questions.list.mockResolvedValue([{ id: "question-new", status: "applied", questions: [], answers: {}, created_at: "2026-11-01T00:01:00Z" }]);
+  getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
+  render(<RunReplay runId="run-1" />);
+  await screen.findByText("Execution claim consumed");
+  await waitFor(() => expect(screen.queryByText("Review approval in chat")).toBeNull());
 });
 
 function recoverableFixture() {

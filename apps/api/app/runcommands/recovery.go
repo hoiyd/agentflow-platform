@@ -7,6 +7,8 @@ import (
 
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
@@ -44,6 +46,9 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	if !found {
 		return commandError(Missing, store.ErrNotFound("run"))
 	}
+	if err := c.rejectUnboundToolApproval(ctx, scope, run); err != nil {
+		return err
+	}
 	if resume {
 		if _, err := c.resumeRoute(ctx, scope, run, input); err != nil {
 			return err
@@ -76,6 +81,9 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	if !found {
 		return commandError(Missing, store.ErrNotFound("run"))
 	}
+	if err := c.rejectUnboundToolApproval(ctx, scope, run); err != nil {
+		return err
+	}
 	if resume {
 		questionID, err := c.resumeRoute(ctx, scope, run, input)
 		if err != nil {
@@ -102,7 +110,7 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	}
 	answer, err := consume(events, errs, observer)
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if turn.IsWaiting(err) {
 			return c.paused(scoped, id, observer)
 		}
 		reason, failRun := ContinuationFailurePolicy(err)
@@ -126,6 +134,31 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 		}
 	}
 	return c.complete(ctx, scoped, runcompletion.Request{WorkspaceID: run.WorkspaceID, RunID: id, ConversationID: run.ConversationID, Assistant: answer}, observer)
+}
+
+func (c Commands) rejectUnboundToolApproval(ctx context.Context, scope Scope, run domain.Run) error {
+	if c.ToolApprovals == nil {
+		return nil
+	}
+	items, err := c.ToolApprovals.ListToolApprovals(ctx, scope.Owner, scope.Workspace.ID(), run.ID)
+	if err != nil {
+		return err
+	}
+	if len(items) > 0 && c.Clarifications != nil {
+		questions, err := c.Clarifications.ListClarifications(ctx, scope.Owner, scope.Workspace.ID(), run.ID)
+		if err != nil {
+			return err
+		}
+		if len(questions) > 0 && questions[len(questions)-1].CreatedAt.After(items[len(items)-1].CreatedAt) {
+			return nil
+		}
+	}
+	for _, item := range items {
+		if item.Status == "pending" || item.Status == "approved" || item.Status == "expired" || (run.Status == domain.RunFailedRecoverable && (item.Status == "claimed" || item.Status == "consumed")) {
+			return commandError(Conflict, approval.ErrConflict)
+		}
+	}
+	return nil
 }
 
 func (c Commands) resumeRoute(ctx context.Context, scope Scope, run domain.Run, input string) (string, error) {

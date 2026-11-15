@@ -7,7 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
-	"agentflow-platform/apps/api/internal/clarification"
+	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
@@ -201,7 +201,7 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 	}
 	answer, err := consume(events, errs, observer)
 	if err != nil {
-		if errors.Is(err, clarification.Pending) {
+		if turn.IsWaiting(err) {
 			return c.paused(scoped, run.ID, observer)
 		}
 		return c.fail(scoped, run.ID, err, true, observer)
