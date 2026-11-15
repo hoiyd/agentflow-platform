@@ -31,6 +31,7 @@ tags:
   - name: Tools
   - name: Workspaces
   - name: Knowledge
+  - name: Memory
 
 paths:
   /api/project-guidance/projects:
@@ -134,7 +135,28 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/KnowledgeDocumentDetail' }
         '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      operationId: deleteKnowledgeDocument
+      tags: [Knowledge]
+      description: Delete a Document and its indexed data only within the authorized Workspace. Repeated or foreign deletes return 404.
+      responses:
+        '204': { description: Document deleted; no response body. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/documents:
+    get:
+      operationId: listKnowledgeDocuments
+      tags: [Knowledge]
+      responses:
+        '200':
+          description: Documents in the authorized Workspace, including inactive sources for owner inspection.
+          content:
+            application/json:
+              schema:
+                type: [array, 'null']
+                items: { $ref: '#/components/schemas/KnowledgeDocument' }
+        '500': { $ref: '#/components/responses/InternalError' }
     post:
       operationId: ingestDocument
       tags: [Knowledge]
@@ -152,6 +174,25 @@ paths:
               schema: { $ref: '#/components/schemas/KnowledgeDocument' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/documents/upload:
+    post:
+      operationId: uploadKnowledgeDocument
+      tags: [Knowledge]
+      description: Ingest a nonempty text/Markdown file in the authorized Workspace. The complete multipart request is limited to 2 MiB; only .txt, .md and .markdown names are accepted. Metadata is encoded as a JSON object string, not a second multipart object. Does not accept filesystem paths.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/DocumentUploadRequest' }
+      responses:
+        '201':
+          description: Indexed Document.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeDocument' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/BadGateway' }
   /api/documents/{id}/metadata:
     parameters:
       - { in: path, name: id, required: true, schema: { type: string } }
@@ -173,6 +214,88 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/memories:
+    post:
+      operationId: createMemory
+      tags: [Memory]
+      description: Commit an explicit curated Memory in the authorized Workspace. Optional provenance must resolve inside the same Workspace/Conversation; caller-provided audit attribution is not authorization. An existing ID cannot be overwritten through create.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMemoryRequest' }
+      responses:
+        '201':
+          description: Persisted Memory; embeddings are never included.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Memory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/memories/search:
+    post:
+      operationId: searchMemories
+      tags: [Memory]
+      description: Recall searchable curated Memory, whether explicitly created or accepted from a completed conversation. Raw conversation text and rejected candidates are not searched. Payload selectors cannot widen the authorized Workspace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemorySearchRequest' }
+      responses:
+        '200':
+          description: Ranked results; empty when no searchable records remain.
+          content:
+            application/json:
+              schema:
+                type: [array, 'null']
+                items: { $ref: '#/components/schemas/RetrievedMemory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/memories/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getMemory
+      tags: [Memory]
+      description: Read a scoped Memory, including a deletion tombstone, and at most 100 recent audit changes. Audit does not retain prior content or embeddings.
+      responses:
+        '200':
+          description: Memory and recent changes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemoryDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/memories/{id}/mutations:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: mutateMemory
+      tags: [Memory]
+      description: Conditionally replace or delete one Memory revision. Replaying the identical operation returns applied=false; a changed command or stale version returns 409. A foreign ID returns 404 before mutation. Actor/reason are audit attribution, not grants. The JSON body is limited to 32 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemoryMutation' }
+      responses:
+        '200':
+          description: Current Memory, durable change and whether the command applied.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemoryMutationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
         '500': { $ref: '#/components/responses/InternalError' }
   /api/conversations/{id}/inputs:
     parameters:
@@ -1070,6 +1193,97 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /api/conversations/{id}/task-state/revisions:
+    parameters:
+      - { $ref: '#/components/parameters/ConversationId' }
+    get:
+      operationId: listTaskStateRevisions
+      tags: [Conversations]
+      responses:
+        '200':
+          description: Scoped revision history, empty when no patch has been committed.
+          content:
+            application/json:
+              schema:
+                type: [array, 'null']
+                items: { $ref: '#/components/schemas/TaskStateRevision' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/conversations/{id}/task-state/revisions/{version}:
+    parameters:
+      - { $ref: '#/components/parameters/ConversationId' }
+      - { in: path, name: version, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+    get:
+      operationId: getTaskStateRevision
+      tags: [Conversations]
+      responses:
+        '200':
+          description: One immutable revision inside the authorized Workspace.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskStateRevision' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/runs/{id}/artifacts:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+    get:
+      operationId: listToolArtifacts
+      tags: [Runs]
+      responses:
+        '200':
+          description: Redacted result metadata for the scoped Run; no physical storage locations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToolArtifactList' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/runs/{id}/artifacts/{artifact_id}:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { in: path, name: artifact_id, required: true, schema: { type: string } }
+    get:
+      operationId: readToolArtifact
+      tags: [Runs]
+      parameters:
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 65536, default: 8192 } }
+      responses:
+        '200':
+          description: Bounded UTF-8 content and byte offsets. Follow next_offset until complete.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToolArtifactRead' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '416': { $ref: '#/components/responses/RangeNotSatisfiable' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/runs/{id}/artifacts/{artifact_id}/search:
+    parameters:
+      - { $ref: '#/components/parameters/RunId' }
+      - { in: path, name: artifact_id, required: true, schema: { type: string } }
+    get:
+      operationId: searchToolArtifact
+      tags: [Runs]
+      parameters:
+        - { in: query, name: q, required: true, description: Nonempty text limited to 256 UTF-8 bytes., schema: { type: string, minLength: 1 } }
+        - { in: query, name: max_matches, schema: { type: integer, minimum: 1, maximum: 20, default: 5 } }
+      responses:
+        '200':
+          description: Bounded matches with scanned byte count and truncation evidence.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToolArtifactSearchResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/runs/{id}/projection:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -1463,6 +1677,21 @@ components:
         minLength: 1
 
   responses:
+    BadGateway:
+      description: A required upstream dependency failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Gone:
+      description: The stored Artifact has expired.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RangeNotSatisfiable:
+      description: The requested byte offset is beyond the stored content.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
     ServiceUnavailable:
       description: Required service or credential configuration is unavailable.
       content:
@@ -1506,6 +1735,134 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    DocumentUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file: { type: string, format: binary, x-go-type: '[]byte' }
+        title: { type: string, description: Defaults to the filename without extension. }
+        metadata_schema_version: { type: string }
+        metadata: { type: string, description: JSON-encoded custom metadata object; omitted preserves ingestion defaults. }
+    CreateMemoryRequest:
+      type: object
+      required: [kind, content]
+      properties:
+        id: { type: string, description: Optional identity for create-only ingestion; never an update operation. }
+        workspace_id: { type: string, description: Must match the authorized request scope when provided. }
+        user_id: { type: string }
+        project_id: { type: string }
+        conversation_id: { type: string }
+        run_id: { type: string }
+        source_message_id: { type: string }
+        kind: { type: string, minLength: 1 }
+        content: { type: string, minLength: 1 }
+        metadata: { type: [object, 'null'], additionalProperties: true }
+        created_at: { type: string, format: date-time }
+    MemorySearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+        workspace_id: { type: string, description: Must match the authorized request scope when provided. }
+        user_id: { type: string }
+        project_id: { type: string }
+        metadata: { type: object, additionalProperties: { type: string } }
+        limit: { type: integer, description: Omitted or nonpositive uses the provider default. }
+    Memory:
+      type: object
+      required: [id, version, kind, content, metadata, created_at, updated_at]
+      properties:
+        id: { type: string }
+        version: { type: integer, format: int64 }
+        deleted_at: { type: string, format: date-time }
+        workspace_id: { type: string }
+        user_id: { type: string }
+        project_id: { type: string }
+        conversation_id: { type: string }
+        run_id: { type: string }
+        source_message_id: { type: string }
+        kind: { type: string }
+        content: { type: string, description: Cleared in a deletion tombstone. }
+        metadata: { type: [object, 'null'], additionalProperties: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RetrievedMemory:
+      type: object
+      required: [memory, similarity, recency_boost, score]
+      properties:
+        memory: { $ref: '#/components/schemas/Memory' }
+        similarity: { type: number }
+        recency_boost: { type: number }
+        score: { type: number }
+    MemoryMutation:
+      type: object
+      additionalProperties: false
+      required: [operation_id, expected_version, action, actor, reason]
+      properties:
+        operation_id: { type: string, minLength: 1 }
+        expected_version: { type: integer, format: int64, minimum: 1 }
+        action: { type: string, enum: [replace, delete] }
+        content: { type: string, description: Required and nonempty for replace; omitted for delete. }
+        actor: { type: string, minLength: 1 }
+        reason: { type: string, minLength: 1 }
+    MemoryChange:
+      type: object
+      required: [workspace_id, memory_id, operation_id, command_hash, action, previous_version, version, actor, reason, created_at]
+      properties:
+        workspace_id: { type: string }
+        memory_id: { type: string }
+        operation_id: { type: string }
+        command_hash: { type: string }
+        action: { type: string, enum: [replace, delete] }
+        previous_version: { type: integer, format: int64 }
+        version: { type: integer, format: int64 }
+        source_message_id: { type: string }
+        actor: { type: string }
+        reason: { type: string }
+        created_at: { type: string, format: date-time }
+    MemoryDetail:
+      type: object
+      required: [memory, changes]
+      properties:
+        memory: { $ref: '#/components/schemas/Memory' }
+        changes: { type: [array, 'null'], items: { $ref: '#/components/schemas/MemoryChange' } }
+    MemoryMutationResult:
+      type: object
+      required: [memory, change, applied]
+      properties:
+        memory: { $ref: '#/components/schemas/Memory' }
+        change: { $ref: '#/components/schemas/MemoryChange' }
+        applied: { type: boolean }
+    ToolArtifactList:
+      type: object
+      required: [run_id, artifacts]
+      properties:
+        run_id: { type: string }
+        artifacts: { type: [array, 'null'], items: { $ref: '#/components/schemas/ToolArtifact' } }
+    ToolArtifactRead:
+      type: object
+      required: [artifact, offset, content, next_offset, complete]
+      properties:
+        artifact: { $ref: '#/components/schemas/ToolArtifact' }
+        offset: { type: integer }
+        content: { type: string }
+        next_offset: { type: integer }
+        complete: { type: boolean }
+    ToolArtifactSearchMatch:
+      type: object
+      required: [offset, preview]
+      properties:
+        offset: { type: integer }
+        preview: { type: string }
+    ToolArtifactSearchResult:
+      type: object
+      required: [artifact, query, matches, scanned_bytes, truncated]
+      properties:
+        artifact: { $ref: '#/components/schemas/ToolArtifact' }
+        query: { type: string }
+        matches: { type: [array, 'null'], items: { $ref: '#/components/schemas/ToolArtifactSearchMatch' } }
+        scanned_bytes: { type: integer }
+        truncated: { type: boolean }
     MCPConnectionRequest:
       type: object
       additionalProperties: false

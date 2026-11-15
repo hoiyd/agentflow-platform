@@ -101,7 +101,8 @@ export interface paths {
         get: operations["getKnowledgeDocument"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description Delete a Document and its indexed data only within the authorized Workspace. Repeated or foreign deletes return 404. */
+        delete: operations["deleteKnowledgeDocument"];
         options?: never;
         head?: never;
         patch?: never;
@@ -114,10 +115,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["listKnowledgeDocuments"];
         put?: never;
         /** @description Ingest and index a document. Same-source/body custom metadata changes require expected_updated_at and reuse the conditional metadata update without embedding calls. An explicit token is not accepted for content/index replacement; use normal ingestion for reindexing. */
         post: operations["ingestDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ingest a nonempty text/Markdown file in the authorized Workspace. The complete multipart request is limited to 2 MiB; only .txt, .md and .markdown names are accepted. Metadata is encoded as a JSON object string, not a second multipart object. Does not accept filesystem paths. */
+        post: operations["uploadKnowledgeDocument"];
         delete?: never;
         options?: never;
         head?: never;
@@ -141,6 +159,78 @@ export interface paths {
         head?: never;
         /** @description Replace custom metadata in the authorized Workspace, atomically updating inherited Chunk fields without re-embedding. expected_updated_at is the existing Document timestamp used as an optimistic concurrency token. Identical payload retries are no-ops even with an older nonzero token; different stale updates return 409. Derived/source/indexing fields cannot be changed here. Does not enforce business expiry or Document ACLs. */
         patch: operations["updateDocumentMetadata"];
+        trace?: never;
+    };
+    "/api/memories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Commit an explicit curated Memory in the authorized Workspace. Optional provenance must resolve inside the same Workspace/Conversation; caller-provided audit attribution is not authorization. An existing ID cannot be overwritten through create. */
+        post: operations["createMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memories/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Recall searchable curated Memory, whether explicitly created or accepted from a completed conversation. Raw conversation text and rejected candidates are not searched. Payload selectors cannot widen the authorized Workspace. */
+        post: operations["searchMemories"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Read a scoped Memory, including a deletion tombstone, and at most 100 recent audit changes. Audit does not retain prior content or embeddings. */
+        get: operations["getMemory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memories/{id}/mutations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Conditionally replace or delete one Memory revision. Replaying the identical operation returns applied=false; a changed command or stale version returns 409. A foreign ID returns 404 before mutation. Actor/reason are audit attribution, not grants. The JSON body is limited to 32 KiB. */
+        post: operations["mutateMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/conversations/{id}/inputs": {
@@ -777,6 +867,99 @@ export interface paths {
         patch: operations["patchTaskState"];
         trace?: never;
     };
+    "/api/conversations/{id}/task-state/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listTaskStateRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{id}/task-state/revisions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        get: operations["getTaskStateRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listToolArtifacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/artifacts/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["readToolArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/artifacts/{artifact_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["searchToolArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/projection": {
         parameters: {
             query?: never;
@@ -1066,6 +1249,133 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DocumentUploadRequest: {
+            /** Format: binary */
+            file: string;
+            /** @description Defaults to the filename without extension. */
+            title?: string;
+            metadata_schema_version?: string;
+            /** @description JSON-encoded custom metadata object; omitted preserves ingestion defaults. */
+            metadata?: string;
+        };
+        CreateMemoryRequest: {
+            /** @description Optional identity for create-only ingestion; never an update operation. */
+            id?: string;
+            /** @description Must match the authorized request scope when provided. */
+            workspace_id?: string;
+            user_id?: string;
+            project_id?: string;
+            conversation_id?: string;
+            run_id?: string;
+            source_message_id?: string;
+            kind: string;
+            content: string;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        MemorySearchRequest: {
+            query: string;
+            /** @description Must match the authorized request scope when provided. */
+            workspace_id?: string;
+            user_id?: string;
+            project_id?: string;
+            metadata?: {
+                [key: string]: string;
+            };
+            /** @description Omitted or nonpositive uses the provider default. */
+            limit?: number;
+        };
+        Memory: {
+            id: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            deleted_at?: string;
+            workspace_id?: string;
+            user_id?: string;
+            project_id?: string;
+            conversation_id?: string;
+            run_id?: string;
+            source_message_id?: string;
+            kind: string;
+            /** @description Cleared in a deletion tombstone. */
+            content: string;
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        RetrievedMemory: {
+            memory: components["schemas"]["Memory"];
+            similarity: number;
+            recency_boost: number;
+            score: number;
+        };
+        MemoryMutation: {
+            operation_id: string;
+            /** Format: int64 */
+            expected_version: number;
+            /** @enum {string} */
+            action: "replace" | "delete";
+            /** @description Required and nonempty for replace; omitted for delete. */
+            content?: string;
+            actor: string;
+            reason: string;
+        };
+        MemoryChange: {
+            workspace_id: string;
+            memory_id: string;
+            operation_id: string;
+            command_hash: string;
+            /** @enum {string} */
+            action: "replace" | "delete";
+            /** Format: int64 */
+            previous_version: number;
+            /** Format: int64 */
+            version: number;
+            source_message_id?: string;
+            actor: string;
+            reason: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MemoryDetail: {
+            memory: components["schemas"]["Memory"];
+            changes: components["schemas"]["MemoryChange"][] | null;
+        };
+        MemoryMutationResult: {
+            memory: components["schemas"]["Memory"];
+            change: components["schemas"]["MemoryChange"];
+            applied: boolean;
+        };
+        ToolArtifactList: {
+            run_id: string;
+            artifacts: components["schemas"]["ToolArtifact"][] | null;
+        };
+        ToolArtifactRead: {
+            artifact: components["schemas"]["ToolArtifact"];
+            offset: number;
+            content: string;
+            next_offset: number;
+            complete: boolean;
+        };
+        ToolArtifactSearchMatch: {
+            offset: number;
+            preview: string;
+        };
+        ToolArtifactSearchResult: {
+            artifact: components["schemas"]["ToolArtifact"];
+            query: string;
+            matches: components["schemas"]["ToolArtifactSearchMatch"][] | null;
+            scanned_bytes: number;
+            truncated: boolean;
+        };
         MCPConnectionRequest: {
             name: string;
             url: string;
@@ -2653,6 +2963,33 @@ export interface components {
         ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["ToolProgressChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
     };
     responses: {
+        /** @description A required upstream dependency failed. */
+        BadGateway: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The stored Artifact has expired. */
+        Gone: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The requested byte offset is beyond the stored content. */
+        RangeNotSatisfiable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Required service or credential configuration is unavailable. */
         ServiceUnavailable: {
             headers: {
@@ -2893,6 +3230,50 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    deleteKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Document deleted; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listKnowledgeDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Documents in the authorized Workspace, including inactive sources for owner inspection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"][] | null;
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     ingestDocument: {
         parameters: {
             query?: never;
@@ -2917,6 +3298,33 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    uploadKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["DocumentUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Indexed Document. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
         };
     };
     updateDocumentMetadata: {
@@ -2947,6 +3355,119 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    createMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Persisted Memory; embeddings are never included. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Memory"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    searchMemories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemorySearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Ranked results; empty when no searchable records remain. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetrievedMemory"][] | null;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Memory and recent changes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    mutateMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryMutation"];
+            };
+        };
+        responses: {
+            /** @description Current Memory, durable change and whether the command applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryMutationResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listRunInputs: {
@@ -4147,6 +4668,146 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listTaskStateRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped revision history, empty when no patch has been committed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStateRevision"][] | null;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTaskStateRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One immutable revision inside the authorized Workspace. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStateRevision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listToolArtifacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redacted result metadata for the scoped Run; no physical storage locations. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolArtifactList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    readToolArtifact: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded UTF-8 content and byte offsets. Follow next_offset until complete. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolArtifactRead"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["Gone"];
+            416: components["responses"]["RangeNotSatisfiable"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    searchToolArtifact: {
+        parameters: {
+            query: {
+                /** @description Nonempty text limited to 256 UTF-8 bytes. */
+                q: string;
+                max_matches?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded matches with scanned byte count and truncation evidence. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolArtifactSearchResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            410: components["responses"]["Gone"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getRunProjection: {

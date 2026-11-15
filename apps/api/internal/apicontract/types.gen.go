@@ -312,6 +312,42 @@ func (e MCPConnectionRequestAuthMode) Valid() bool {
 	}
 }
 
+// Defines values for MemoryChangeAction.
+const (
+	MemoryChangeActionDelete  MemoryChangeAction = "delete"
+	MemoryChangeActionReplace MemoryChangeAction = "replace"
+)
+
+// Valid indicates whether the value is a known member of the MemoryChangeAction enum.
+func (e MemoryChangeAction) Valid() bool {
+	switch e {
+	case MemoryChangeActionDelete:
+		return true
+	case MemoryChangeActionReplace:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryMutationAction.
+const (
+	MemoryMutationActionDelete  MemoryMutationAction = "delete"
+	MemoryMutationActionReplace MemoryMutationAction = "replace"
+)
+
+// Valid indicates whether the value is a known member of the MemoryMutationAction enum.
+func (e MemoryMutationAction) Valid() bool {
+	switch e {
+	case MemoryMutationActionDelete:
+		return true
+	case MemoryMutationActionReplace:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MessageRole.
 const (
 	Assistant MessageRole = "assistant"
@@ -1532,6 +1568,25 @@ type CreateConversationRequest struct {
 	Title string `json:"title"`
 }
 
+// CreateMemoryRequest defines model for CreateMemoryRequest.
+type CreateMemoryRequest struct {
+	Content        string     `json:"content"`
+	ConversationId *string    `json:"conversation_id,omitempty"`
+	CreatedAt      *time.Time `json:"created_at,omitempty"`
+
+	// Id Optional identity for create-only ingestion; never an update operation.
+	Id              *string                 `json:"id,omitempty"`
+	Kind            string                  `json:"kind"`
+	Metadata        *map[string]interface{} `json:"metadata,omitempty"`
+	ProjectId       *string                 `json:"project_id,omitempty"`
+	RunId           *string                 `json:"run_id,omitempty"`
+	SourceMessageId *string                 `json:"source_message_id,omitempty"`
+	UserId          *string                 `json:"user_id,omitempty"`
+
+	// WorkspaceId Must match the authorized request scope when provided.
+	WorkspaceId *string `json:"workspace_id,omitempty"`
+}
+
 // DeleteConversationResponse defines model for DeleteConversationResponse.
 type DeleteConversationResponse struct {
 	Deleted bool `json:"deleted"`
@@ -1620,6 +1675,18 @@ type DocumentMetadataUpdate struct {
 
 	// MetadataSchemaVersion Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC.
 	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
+}
+
+// DocumentUploadRequest defines model for DocumentUploadRequest.
+type DocumentUploadRequest struct {
+	File []byte `json:"file"`
+
+	// Metadata JSON-encoded custom metadata object; omitted preserves ingestion defaults.
+	Metadata              *string `json:"metadata,omitempty"`
+	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
+
+	// Title Defaults to the filename without extension.
+	Title *string `json:"title,omitempty"`
 }
 
 // EpisodeError defines model for EpisodeError.
@@ -1870,6 +1937,84 @@ type MCPDiscoveredTool struct {
 	Name        string  `json:"name"`
 	Reason      *string `json:"reason,omitempty"`
 	Supported   bool    `json:"supported"`
+}
+
+// Memory defines model for Memory.
+type Memory struct {
+	// Content Cleared in a deletion tombstone.
+	Content         string                  `json:"content"`
+	ConversationId  *string                 `json:"conversation_id,omitempty"`
+	CreatedAt       time.Time               `json:"created_at"`
+	DeletedAt       *time.Time              `json:"deleted_at,omitempty"`
+	Id              string                  `json:"id"`
+	Kind            string                  `json:"kind"`
+	Metadata        *map[string]interface{} `json:"metadata"`
+	ProjectId       *string                 `json:"project_id,omitempty"`
+	RunId           *string                 `json:"run_id,omitempty"`
+	SourceMessageId *string                 `json:"source_message_id,omitempty"`
+	UpdatedAt       time.Time               `json:"updated_at"`
+	UserId          *string                 `json:"user_id,omitempty"`
+	Version         int64                   `json:"version"`
+	WorkspaceId     *string                 `json:"workspace_id,omitempty"`
+}
+
+// MemoryChange defines model for MemoryChange.
+type MemoryChange struct {
+	Action          MemoryChangeAction `json:"action"`
+	Actor           string             `json:"actor"`
+	CommandHash     string             `json:"command_hash"`
+	CreatedAt       time.Time          `json:"created_at"`
+	MemoryId        string             `json:"memory_id"`
+	OperationId     string             `json:"operation_id"`
+	PreviousVersion int64              `json:"previous_version"`
+	Reason          string             `json:"reason"`
+	SourceMessageId *string            `json:"source_message_id,omitempty"`
+	Version         int64              `json:"version"`
+	WorkspaceId     string             `json:"workspace_id"`
+}
+
+// MemoryChangeAction defines model for MemoryChange.Action.
+type MemoryChangeAction string
+
+// MemoryDetail defines model for MemoryDetail.
+type MemoryDetail struct {
+	Changes *[]MemoryChange `json:"changes"`
+	Memory  Memory          `json:"memory"`
+}
+
+// MemoryMutation defines model for MemoryMutation.
+type MemoryMutation struct {
+	Action MemoryMutationAction `json:"action"`
+	Actor  string               `json:"actor"`
+
+	// Content Required and nonempty for replace; omitted for delete.
+	Content         *string `json:"content,omitempty"`
+	ExpectedVersion int64   `json:"expected_version"`
+	OperationId     string  `json:"operation_id"`
+	Reason          string  `json:"reason"`
+}
+
+// MemoryMutationAction defines model for MemoryMutation.Action.
+type MemoryMutationAction string
+
+// MemoryMutationResult defines model for MemoryMutationResult.
+type MemoryMutationResult struct {
+	Applied bool         `json:"applied"`
+	Change  MemoryChange `json:"change"`
+	Memory  Memory       `json:"memory"`
+}
+
+// MemorySearchRequest defines model for MemorySearchRequest.
+type MemorySearchRequest struct {
+	// Limit Omitted or nonpositive uses the provider default.
+	Limit     *int               `json:"limit,omitempty"`
+	Metadata  *map[string]string `json:"metadata,omitempty"`
+	ProjectId *string            `json:"project_id,omitempty"`
+	Query     string             `json:"query"`
+	UserId    *string            `json:"user_id,omitempty"`
+
+	// WorkspaceId Must match the authorized request scope when provided.
+	WorkspaceId *string `json:"workspace_id,omitempty"`
 }
 
 // Message defines model for Message.
@@ -2287,6 +2432,14 @@ type RecoverySummary struct {
 // ResumeRunRequest defines model for ResumeRunRequest.
 type ResumeRunRequest struct {
 	UserInput string `json:"user_input"`
+}
+
+// RetrievedMemory defines model for RetrievedMemory.
+type RetrievedMemory struct {
+	Memory       Memory  `json:"memory"`
+	RecencyBoost float32 `json:"recency_boost"`
+	Score        float32 `json:"score"`
+	Similarity   float32 `json:"similarity"`
 }
 
 // Run defines model for Run.
@@ -2813,6 +2966,36 @@ type ToolArtifact struct {
 	TurnId             *string    `json:"turn_id,omitempty"`
 }
 
+// ToolArtifactList defines model for ToolArtifactList.
+type ToolArtifactList struct {
+	Artifacts *[]ToolArtifact `json:"artifacts"`
+	RunId     string          `json:"run_id"`
+}
+
+// ToolArtifactRead defines model for ToolArtifactRead.
+type ToolArtifactRead struct {
+	Artifact   ToolArtifact `json:"artifact"`
+	Complete   bool         `json:"complete"`
+	Content    string       `json:"content"`
+	NextOffset int          `json:"next_offset"`
+	Offset     int          `json:"offset"`
+}
+
+// ToolArtifactSearchMatch defines model for ToolArtifactSearchMatch.
+type ToolArtifactSearchMatch struct {
+	Offset  int    `json:"offset"`
+	Preview string `json:"preview"`
+}
+
+// ToolArtifactSearchResult defines model for ToolArtifactSearchResult.
+type ToolArtifactSearchResult struct {
+	Artifact     ToolArtifact               `json:"artifact"`
+	Matches      *[]ToolArtifactSearchMatch `json:"matches"`
+	Query        string                     `json:"query"`
+	ScannedBytes int                        `json:"scanned_bytes"`
+	Truncated    bool                       `json:"truncated"`
+}
+
 // ToolEffect defines model for ToolEffect.
 type ToolEffect struct {
 	AvailableActions   *[]ToolEffectReconciliationAction `json:"available_actions,omitempty"`
@@ -3104,17 +3287,26 @@ type RunId = string
 // ToolName defines model for ToolName.
 type ToolName = string
 
+// BadGateway defines model for BadGateway.
+type BadGateway = ErrorResponse
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorResponse
 
 // Conflict defines model for Conflict.
 type Conflict = ErrorResponse
 
+// Gone defines model for Gone.
+type Gone = ErrorResponse
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// RangeNotSatisfiable defines model for RangeNotSatisfiable.
+type RangeNotSatisfiable = ErrorResponse
 
 // ServiceUnavailable defines model for ServiceUnavailable.
 type ServiceUnavailable = ErrorResponse
@@ -3131,6 +3323,19 @@ type CompleteLoginParams struct {
 // ListProjectGuidanceFilesParams defines parameters for ListProjectGuidanceFiles.
 type ListProjectGuidanceFilesParams struct {
 	Path *string `form:"path,omitempty" json:"path,omitempty"`
+}
+
+// ReadToolArtifactParams defines parameters for ReadToolArtifact.
+type ReadToolArtifactParams struct {
+	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// SearchToolArtifactParams defines parameters for SearchToolArtifact.
+type SearchToolArtifactParams struct {
+	// Q Nonempty text limited to 256 UTF-8 bytes.
+	Q          string `form:"q" json:"q"`
+	MaxMatches *int   `form:"max_matches,omitempty" json:"max_matches,omitempty"`
 }
 
 // ObserveRunEventsParams defines parameters for ObserveRunEvents.
@@ -3183,6 +3388,9 @@ type PatchTaskStateJSONRequestBody = TaskStatePatch
 // IngestDocumentJSONRequestBody defines body for IngestDocument for application/json ContentType.
 type IngestDocumentJSONRequestBody = DocumentIngestRequest
 
+// UploadKnowledgeDocumentMultipartRequestBody defines body for UploadKnowledgeDocument for multipart/form-data ContentType.
+type UploadKnowledgeDocumentMultipartRequestBody = DocumentUploadRequest
+
 // UpdateDocumentMetadataJSONRequestBody defines body for UpdateDocumentMetadata for application/json ContentType.
 type UpdateDocumentMetadataJSONRequestBody = DocumentMetadataUpdate
 
@@ -3191,6 +3399,15 @@ type CreateMCPConnectionJSONRequestBody = MCPConnectionRequest
 
 // UpdateMCPConnectionJSONRequestBody defines body for UpdateMCPConnection for application/json ContentType.
 type UpdateMCPConnectionJSONRequestBody = MCPConnectionRequest
+
+// CreateMemoryJSONRequestBody defines body for CreateMemory for application/json ContentType.
+type CreateMemoryJSONRequestBody = CreateMemoryRequest
+
+// SearchMemoriesJSONRequestBody defines body for SearchMemories for application/json ContentType.
+type SearchMemoriesJSONRequestBody = MemorySearchRequest
+
+// MutateMemoryJSONRequestBody defines body for MutateMemory for application/json ContentType.
+type MutateMemoryJSONRequestBody = MemoryMutation
 
 // RunRAGEvaluationJSONRequestBody defines body for RunRAGEvaluation for application/json ContentType.
 type RunRAGEvaluationJSONRequestBody = RAGEvaluationRunRequest

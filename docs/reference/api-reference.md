@@ -41,19 +41,11 @@ running HTTP surface. Do not maintain another complete endpoint list here.
 
 ### Contract Coverage Gaps
 
-These existing operations are not yet described in OpenAPI. Their current
-behavior remains available; generated-contract coverage must not be claimed for them.
-
-| Surface awaiting contract coverage | Current owner |
-| --- | --- |
-| Task State revision list/detail (`GET .../task-state/revisions[/{version}]`) | [Task State](../runtime/task-state.md), [handlers](../../apps/api/internal/httpapi/task_states.go) |
-| Memory create/search/detail/mutation (`POST /api/memories`, `POST /api/memories/search`, `GET /api/memories/{id}`, `POST /api/memories/{id}/mutations`) | [Memory](../context/memory-management.md), [handlers](../../apps/api/internal/httpapi/memories.go) |
-| Document list/upload/delete (`GET /api/documents`, `POST /api/documents/upload`, `DELETE /api/documents/{id}`) | [Knowledge](../knowledge/knowledge-rag.md), [handlers](../../apps/api/internal/httpapi/documents.go) |
-| Run Artifact list/read/search (`GET .../artifacts[/{artifact_id}[/search]]`) | [Artifacts](../tools/tool-result-artifacts.md), [handlers](../../apps/api/internal/httpapi/run_tool_artifacts.go) |
-
-This is a bounded exception list, not a second contract. Add the real schemas
-and serialized boundary tests before removing an exception; document cleanup
-alone does not implement those contracts.
+No uncovered operations remain among the current literal production route
+registrations. `TestHTTPRouteContractCoverage` checks their methods and paths;
+serialized resource regressions exercise request/response schemas, empty/null
+collections, range failures, mutation conflicts and foreign Workspace rejection.
+Route presence alone does not prove full behavioral or nested-schema coverage.
 
 ## Conversations and Agent Profiles
 

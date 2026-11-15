@@ -87,6 +87,7 @@ function documentDetail(id: string): DocumentDetail {
       workspace_id: "default_workspace",
       title: id,
       source_type: "text",
+      index_identity: { chunker_version: "fixture-v1", embedding_provider: "fixture", embedding_model: "fixture", embedding_dimensions: 1536 },
       metadata: {},
       created_at: "2026-09-10T00:00:00Z",
       updated_at: "2026-09-10T00:00:00Z"

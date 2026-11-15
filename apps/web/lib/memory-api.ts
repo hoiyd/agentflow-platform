@@ -1,40 +1,12 @@
 import { apiArray, apiObject } from "./api-client.ts";
+import type { components } from "./api-contract.gen.ts";
 
-export type MemoryInfo = {
-  id: string;
-  version: number;
-  deleted_at?: string;
-  workspace_id?: string;
-  user_id?: string;
-  project_id?: string;
-  conversation_id?: string;
-  run_id?: string;
-  source_message_id?: string;
-  kind: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-  created_at: string;
-  updated_at: string;
-};
+type MemorySchemas = components["schemas"];
 
-export type RetrievedMemory = {
-  memory: MemoryInfo;
-  similarity: number;
-  recency_boost: number;
-  score: number;
-};
-
-export type CreateMemoryInput = {
-  kind: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-};
-
-export type SearchMemoriesInput = {
-  query: string;
-  limit?: number;
-  metadata?: Record<string, string>;
-};
+export type MemoryInfo = MemorySchemas["Memory"];
+export type RetrievedMemory = MemorySchemas["RetrievedMemory"];
+export type CreateMemoryInput = MemorySchemas["CreateMemoryRequest"];
+export type SearchMemoriesInput = MemorySchemas["MemorySearchRequest"];
 
 export async function createMemory(input: CreateMemoryInput): Promise<MemoryInfo> {
   return apiObject<MemoryInfo>(
@@ -61,34 +33,15 @@ export async function searchMemories(input: SearchMemoriesInput): Promise<Retrie
   );
 }
 
-export type MemoryMutation = {
-  operation_id: string;
-  expected_version: number;
-  action: "replace" | "delete";
-  content?: string;
-  actor: string;
-  reason: string;
-};
+export type MemoryMutation = MemorySchemas["MemoryMutation"];
+export type MemoryChange = MemorySchemas["MemoryChange"];
+export type MemoryDetail = Omit<MemorySchemas["MemoryDetail"], "changes"> & { changes: MemoryChange[] };
+export type MemoryMutationResult = MemorySchemas["MemoryMutationResult"];
 
-export type MemoryChange = {
-  workspace_id: string;
-  memory_id: string;
-  operation_id: string;
-  action: "replace" | "delete";
-  previous_version: number;
-  version: number;
-  source_message_id?: string;
-  actor: string;
-  reason: string;
-  created_at: string;
-};
-
-export type MemoryDetail = { memory: MemoryInfo; changes: MemoryChange[] };
-export type MemoryMutationResult = { memory: MemoryInfo; change: MemoryChange; applied: boolean };
-
-export function getMemory(id: string): Promise<MemoryDetail> {
-  return apiObject<MemoryDetail>(`/api/memories/${encodeURIComponent(id)}`, { cache: "no-store" },
+export async function getMemory(id: string): Promise<MemoryDetail> {
+  const detail = await apiObject<MemorySchemas["MemoryDetail"]>(`/api/memories/${encodeURIComponent(id)}`, { cache: "no-store" },
     { errorMessage: "Failed to load memory", includeErrorBody: true }, "memory detail");
+  return { ...detail, changes: Array.isArray(detail.changes) ? detail.changes : [] };
 }
 
 export function mutateMemory(id: string, command: MemoryMutation): Promise<MemoryMutationResult> {

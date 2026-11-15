@@ -81,6 +81,12 @@ test("memory detail is scoped, uncached, and preserves tombstones and audit", as
   assert.deepEqual(await getMemory("mem/1"), detail);
 });
 
+test("memory detail normalizes nullable audit history without dropping identity", async (t) => {
+  const memory = { id: "mem", workspace_id: "9007199254740993", version: 1 };
+  mockFetch(t, { memory, changes: null });
+  assert.deepEqual(await getMemory("mem"), { memory, changes: [] });
+});
+
 test("memory mutations preserve expected version and operation identity without retries", async (t) => {
   const command = { operation_id: "op", expected_version: 2, action: "delete", actor: "user", reason: "wrong" };
   let calls = 0;
