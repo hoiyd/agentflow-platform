@@ -1,369 +1,143 @@
 # Functional Regression Gates
 
-These gates protect user-visible behavior, not coverage percentages. The two
-Tool regressions exposed a missing layer: component tests mocked the API, while
-direct Tool-loop tests did not exercise the production application composition.
-
-Shell test/evaluation entry points load ignored `scripts/.env`; process overrides
-win, live flags remain opt-in, and the application `.env` is never imported.
-Direct Go/npm commands require explicit environment settings. See
-[configuration files](backend-configuration.md#configuration-files).
-
-## Failure Inventory
-
-Write or update this inventory before adding isolated fixtures.
-
-| Failure | Expected observation |
-| --- | --- |
-| Thinking continuation fields are lost between Tool rounds | The strict fixture rejects the actual follow-up HTTP request; the browser test fails, not silently succeeds |
-| Internal Task State writes are classified as external writes | Single Chat fails its real guarded write without an invented Stage ID |
-| Invalid arguments cannot be corrected | Schema error reaches the next model request; only the corrected operation persists |
-| Stale Task State version overwrites facts | Real HTTP patch returns 409; state and revision count remain unchanged; Tool-level rejection/uncertain settlement retain their focused integration tests |
-| Skill is configured but never loaded | Missing body sentinel in the subsequent request fails the provider contract |
-| Tool-mode answers are buffered until completion | Browser must see a partial answer before it releases the provider's completion gate |
-| A provider failure looks successful or remains loading | Failed status and useful error are visible and survive Replay |
-| Verification UI never sends a contract or completion bypasses the gate | Browser-submitted policy is persisted; a failing verifier prevents `completed` |
-| A read-only plan acquires write authority or executes changed materials | [Planning gate](../runtime/read-only-planning.md#validation-and-rollback) checks hidden schemas, forged-call denial, frozen recovery, source drift and a separately authorized execution Run |
-| Multi/Loop execution loses Tool continuation or stage identity | Real staged runs finish with paired calls and a valid projection; Loop writes have durable receipts; isolated Multi Worker has no Task State write authority |
-| Reload loses accepted results or persisted Task State | Reload reads the same messages, run, and Task State from PostgreSQL |
-| Task State refresh invalidates pending history/Trace recovery | Delay the real Stage response in all three runtime modes; an independent Task State refresh still permits complete history restoration |
-| Replay Resume rejection or refresh failure hides existing evidence | Keep the readable Replay and selection; only accepted server events change status, and read warnings stay separate from command errors |
-| Old Replay reads or Resume callbacks arrive after navigation | Read/command leases reject the old Run; repeated Resume clicks admit one command |
-| Tool toggles only update local UI state | Catalog API and reloaded page agree on the persisted enabled flag |
-| Agent names overflow, duplicate names select the wrong ID, or controls misalign | Picker geometry, keyboard selection and persisted Agent ID agree at 1280/1920px; disabled Skills do not resize the Agent control |
-| Foreign/archived Agents or mutable templates bypass scope | Reject before Chat writes in all modes; owned CRUD still works and templates remain read-only |
-| Empty grants, new Tools or Resume restore revoked access | Explicit deny-all persists; new Tools receive no grant; denied calls never enter the Binding |
-| Workspace switching retains a prior draft or request | Discard stale state; archived Workspaces remain read-only |
-| Knowledge ingestion/search/deletion disagree | Real index detail and retrieval show the inserted document; deletion returns 404 |
-| A Knowledge filter disappears between search, execution or recovery | [Runtime scope gate](../knowledge/runtime-knowledge-filters.md#verification) checks frozen scope, source drift and revoked access |
-| Withdrawn/expired Knowledge is reused or an edit overwrites a newer revision | [Lifecycle gate](../knowledge/document-lifecycle.md#verification) checks persisted edits, current-source reads, restart and three runtime modes |
-| Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
-| Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
-| A new Conversation is still being created when Send/Enter fires | Creation and submission stay locked; the draft survives, the new Run uses the created ID, and no previous history is reused |
-| Continue becomes clickable before the previous command settles | `tool-progress.spec.ts` delays history, then checks disabled approval, successful Continue and persisted completion |
-| A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
-| A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
-| Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
-| A valid identity guesses another owner's object ID or supplies linked evidence | The resource authorization gate rejects reads, mutation and Memory provenance; owned resources and persisted revisions remain unchanged |
-| Production wrapping discards scoped Artifact reads | Artifact list/read/search retain capability and authorization in the real application composition |
-| New Tool defaults contaminate an existing operator policy | A fixed prior configuration starts unchanged; effective permissions, denied network, receipts and revocation survive restart |
-| Access is revoked after a stream was admitted | Further delivery stops, the browser reauthenticates, and the durable Run still completes independently |
-| Signup styling bypasses IdP security or creates shared access | The disposable Keycloak theme gate proves native password validation, direct IdP form submission, personal-only access, reload and repeat-login stability |
-| A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
-| Stop cancels an in-flight model request | Single, Multi-Agent Continue and Loop return `done:canceled`, not SSE `error`; the canceled Run survives reload, partial reasoning remains withheld, and the composer accepts another task |
-| Earlier cases leave conversation titles containing mode labels | Mode selection is scoped to the named Chat mode region, never the sidebar's conversation or delete buttons; run the affected gate in CI order, not only the new case |
-| Earlier cases leave Workers with the same routing capability | Each scenario declares and requests its own capability; exercise the real Router without weakening score-margin gates to bypass fixture collisions |
-| A Chat gate assumes global Agents or relies on earlier test data | Create and select an owned Workspace Agent through the real API/UI; assert its ID in the persisted Run and run the gate independently |
-| Earlier cases create additional owned Workspaces | Assert one default and correct ownership, not one total Workspace; reload preserves the full baseline plus the newly created space |
-| Agent setup starts on Replay or before back navigation commits | Enter `/workspace` explicitly before waiting for Chat readiness and selecting a fresh Conversation; do not reload an assumed destination |
-| Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
-| Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
-| A Run stops while the observer snapshot is loading | A controlled read-boundary regression prevents stale status from acknowledging the stopping event; three-mode browser recovery gates assert durable and visible cancellation before and after reload |
-| Clarification vanishes on reload, enters the wrong Stage, or resets the Run | Three-mode question gates retain questions/answers, reject oversized replies without losing the question, preserve Snapshot and verify Replay receipts |
-| Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
-
-Each CI composition profile starts with a fresh disposable database. Cases must
-declare their owned Agent and required Tools explicitly; neither a preceding
-profile nor another case supplies those prerequisites.
-
-## Headless Run Client
-
-The [CLI functional gate](../runtime/headless-run-client.md#verification) operates
-the same production HTTP/SSE API and Postgres without a browser. Its retained
-report covers file/Skill execution, accepted and rejected machine results,
-authorization, approval pause, detached execution, SIGINT, cancellation and
-restart reads. The owning document also lists the controlled wire-fault cases.
-
-## Configuration Upgrade Gate
-
-With disposable `TEST_DATABASE_URL`, run from `apps/api`:
-
-```bash
-EVALUATION_REPORT_DIR=/tmp/config-upgrade-evidence \
-  go test -json ./app -run '^TestToolPolicyConfigUpgradeStartsApplication$' -count=1
-```
-
-The [fixed prior policy](../../apps/api/app/testdata/tools.pre-web-fetch.json)
-must not be generated from current defaults. The gate uses `app.New`, HTTP,
-the real Sandbox Binding and Postgres; only the model and sbx CLI are controlled
-fixtures. It checks readiness, exact policy, no implicit new Tool, persisted
-receipts, restart, revocation and invalid-startup lock cleanup. Its JSON evidence
-records the fixture hash, revision/dirty state, resource identities and limits.
-This proves configuration compatibility, not live model quality or VM isolation.
-The [Failure Corpus](../evaluation/failure-corpus.md) makes a missing, skipped or
-failed gate block CI; the ordinary backend job retains both artifacts.
-
-The related-loader audit found prefilled collection decoding only in Tool
-configuration, now corrected. Model routes, MCP, filesystem roots, project
-guidance, verifier configs and Skill YAML decode into fresh values; environment
-configuration applies scalar defaults directly. Recheck these boundaries when
-introducing collection defaults; this audit does not attest arbitrary payloads.
-
-## Web Fetch
-
-The focused [Web fetch gate](../tools/web-fetch.md#verification) checks owned
-configuration, scoped rejection and Replay reload in all modes. Successful
-search/fetch/Artifact acquisition and HTTP/Dial failures have a separate backend
-integration boundary; neither fixture claims live-model quality.
-
-## Project Instructions
-
-The [scoped instructions gate](../context/project-instructions.md#verification) checks
-explicit project selection, path matching, frozen recovery, current grants and
-rejected inputs through CLI/HTTP/Postgres. Its opt-in browser profile also checks
-the actual form in all modes, stale file reads, Workspace isolation, compatibility
-rejection and readable frozen instructions after Replay reload.
-
-## Trusted MCP
-
-With a dedicated `TEST_DATABASE_URL`, run:
-
-```bash
-AGENTFLOW_MCP_TEST=1 bash scripts/test-browser.sh mcp.spec.ts
-AGENTFLOW_MCP_CONNECTION_TEST=1 bash scripts/test-browser.sh mcp-connections.spec.ts
-```
-
-The official SDK server fixture serves reviewed public text and structured JSON.
-The gate checks source/readiness UI, a failed call followed by a successful call,
-Single/Multi/Loop, frozen metadata in Postgres, Replay after reload, and rejection
-of a changed remote definition while a Run is awaiting continuation. It retains
-`mcp-evidence.json` and a desktop screenshot. The provider and MCP data are
-deterministic; this is not external availability or live-model quality evidence.
-See the [adapter contract](../tools/mcp-adapter.md) for the separate live read.
-
-The Workspace gate creates a connection through the browser, corrects an
-authentication failure, discovers/selects tools and binds an Agent. It checks
-all modes, reload persistence, secret-free Replay and disable/delete without
-losing historical evidence, retaining `workspace-mcp-evidence.json` and a desktop
-screenshot. Backend integration additionally checks cross-Workspace access,
-encrypted-token restart, unsafe endpoints, stale edits and frozen-call revocation.
-
-## Tool Discovery
-
-The independent [scoped filesystem gate](../tools/scoped-filesystem.md#validation)
-uses `AGENTFLOW_FILESYSTEM_TEST=1` with `filesystem-read.spec.ts`. It exercises
-real file list/search/read and rejected paths in all three modes, then reloads
-persisted Tool evidence in Replay. Retain `filesystem-read-evidence.json`; this
-does not execute sbx or measure live-model quality.
-
-The [managed output write gate](../tools/scoped-filesystem-writes.md#validation-and-rollback)
-uses `AGENTFLOW_FILESYSTEM_WRITE_TEST=1` with `filesystem-write.spec.ts`: all modes
-save/read/hash-patch reports, reject conflicts/escapes/read-only roots, preserve
-Effect receipts and reload Replay. A loaded Skill cannot grant a reader writes.
-Retain `filesystem-write-evidence.json` and the synthetic desktop screenshot.
-The same profile also covers [file Undo](../tools/file-undo.md): all modes restore
-and read back the retained report, reload compensation state, reject foreign
-Workspace reads and disable Undo after a later Run changes the file. Separate
-conflict evidence and desktop previews are retained; backend integrations cover
-retention, cancellation, storage faults and uncertain compensation settlement.
-
-```bash
-AGENTFLOW_TOOL_DISCOVERY_TEST=1 \
-  TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \
-  bash scripts/test-browser.sh tool-discovery.spec.ts
-```
-
-The lazy composition gate runs Single, Multi and Bounded Loop plus an unloaded
-call rejection through the browser, real Calculator Binding and disposable
-Postgres. It checks next-request Schema loading, typed activation events,
-frozen settings, invariants, failure correction and Chat/Replay reload. JSON
-attachments retain inputs, Agent/Run identities, state and provider contracts.
-The provider is deterministic; this is not live selection-quality evidence.
-Backend integration tests separately close/reopen Postgres before continuing
-with restored visibility. See [Tool discovery](../tools/tool-discovery.md).
-
-## Structured Clarification
-
-Run `bash scripts/test-browser.sh clarification.spec.ts runtime.spec.ts` with the
-dedicated `TEST_DATABASE_URL` above. New cases archive their owned Agents after
-recording evidence so they cannot change later Router rankings. See the
-[clarification contract](../runtime/structured-clarification.md) for persistence,
-mode boundaries and the backend crash/failure matrix.
-
-## Durable Inputs
-
-The [durable inbox gates](../runtime/durable-inputs.md#verification) run through
-the real composer, Go runtime and Postgres. The sandbox composition profile
-also runs `run-inbox.spec.ts`; a separate `AGENTFLOW_INBOX_EDGE_TEST=1` profile
-runs `run-inbox-boundaries.spec.ts` with real compaction and a three-call budget.
-CI retains both evidence reports. A backend production-composition integration
-test additionally exercises HTTP errors, final-response steering and fresh
-follow-up dispatch during ordinary `go test ./...`.
-
-## Execution Boundary
-
-The opt-in browser gate exercises real HTTP destination enforcement and OIDC
-command denial through production composition and disposable Postgres. It
-retains contract, Evidence and destination hit counters, and verifies Replay
-reload. DNS and process failure checks run separately without external services.
-See [Execution boundaries](execution-boundaries.md#repeatable-evidence) for the
-failure inventory, command and evidence limitations.
-
-## Owner Model Admission
-
-The focused gate uses two signed OIDC identities, the production composition,
-and disposable Postgres. One identity holds a gated streaming response, then
-attempts another Run in a second owned Workspace. The second identity must still
-complete; spoofing `X-Owner-ID` cannot bypass the first identity's capacity.
-Stop releases the physical connection; a subsequent Run and background Memory
-sync succeed, and owner-wait diagnostics survive Replay/reload.
-Separate Single, Multi-Agent, and Bounded Loop cases each complete four real
-Tool rounds with owner capacity one, verifying permit reuse and persisted
-owner-wait diagnostics for every physical model attempt.
-
-```bash
-AGENTFLOW_OWNER_ADMISSION_TEST=1 AGENTFLOW_IDENTITY_TEST=1 \
-  TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \
-  npm --prefix apps/web run test:e2e -- owner-admission.spec.ts
-```
-
-The fixture fixes global=2, owner=1, owner queue=0, owner wait=3s. Its JSON
-attachment records identities, Workspace IDs, limits, Runs, persisted events,
-checks, and limitations. Deterministic Go tests additionally cover nonzero
-waiting queues, cancellation/timeout/close in owner/key/global phases, retries,
-and durable ownership after revoked access. This proves process-local control
-semantics, not provider throughput or strict fairness.
-
-## Workspace Configuration
-
-```bash
-AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh agent-selection.spec.ts workspace-agent-config.spec.ts
-```
-
-- `workspace-agent-config.spec.ts`: blank/template creation, draft-only copying,
-  copied bindings, immutable templates, scoped CRUD/Chat, persisted Tool toggles,
-  Workspace switching and empty-Workspace behavior.
-- `agent-selection.spec.ts`: 12 Agents with long/duplicate names, description
-  search, keyboard selection, bounded menus and aligned 40px controls at
-  1280/1920px; Skill invocation/Automatic reset, disabled notes and persisted Run ID.
-- Backend integration tests cover revoked execution/Resume, deny-all and new-Tool
-  grants, plus transactional migration and repeat-apply behavior.
-
-The browser gates retain `workspace-agent-config-evidence.json` and
-`agent-selection-evidence.json` with owner/Workspace/Agent/Run identities, checks
-and geometry; synthetic screenshots support visual review. Component tests cover
-empty search, dismissal, lock/reset and input-method composition. CI runs these
-with the identity/resource gate; fixture limitations are listed below.
-
-## Test Boundaries
-
-Browser E2E uses the real Next.js workspace, browser API client, Go production
-composition (`app.New`), runtime, registered Bindings, guards, and a disposable
-Postgres database. External model/embedding and, in the identity gate, OIDC
-provider endpoints are deterministic transport fixtures.
-There is no fake business Store or fabricated API success. The history-refresh
-race gate uses `page.route` only to delay a real Stage HTTP response fetched from
-the backend. Fixture control endpoints exist only in the opt-in Go test, never
-in `cmd/server`.
-
-The [identity gate](identity-membership.md#repeatable-validation) runs separately
-with `AGENTFLOW_IDENTITY_TEST=1` so the ordinary trusted-local runtime suite remains
-unchanged. CI retains its protocol/boundary attachments separately from runtime
-evidence. This gate does not claim live-provider or complete object-ACL validation.
-
-`AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh resource-authorization.spec.ts`
-adds real signed identities and Workspace/object isolation, retrieval content,
-rejected writes, reload and active Chat logout/continuity. Its JSON attachments
-record resource identities and limitations. Populated Artifact/effect/Capture
-and additional revocation/storage failures have focused Postgres integration tests;
-see the [authorization matrix](resource-authorization.md). No screenshots are used.
-
-`bash scripts/test-keycloak-auth.sh` additionally checks real themed authentication
-with a disposable Keycloak realm and independent Postgres. It is a separate narrow
-gate, not part of the trusted-local runtime suite, and retains `onboarding-evidence.json`.
-It never configures an operator's IdP and does not cover every MFA/reset flow.
-
-Focused unit/component tests remain valuable for races, parsers, schema rejection,
-privacy, and uncertain-write settlement. A mocked success response is not evidence
-of cross-layer correctness. Do not delete these boundary checks merely because
-browser tests exist, or add struct-round-trip tests to inflate patch coverage.
-Two API fixture-echo tests (Skill hash passthrough and Runtime Snapshot passthrough)
-are replaced by real catalog metadata/privacy and persisted Snapshot checks.
-Nullable collection normalization, request-policy, SSE parser, state-race, and
-Tool uncertain-write tests remain; they cover different failure mechanisms.
-The existing Task State executor integration now uses the real Single boundary
-(no Stage ID) and asserts that a stale patch leaves both state and revisions
-unchanged. Browser scenarios also fail on unhandled page exceptions.
-
-Replay command rejection, post-acceptance transport failure, refresh races and
-unmount callbacks have focused component regressions. The runtime browser gate
-checks history/Task State refresh against real Stage HTTP and Postgres responses;
-`history-refresh-evidence` records each mode's identities and assertions. These
-checks do not simulate a provider crash or claim live-model quality.
-
-The gates were checked against two temporary regression canaries, then the
-production code was restored: dropping Tool continuation `reasoning_content`
-fails the Single browser case with an explicit provider contract rejection;
-classifying Task State as an external write fails the real executor integration
-at the security boundary. Neither canary is a permanent runtime switch or an
-alternative implementation.
-
-Deterministic provider evidence does **not** establish live model quality,
-provider availability, real Tavily egress, or recovery from process termination.
-Those have separate owned integration/evaluation/drill suites.
-
-The fixture returns fixed embeddings. Knowledge/Memory cases prove plumbing,
-index compatibility, mutation and UI contracts, **not** semantic recall quality.
-Every runtime scenario starts a new conversation; Multi-Agent uses explicit
-declarative routing signals rather than changing routing thresholds or bypassing
-the selection gate. Provider failures retain the safe generic 5xx message;
-the UI now displays the already-supplied error source/code and request ID.
+Browser gates exercise the production Next.js client, Go `app.New`, Runtime,
+registered Bindings and disposable Postgres. External model/embedding transports
+are controlled fixtures; business persistence and successful API responses are
+not fabricated. Test-only control routes never enter `cmd/server`.
 
 ## Run and Evidence
 
-With Go 1.26.5, Node 22+, frontend dependencies and Chromium installed:
+Use Go 1.26.5, Node 22+, installed frontend dependencies and Chromium. From the
+repository root, supply a dedicated pgvector database with `CREATEDB` privileges:
 
 ```bash
-cd apps/web
-npm ci
-npx playwright install chromium
 export TEST_DATABASE_URL='postgres://test-user:test-password@127.0.0.1:5432/agentflow_test?sslmode=disable'
-npm run test:e2e -- --grep 'Single agent'
+npm --prefix apps/web ci
+npm --prefix apps/web exec playwright install chromium
+bash scripts/test-browser.sh runtime.spec.ts --grep 'Tool-enabled answer'
 ```
 
-The dedicated test database must exist and allow `CREATEDB`; pgvector must be
-available. Each invocation creates and drops a new database via `pgfixture`,
-without migrating or clearing the database in the URL. Missing prerequisites
-fail the browser command instead of producing a green skipped test suite.
-Ports 13000 and 18080 must be free; existing services are never reused.
-The Next production build uses `.next-functional`; generated source files are
-restored by the wrapper, even on failure. Do not run builds concurrently in the
-same checkout.
+Each composition creates/drops its own database; the database in the URL is not
+migrated or cleared. Ports 13000/18080 must be free; existing services are never
+reused. `.next-functional` keeps production test builds separate from development.
+Wrappers restore Next-generated source files, including on failure. Do not run
+builds concurrently in one checkout. Shell entry points load `scripts/.env`,
+never the application `.env`; process overrides win. See [configuration](backend-configuration.md#configuration-files).
 
-CI uses `npm run test:e2e:ci`: one `.next-functional` build serves the profiles in
-[`browser-gates.mjs`](../../scripts/browser-gates.mjs). Usage/reasoning share a
-route-evidence composition; managed writes and planning retain separate file
-state, and identity/approval profiles retain separate policy. Each profile starts
-fresh servers/databases. The build ID must match before reuse. Each profile has
-its own results, attachments and HTML report under `test-results/gates/NAME`;
-`summary.json` records revision, build count/ID, flags, durations and test counts.
-Failed profiles do not prevent later independent profiles from running; a failed
-build or cancellation leaves subsequent profiles explicitly `not_run`. Old gate
-output is cleared before building, so it cannot be uploaded as new evidence.
+CI runs `npm --prefix apps/web run test:e2e:ci`. The profile/file/flag assignment
+has one owner: [`browser-gates.mjs`](../../scripts/browser-gates.mjs). One frontend
+build is reused by matching build ID; each profile starts fresh servers and
+Postgres. Usage/reasoning share a route-evidence profile; managed writes and
+planning keep separate file state. Identity, approval and other policy profiles
+remain isolated. Keycloak uses its disposable container, never the operator IdP.
 
-Local development should select the affected scenario, or run named profiles
-with `bash scripts/test-browser-ci.sh filesystem-write tool-approval` rather than the
-whole CI suite. `npm test` remains fast component/library testing.
-Standalone `test-results/results.json`, per-test `runtime-evidence` attachments,
-provider contract counters, and the HTML report retain identities, inputs,
-frozen configuration, persisted outcomes and limitations. Failure traces use
-only synthetic fixture data; no real provider credentials or operator Skills
-are loaded. Reports are ignored by Git and retained by CI for 14 days.
+For a small multi-profile check, select names rather than running the full suite:
 
-See [Playwright webServer](https://playwright.dev/docs/test-webserver) for managed
-process lifecycle and [retrying assertions](https://playwright.dev/docs/test-assertions)
-for condition-based waiting. No fixed sleeps or automatic retries hide failures.
-## Skill Invocation/Readiness Gate
+```bash
+bash scripts/test-browser-ci.sh planning tool-approval
+node --test scripts/browser-gates.test.mjs scripts/script-env.test.mjs
+```
 
-`AGENTFLOW_SKILL_POLICY_TEST=1 bash scripts/test-browser.sh skill-policy.spec.ts`
-uses disposable Postgres and strict model fixtures to verify explicit/model
-invocation, dependencies, frozen policies and all-mode execution. See the
-[owning contract](../tools/skill-invocation.md#evidence) for evidence and scope.
+CI stores each profile's JSON results, attachments, HTML report and failure traces
+under `apps/web/test-results/gates/NAME/`; `summary.json` records revision, build
+count/ID, flags, duration and executed/skipped/failed counts. Output is cleared
+before building. A failed profile does not stop independent later profiles;
+build failure or cancellation leaves remaining profiles `not_run`. Missing
+results or an all-skipped profile cannot pass. Artifacts are ignored by Git and
+retained by CI for 14 days. Standalone Playwright runs retain `test-results/`
+and `playwright-report/`; skipped cases alone are not acceptance evidence.
 
-## Structured Output Gate
+## Failure Inventory
 
-`AGENTFLOW_STRUCTURED_OUTPUT_TEST=1 bash scripts/test-browser.sh structured-output.spec.ts`
-(with the dedicated `TEST_DATABASE_URL`) checks real UI/API/Postgres output contracts,
-all three modes, Tool continuation and generation/verification failures. It retains
-desktop screenshots and `structured-output-evidence.json`; see the
-[output contract](../runtime/structured-output.md#verification) for scope and limits.
+Before adding a fixture, state the failure and expected durable/UI outcome in
+the owning test. Keep the detailed matrix with that test or its feature contract,
+not in a second cross-project checklist.
+
+- Stub external transport, not Tool descriptors, authorization, Store or business behavior.
+- Give each case its own Conversation, owned Agent and explicit Tools/routing signals.
+  Do not depend on earlier cases, shared names or global templates.
+- Control races with a request/response handshake, not fixed sleeps, retries or
+  larger timeouts. Delay real API responses rather than fabricate successful writes.
+- Assert pre-write rejection and durable failure state, not returned errors alone.
+  Cover reload, stale input and the affected runtime modes without inventing Stage IDs.
+- A completed Run may receive later title/Memory telemetry. Compare the observed
+  immutable event prefix by sequence, then verify allowed appends by request identity.
+- Keep command acceptance, browser observation, cancellation and late-navigation
+  results separate. A stale callback must not modify the selected Run or draft.
+- Record identity, synthetic inputs, frozen configuration, outcomes and limitations.
+  Use screenshots for visible changes, not as substitutes for functional assertions.
+
+## Gate Index
+
+The [profile source](../../scripts/browser-gates.mjs) owns exact selections and
+flags. These links own behavior, failure semantics and focused operating commands.
+
+| Boundary | Owning contract / evidence |
+| --- | --- |
+| Tool continuation, corrections, real answer streaming | [Bounded Tool loop](../tools/bounded-tool-loop.md#failure-inventory-and-test-plan), [`runtime.spec.ts`](../../apps/web/e2e/runtime.spec.ts) |
+| Clarification and same-Run recovery | [Structured clarification](../runtime/structured-clarification.md#api-and-recovery) |
+| Exact-call Tool approval | [Tool approval](../tools/tool-approval.md#api-and-evidence) |
+| Read-only plan and separate execution | [Planning](../runtime/read-only-planning.md#validation-and-rollback) |
+| Inbox, steering and compaction/budget boundaries | [Durable inputs](../runtime/durable-inputs.md#verification) |
+| Knowledge scope, source revocation and edits | [Runtime filters](../knowledge/runtime-knowledge-filters.md#verification), [document lifecycle](../knowledge/document-lifecycle.md#verification) |
+| Filesystem reads, managed writes and Undo | [Reads](../tools/scoped-filesystem.md#validation), [writes](../tools/scoped-filesystem-writes.md#validation-and-rollback), [Undo](../tools/file-undo.md) |
+| Web source acquisition | [Web fetch](../tools/web-fetch.md#verification) |
+| Project instructions | [Scoped instructions](../context/project-instructions.md#verification) |
+| Skill invocation/readiness and package review | [Invocation](../tools/skill-invocation.md#evidence), [review](../tools/skill-package-review.md) |
+| Structured output and Completion Gate | [Structured output](../runtime/structured-output.md#verification), [Verification](../runtime/verification.md) |
+| Usage, reasoning and partial output | [Budget](../runtime/run-budget.md), [reasoning](../runtime/provider-reasoning.md), [partial recovery](../runtime/durable-partial-output.md) |
+| Host/network/sandbox enforcement | [Execution boundaries](execution-boundaries.md#repeatable-evidence), [sandbox commands](sandbox-execution.md) |
+| Headless HTTP/SSE client | [Headless Run client](../runtime/headless-run-client.md#verification) |
+
+## Configuration Upgrade Gate
+
+The [Failure Corpus](../evaluation/failure-corpus.md#historical-seeds-and-limits)
+owns the promoted startup regression and its exact invocation. It uses a fixed
+[prior policy](../../apps/api/app/testdata/tools.pre-web-fetch.json) through real
+`app.New`, HTTP, Sandbox Binding and Postgres. Never regenerate that fixture from
+current defaults or relax validation to make it start. Retain permissions,
+rejection, receipts, restart, revocation and invalid-startup cleanup evidence.
+
+## Trusted MCP
+
+The [MCP adapter](../tools/mcp-adapter.md) owns operator and Workspace-connection
+contracts. Separate profiles check discovery/readiness, authenticated selection,
+all-mode calls, frozen-definition drift, disable/delete and historical Replay.
+Controlled SDK transport is not evidence of external service availability.
+
+## Tool Discovery
+
+The [discovery contract](../tools/tool-discovery.md) owns lazy-schema activation,
+unloaded-call denial, frozen visibility and restart checks. Its browser profile
+uses real guarded Bindings and rejects missing next-request schemas.
+
+## Owner Model Admission
+
+The [control map](../runtime/execution-controls.md#owner-scoped-admission) owns limit units
+and precedence. [`owner-admission.spec.ts`](../../apps/web/e2e/owner-admission.spec.ts)
+checks distinct owners, same-owner Workspace competition, spoof rejection, Stop
+permit release and staged Tool rounds. Queue/timeout/retry/close failures remain
+with the focused Go tests; the browser profile does not claim serving throughput.
+
+## Workspace Configuration
+
+[Agent/Tool ownership](../architecture/workspace-agent-tools.md) and
+[resource authorization](resource-authorization.md) own scoped CRUD, grants,
+revocation and cross-owner rejection. [Identity validation](identity-membership.md#repeatable-validation)
+owns login/session/onboarding. Picker geometry and keyboard behavior remain in
+the existing Agent-selection gate; Keycloak password forms have a separate gate.
+
+## Test Boundaries
+
+Component/library and backend tests still own races, parsers, schema rejection,
+privacy, uncertain writes and crash windows that browser happy paths cannot
+prove. Do not delete them just because a browser gate exists, or add fixture-echo
+tests merely for coverage. Reviewed historical incidents and promotion evidence
+belong in the [Failure Corpus](../evaluation/failure-corpus.md).
+
+Controlled model/embedding results prove protocol, plumbing and persistence,
+not semantic quality, live availability or actual network egress. Controlled sbx
+CLI evidence is not VM-isolation evidence. Process termination, production
+capacity and model quality have separate [drill](release-recovery-drill.md) and
+[evaluation](../evaluation/README.md) owners. Run only the smallest affected scope
+during development; the complete profile set remains a CI gate.
