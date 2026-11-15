@@ -166,7 +166,7 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 	}
 	if restored.mode == ChatModeSingle {
 		if completed {
-			r.emitFinalDeltas(executionCtx, runID, result.Output, events)
+			r.emitCompletedAnswer(executionCtx, runID, result.Output, events)
 		}
 		return nil
 	}

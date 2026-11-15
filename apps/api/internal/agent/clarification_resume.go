@@ -59,7 +59,7 @@ func (r *Runtime) resumeClarification(ctx context.Context, owner, workspace, run
 	}
 	events <- liveRunEvent(run)
 	if plan.kind == clarificationResumeReplay {
-		r.emitFinalDeltas(executionCtx, runID, plan.output, events)
+		r.emitCompletedAnswer(executionCtx, runID, plan.output, events)
 		return nil
 	}
 	if saved.HumanInput {

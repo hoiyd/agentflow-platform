@@ -535,10 +535,12 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		resumed = call("POST", path+"/resume", nil, 200, nil)
 	}
 	var answer strings.Builder
+	answerEvents := 0
 	for _, line := range strings.Split(resumed, "\n") {
 		if strings.HasPrefix(line, "data: ") {
 			var item domain.RunEvent
 			if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &item) == nil && item.Type == domain.EventModelDelta {
+				answerEvents++
 				if reset, _ := item.Payload["reset"].(bool); reset {
 					answer.Reset()
 				}
@@ -549,6 +551,11 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	}
 	if answer.String() != "Report edit verified." {
 		t.Fatalf("continuation failed: %s", resumed)
+	}
+	// A completed staged/recovered answer is one delivery, not simulated tokens.
+	// Real Single Provider deltas retain their separate streaming contract.
+	if (mode != "single" || scenario == "completed_restart") && answerEvents != 1 {
+		t.Fatalf("completed answer delivered in %d synthetic pieces: %s", answerEvents, resumed)
 	}
 	contents, err = os.ReadFile(filepath.Join(root, "output", "approval-report.md"))
 	wantContent := "Approved report.\n"

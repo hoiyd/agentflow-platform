@@ -73,7 +73,7 @@ func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.
 		if err != nil {
 			return err
 		}
-		r.emitFinalDeltas(ctx, prepared.Run.ID, output, events)
+		r.emitCompletedAnswer(ctx, prepared.Run.ID, output, events)
 		return nil
 	}
 	output := strings.TrimSpace(finalAnswer)
@@ -98,7 +98,7 @@ func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.
 		return err
 	}
 	events <- liveStageEvent(step)
-	r.emitFinalDeltas(ctx, prepared.Run.ID, output, events)
+	r.emitCompletedAnswer(ctx, prepared.Run.ID, output, events)
 	return nil
 }
 
