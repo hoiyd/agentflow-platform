@@ -118,7 +118,18 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	browserFilesystemConfig(t, &cfg, root)
 	var mcpControls http.Handler
 	if scenario == "generic_mcp_docs__read" {
-		mcpControls = browserMCPConfig(t, &cfg, root)
+		mcpControls = browserMCPConfig(t, &cfg, root, true)
+		data, err := os.ReadFile(cfg.MCPConfigPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fixture struct{ Servers []tool.MCPServerConfig }
+		if err := json.Unmarshal(data, &fixture); err != nil {
+			t.Fatal(err)
+		}
+		if len(fixture.Servers) == 0 || fixture.Servers[0].ID != "docs" || !fixture.Servers[0].Required {
+			t.Fatal("approval fixture must require MCP discovery before application startup completes")
+		}
 	}
 	tools, err := tool.LoadConfig(cfg.ToolConfigPath)
 	if err != nil {
