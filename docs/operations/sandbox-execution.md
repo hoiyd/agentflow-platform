@@ -3,8 +3,7 @@
 PROD-101 uses the local Docker `sbx` CLI as the execution boundary, not bare
 host `exec`. The first release supplies an opt-in `sandbox_command` Tool through
 the existing Catalog, Executor, frozen definitions, Effect Journal and Artifact
-governance. It does not execute Skill resources or change Command Verifier's
-trusted-local host execution behavior.
+governance. It does not execute Skill resources or provide a Completion Verifier.
 
 ## Failure Inventory
 
@@ -47,8 +46,8 @@ missing utilities fail instead of reverting to a less restricted launch.
 
 This is a single-API-process integration, not a multi-worker sandbox scheduler.
 Do not mount the API repository or credential files to make a command work.
-The existing host Command Verifier remains local-only and is not upgraded to a
-sandbox by this feature. Skill installation/loading still grants no execution.
+The retired host Command Verifier is not replaced by this Tool. Skill
+installation/loading still grants no execution.
 
 ## Enable and Authorize
 
@@ -166,8 +165,7 @@ Tool definition with the new contract.
 
 `exit_code != 0` is unsuccessful guest execution, even when the CLI transport
 returned normally. The Tool result is an observation, not a Completion Gate;
-enabling this Tool does not automatically verify an Agent's answer. Host Command
-Verifier and its frontend restrictions stay unchanged.
+enabling this Tool does not automatically verify an Agent's answer.
 
 ## Evidence and Recovery
 

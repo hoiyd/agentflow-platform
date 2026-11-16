@@ -35,9 +35,6 @@ func browserExecutionBoundary(t *testing.T, cfg *config.Config, root string) htt
 	}))
 	t.Cleanup(allowed.Close)
 	cfg.VerificationAllowedHTTPHosts = allowed.URL
-	// An actual executable is allowlisted to prove OIDC gating, not just an empty
-	// allowlist. The request cannot turn this host command into a remote capability.
-	cfg.VerificationAllowedCommands = "/usr/bin/touch"
 	marker := filepath.Join(root, "unexpected-command-write")
 	return func(w http.ResponseWriter, _ *http.Request) {
 		_, err := os.Stat(marker)

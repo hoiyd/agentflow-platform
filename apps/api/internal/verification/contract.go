@@ -17,9 +17,25 @@ const (
 	maxVerifierTimeoutMS     = int64(300_000)
 )
 
+// ValidateExecution rejects retired capabilities without rewriting historical
+// contracts. Keep read-only hash validation separate so Replay remains readable.
+func ValidateExecution(contract *domain.CompletionContract) error {
+	if contract != nil {
+		for _, spec := range contract.Verifiers {
+			if spec.Type == domain.VerifierCommand {
+				return invalidContract("host command verifier is retired; create a new Run with a supported completion contract")
+			}
+		}
+	}
+	return nil
+}
+
 func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.CompletionContract, error) {
 	if input == nil {
 		return nil, nil
+	}
+	if err := ValidateExecution(input); err != nil {
+		return nil, err
 	}
 	if err := redaction.ValidateValue(input); err != nil {
 		return nil, &VerificationError{Kind: ErrorInvalidContract, Message: "completion contract contains credential-like content", Cause: err}

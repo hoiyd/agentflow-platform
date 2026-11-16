@@ -1,7 +1,7 @@
 import type { components } from "./api-contract.gen";
 
 export type VerificationFailureAction = "fail" | "waiting_for_user";
-export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
+export type VerifierTypeInput = "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
 
 export type AnswerRelevanceSettings = {
   enabled: boolean;
@@ -49,13 +49,6 @@ export type HTTPVerifierSettings = {
   expectedStatus: number;
 };
 
-export type CommandVerifierSettings = {
-  enabled: boolean;
-  executable: string;
-  arguments: string;
-  workingDirectory: string;
-};
-
 export type CompletionVerificationSettings = {
   enabled: boolean;
   answerRelevance: AnswerRelevanceSettings;
@@ -64,7 +57,6 @@ export type CompletionVerificationSettings = {
   citation: CitationSettings;
   jsonSchema: JSONSchemaSettings;
   http: HTTPVerifierSettings;
-  command: CommandVerifierSettings;
   maxAttempts: number;
   onExhausted: VerificationFailureAction;
 };
@@ -121,12 +113,6 @@ export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
     method: "GET",
     url: "http://localhost:8080/health",
     expectedStatus: 200
-  },
-  command: {
-    enabled: false,
-    executable: "go",
-    arguments: "test\n./...",
-    workingDirectory: "."
   },
   maxAttempts: 2,
   onExhausted: "waiting_for_user"
@@ -219,17 +205,6 @@ export function buildCompletionContract(
       }
     });
   }
-  if (normalized.command.enabled) {
-    verifiers.push({
-      id: "command-check",
-      type: "command",
-      required: true,
-      config: compactConfig({
-        args: [normalized.command.executable.trim(), ...lines(normalized.command.arguments)],
-        working_directory: normalized.command.workingDirectory.trim()
-      })
-    });
-  }
 
   return {
     subject_type: "run_output",
@@ -275,7 +250,6 @@ export function normalizeCompletionVerification(
       ...settings.http,
       expectedStatus: clampInteger(settings.http.expectedStatus, 100, 599)
     },
-    command: { ...settings.command },
     maxAttempts: clampInteger(settings.maxAttempts, 1, 5)
   };
 }
@@ -346,17 +320,6 @@ export function validateCompletionVerification(settings: CompletionVerificationS
     }
   }
 
-  if (settings.command.enabled) {
-    if (!settings.command.executable.trim()) {
-      errors.push("Command verifier requires an executable.");
-    }
-    if (isAbsolutePath(settings.command.workingDirectory.trim())) {
-      errors.push("Command working directory must be relative.");
-    }
-    if (settings.command.workingDirectory.split(/[\\/]/).some((segment) => segment === "..")) {
-      errors.push("Command working directory cannot escape the verification workspace.");
-    }
-  }
 
   return errors;
 }
@@ -368,8 +331,7 @@ export function enabledVerifierCount(settings: CompletionVerificationSettings): 
     settings.textConstraints.enabled,
     settings.citation.enabled,
     settings.jsonSchema.enabled,
-    settings.http.enabled,
-    settings.command.enabled
+    settings.http.enabled
   ].filter(Boolean).length;
 }
 
@@ -415,9 +377,7 @@ function normalizedHostInputs(value: string, errors: string[]): string[] {
   });
 }
 
-function isAbsolutePath(value: string): boolean {
-  return value.startsWith("/") || value.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(value);
-}
+
 
 function clampInteger(value: number, minimum: number, maximum: number): number {
   if (!Number.isFinite(value)) {

@@ -249,10 +249,9 @@ rereading disk. See [installation](../tools/skill-installation.md) and
 ## Verification
 
 Only `completion_contract` opts a new Run in; `VERIFICATION_*` settings bound
-execution, not activation. Host commands require trusted local mode, a workspace
-root and absolute executable allowlist; OIDC blocks them pending an isolated
-runner. Canonical cwd checks and a clean environment do not constitute an OS
-sandbox. HTTP requires an exact origin grant, including loopback, with dial-time
+execution, not activation. Host Command Verifier and its workspace/command
+environment settings are retired; historical output remains readable.
+HTTP requires an exact origin grant, including loopback, with dial-time
 DNS checks, no redirects/proxies, a 10s total ceiling and 1 MiB response limit.
 Artifact bytes are capped independently with observed-size/hash metadata.
 See [Verification](../runtime/verification.md) and
@@ -261,6 +260,6 @@ See [Verification](../runtime/verification.md) and
 ## Operational Checklist
 
 Check actual vector dimensions; reindex changed identities; set prices before
-cost limits; deliberately scope verifier commands/hosts and CORS/access; and
+cost limits; deliberately scope verifier HTTP hosts and CORS/access; and
 create a new Run after changing frozen settings. Do not reinterpret old Runs
 through current editable config.

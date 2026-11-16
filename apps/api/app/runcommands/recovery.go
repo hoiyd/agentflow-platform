@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 func (c Commands) Continue(ctx context.Context, scope Scope, id, plan string, routing domain.AgentRoutingRequirements, observer Observer) error {
@@ -45,6 +46,9 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	}
 	if !found {
 		return commandError(Missing, store.ErrNotFound("run"))
+	}
+	if err := verification.ValidateExecution(run.CompletionContract); err != nil {
+		return commandError(Conflict, err)
 	}
 	if err := c.rejectUnboundToolApproval(ctx, scope, run); err != nil {
 		return err

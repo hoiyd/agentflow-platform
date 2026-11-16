@@ -1,4 +1,4 @@
-import { BookCheck, Braces, Globe2, Quote, Target, Terminal, TextCursorInput, X } from "lucide-react";
+import { BookCheck, Braces, Globe2, Quote, Target, TextCursorInput, X } from "lucide-react";
 import { useState } from "react";
 
 import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
@@ -19,8 +19,7 @@ const VERIFIER_TABS: Array<{ type: VerifierTypeInput; label: string }> = [
   { type: "text_constraints", label: "Text" },
   { type: "citation", label: "Citations" },
   { type: "json_schema", label: "JSON Schema" },
-  { type: "http", label: "HTTP" },
-  { type: "command", label: "Command" }
+  { type: "http", label: "HTTP" }
 ];
 
 export function CompletionVerificationPanel({
@@ -127,7 +126,7 @@ function isVerifierEnabled(settings: CompletionVerificationSettings, type: Verif
   if (type === "citation") return settings.citation.enabled;
   if (type === "json_schema") return settings.jsonSchema.enabled;
   if (type === "http") return settings.http.enabled;
-  return settings.command.enabled;
+  return false;
 }
 
 function verifierIcon(type: VerifierTypeInput) {
@@ -137,5 +136,5 @@ function verifierIcon(type: VerifierTypeInput) {
   if (type === "citation") return <Quote size={14} />;
   if (type === "json_schema") return <Braces size={14} />;
   if (type === "http") return <Globe2 size={14} />;
-  return <Terminal size={14} />;
+  return null;
 }

@@ -64,6 +64,9 @@ func (e *Engine) Verify(ctx context.Context, runID string, subject Subject) (Dec
 	if run.CompletionContract == nil {
 		return Decision{Status: domain.VerificationNotRequired, AllowCompletion: true, RunStatus: domain.RunCompleted, Summary: "verification is not required"}, nil
 	}
+	if err := ValidateExecution(run.CompletionContract); err != nil {
+		return Decision{}, err
+	}
 	if subject.Type != run.CompletionContract.SubjectType || subject.Hash == "" {
 		return Decision{}, invalidContract("verification subject does not match the frozen contract")
 	}
@@ -257,7 +260,7 @@ func boundedArtifactContent(content string, limit int) (string, bool) {
 	if !utf8.ValidString(content) {
 		content = strings.ToValidUTF8(content, "\uFFFD")
 	}
-	// HTTP/command output can be binary; Postgres TEXT cannot contain NUL.
+	// HTTP output can be binary; Postgres TEXT cannot contain NUL.
 	content = strings.ReplaceAll(content, "\x00", "\uFFFD")
 	if limit > 0 && len(content) > limit {
 		content = content[:limit]

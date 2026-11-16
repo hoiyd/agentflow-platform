@@ -1746,8 +1746,11 @@ export interface components {
         RunStatus: "queued" | "running" | "waiting_for_user" | "completed" | "failed" | "failed_recoverable" | "canceling" | "canceled";
         /** @enum {string} */
         VerificationStatus: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale";
-        /** @enum {string} */
-        VerifierType: "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
+        /**
+         * @description Supported new-contract verifier types. Historical evidence may still contain the retired command type.
+         * @enum {string}
+         */
+        VerifierType: "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
         VerifierSpecInput: {
             id: string;
             type: components["schemas"]["VerifierType"];

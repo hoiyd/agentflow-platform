@@ -1306,7 +1306,6 @@ func (e VerificationStatus) Valid() bool {
 const (
 	AnswerRelevance VerifierType = "answer_relevance"
 	Citation        VerifierType = "citation"
-	Command         VerifierType = "command"
 	GroundedAnswer  VerifierType = "grounded_answer"
 	Http            VerifierType = "http"
 	JsonSchema      VerifierType = "json_schema"
@@ -1319,8 +1318,6 @@ func (e VerifierType) Valid() bool {
 	case AnswerRelevance:
 		return true
 	case Citation:
-		return true
-	case Command:
 		return true
 	case GroundedAnswer:
 		return true
@@ -3205,11 +3202,13 @@ type VerifierSpecInput struct {
 	Id        string                 `json:"id"`
 	Required  bool                   `json:"required"`
 	TimeoutMs *int64                 `json:"timeout_ms,omitempty"`
-	Type      VerifierType           `json:"type"`
-	Version   *string                `json:"version,omitempty"`
+
+	// Type Supported new-contract verifier types. Historical evidence may still contain the retired command type.
+	Type    VerifierType `json:"type"`
+	Version *string      `json:"version,omitempty"`
 }
 
-// VerifierType defines model for VerifierType.
+// VerifierType Supported new-contract verifier types. Historical evidence may still contain the retired command type.
 type VerifierType string
 
 // VerifyRunResponse defines model for VerifyRunResponse.

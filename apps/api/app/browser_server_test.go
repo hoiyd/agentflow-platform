@@ -162,8 +162,7 @@ func TestBrowserServer(t *testing.T) {
 		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", "http://127.0.0.1:19081/realms/agentflow-test", "fixture-client"
 		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
 	}
-	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
-	cfg.VerificationWorkspaceRoot = root
+	cfg.VerificationAllowedHTTPHosts = ""
 	var boundary http.HandlerFunc
 	if os.Getenv("AGENTFLOW_EXECUTION_BOUNDARY_TEST") == "1" {
 		boundary = browserExecutionBoundary(t, &cfg, root)

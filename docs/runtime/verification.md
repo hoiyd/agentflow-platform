@@ -58,7 +58,6 @@ the contract under **Verification**; disabling it omits the field.
 
 | Verifier | What it establishes | What it does not establish |
 | --- | --- | --- |
-| `command` | Exit/output of an allowlisted argument vector, no shell | Safe arbitrary host-code execution |
 | `http` | Read-only GET/HEAD status/body checks | Absence of remote side effects |
 | `json_schema` | JSON Schema 2020-12 validation | Provider-constrained generation or factual truth |
 | `text_constraints` | Bounds, phrases and headings | Semantic correctness |
@@ -195,11 +194,11 @@ and Knowledge aliases are separate source protocols.
 ## Security Boundaries
 
 [Execution boundaries](../operations/execution-boundaries.md) owns executable,
-destination and response-limit rules. Host command verification requires trusted
-local mode, a configured root and absolute executable allowlist; OIDC cannot use
-it. Root/environment/process-group controls are **not an OS sandbox**. An
-allowlisted executable still has server-user authority; isolated sandbox Tool
-execution is a different capability.
+destination and response-limit rules. Host `command` verification is retired in
+all auth modes. New contracts return `400`; Resume/Continue/Reverify of a Run
+containing it return `409` before execution or record mutation, even when optional
+or combined with `any_may_pass`. Historical contracts, Evidence and Artifacts stay
+readable. There is no automatic replacement by the sandbox Tool.
 
 HTTP origins default to deny, including loopback. Grant exact trusted origins;
 DNS validation pins the dialed IP, redirects/proxies are disabled, and metadata
@@ -224,6 +223,5 @@ the verifier; the gate consumes passed/failed/blocked and required-check policy.
 
 Built-in model graders and asynchronous human Evidence ingestion are not
 implemented. Deterministic structure/relevance checks cannot replace calibrated
-human/model assessment of high-impact answers. A command verifier runs a test
-runner only when an operator explicitly configures and allowlists it; it never
-discovers the repository suite automatically.
+human/model assessment of high-impact answers. Sandbox command execution remains
+a Tool observation, not an automatic Completion Gate.

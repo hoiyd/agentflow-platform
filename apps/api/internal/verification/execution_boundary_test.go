@@ -4,9 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,57 +47,6 @@ func TestHTTPExecutionBoundary(t *testing.T) {
 				t.Fatalf("boundary bypass: %#v, hits=%d", result, hits.Load()-before)
 			}
 		})
-	}
-}
-
-func TestTrustedCommandEnvironmentAndDirectory(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("host supervision requires Linux or macOS")
-	}
-	t.Setenv("OPENAI_API_KEY", "boundary-fixture-secret")
-	t.Setenv("OIDC_CLIENT_SECRET", "boundary-fixture-secret")
-	root := t.TempDir()
-	outside := t.TempDir()
-	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
-		t.Fatal(err)
-	}
-	v, _ := NewRegistry(Options{AllowHostCommands: true, WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/env", "env"}}).Resolve(domain.VerifierCommand)
-	spec := domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/env"}}}
-	result := v.Verify(t.Context(), spec, Subject{})
-	if result.Status != domain.VerificationPassed || strings.Contains(result.Artifacts[0].Content, "boundary-fixture-secret") || strings.Contains(result.Artifacts[0].Content, "OPENAI_API_KEY") {
-		t.Fatalf("inherited credentials: %#v", result)
-	}
-	for _, dir := range []string{"../", "escape", outside} {
-		spec.Config["working_directory"] = dir
-		result := v.Verify(t.Context(), spec, Subject{})
-		if result.Status != domain.VerificationBlocked || result.Details["reason_code"] != BlockedPolicyDenied {
-			t.Fatalf("cwd %s: %#v", dir, result)
-		}
-	}
-	spec.Config = map[string]any{"args": []string{"env"}}
-	if result := v.Verify(t.Context(), spec, Subject{}); result.Details["reason_code"] != BlockedPolicyDenied {
-		t.Fatalf("PATH lookup enabled: %#v", result)
-	}
-}
-
-func TestCommandCancellationStopsDescendants(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("host supervision requires Linux or macOS")
-	}
-	root := t.TempDir()
-	marker := filepath.Join(root, "escaped-child")
-	v, _ := NewRegistry(Options{AllowHostCommands: true, WorkspaceRoot: root, AllowedCommands: []string{"/bin/sh"}}).Resolve(domain.VerifierCommand)
-	// A trusted fixture shell, not a product shell capability. A direct-child-only
-	// cancellation would leave this background write alive after the verifier stops.
-	ctx, cancel := context.WithTimeout(t.Context(), 80*time.Millisecond)
-	defer cancel()
-	result := v.Verify(ctx, domain.VerifierSpec{Config: map[string]any{"args": []string{"/bin/sh", "-c", `(sleep 0.4; printf escaped > "$1") & wait`, "fixture", marker}}}, Subject{})
-	if result.Status != domain.VerificationBlocked || result.Details["reason_code"] != BlockedTimedOut {
-		t.Fatalf("canceled process: %#v", result)
-	}
-	time.Sleep(500 * time.Millisecond)
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("descendant outlived canceled verifier: %v", err)
 	}
 }
 
@@ -171,31 +117,5 @@ func TestHTTPBrokenBodyAndDeadlinesAreNotSuccess(t *testing.T) {
 	cancel()
 	if result := v.Verify(ctx, domain.VerifierSpec{Config: map[string]any{"method": "GET", "url": s.URL}}, Subject{}); result.Details["reason_code"] != BlockedCanceled {
 		t.Fatalf("cancellation: %#v", result)
-	}
-}
-
-func TestTrustedCommandMissingWorkspaceFailsClosed(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("host supervision requires Linux or macOS")
-	}
-	for _, root := range []string{"", filepath.Join(t.TempDir(), "missing")} {
-		v, _ := NewRegistry(Options{AllowHostCommands: true, WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/printf"}}).Resolve(domain.VerifierCommand)
-		result := v.Verify(t.Context(), domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/printf", "should-not-run"}}}, Subject{})
-		if result.Status != domain.VerificationBlocked || result.Details["reason_code"] != BlockedConfigInvalid {
-			t.Fatalf("missing root: %#v", result)
-		}
-	}
-}
-
-func TestCommandDeniedUnlessTrustedLocal(t *testing.T) {
-	root := t.TempDir()
-	marker := filepath.Join(root, "should-not-exist")
-	v, _ := NewRegistry(Options{WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/touch"}}).Resolve(domain.VerifierCommand)
-	result := v.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/touch", marker}}}, Subject{})
-	if result.Status != domain.VerificationBlocked || result.Details["reason_code"] != BlockedPolicyDenied {
-		t.Fatalf("untrusted host execution: %#v", result)
-	}
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("unexpected command side effect: %v", err)
 	}
 }

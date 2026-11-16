@@ -18,11 +18,6 @@ import (
 const defaultArtifactBytes = 64 * 1024
 
 type Options struct {
-	// AllowHostCommands is for the trusted local operator only. It is not a sandbox.
-	// Production OIDC composition must leave it false until an isolated runner exists.
-	AllowHostCommands       bool
-	WorkspaceRoot           string
-	AllowedCommands         []string
 	AllowedHTTPHosts        []string
 	MaxArtifactBytes        int
 	AnswerRelevanceEmbedder AnswerRelevanceEmbedder
@@ -84,7 +79,6 @@ func NewRegistry(options Options) *Registry {
 		options.MaxArtifactBytes = defaultArtifactBytes
 	}
 	items := []Verifier{
-		newCommandVerifier(options.AllowHostCommands, options.WorkspaceRoot, options.AllowedCommands, options.MaxArtifactBytes),
 		newHTTPVerifier(options.AllowedHTTPHosts, options.MaxArtifactBytes),
 		jsonSchemaVerifier{},
 		textConstraintsVerifier{},

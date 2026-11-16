@@ -6,6 +6,7 @@ import (
 
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 // Reverify shares Conversation admission with execution and recovery so a
@@ -21,6 +22,9 @@ func (c Commands) Reverify(ctx context.Context, scope Scope, id string) (runcomp
 	}
 	if !found {
 		return runcompletion.VerificationResult{}, commandError(Missing, store.ErrNotFound("run"))
+	}
+	if err := verification.ValidateExecution(run.CompletionContract); err != nil {
+		return runcompletion.VerificationResult{}, commandError(Conflict, err)
 	}
 	reservation, err := c.reserve(nil)
 	if err != nil {

@@ -62,12 +62,6 @@ test("all seven backend verifiers have a compatible frontend contract", () => {
       method: "HEAD",
       url: "http://localhost:8080/health",
       expectedStatus: 204
-    },
-    command: {
-      enabled: true,
-      executable: "go",
-      arguments: "test\n./...",
-      workingDirectory: "apps/api"
     }
   });
 
@@ -127,15 +121,6 @@ test("all seven backend verifiers have a compatible frontend contract", () => {
           url: "http://localhost:8080/health",
           expected_status: 204
         }
-      },
-      {
-        id: "command-check",
-        type: "command",
-        required: true,
-        config: {
-          args: ["go", "test", "./..."],
-          working_directory: "apps/api"
-        }
       }
     ],
     policy: {
@@ -147,8 +132,8 @@ test("all seven backend verifiers have a compatible frontend contract", () => {
 });
 
 test("each verifier can be enabled independently", () => {
-  const verifierKeys = ["answerRelevance", "groundedAnswer", "textConstraints", "citation", "jsonSchema", "http", "command"];
-  const verifierTypes = ["answer_relevance", "grounded_answer", "text_constraints", "citation", "json_schema", "http", "command"];
+  const verifierKeys = ["answerRelevance", "groundedAnswer", "textConstraints", "citation", "jsonSchema", "http"];
+  const verifierTypes = ["answer_relevance", "grounded_answer", "text_constraints", "citation", "json_schema", "http"];
 
   verifierKeys.forEach((enabledKey, index) => {
     const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
@@ -174,17 +159,14 @@ test("invalid enabled verifier settings are rejected before the request", () => 
   assert.throws(() => buildCompletionContract(settings), /JSON Schema must be valid JSON/);
 });
 
-test("unsafe host and command paths are rejected before the request", () => {
+test("unsafe citation hosts are rejected before the request", () => {
   const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
   settings.enabled = true;
   settings.citation.enabled = true;
   settings.citation.allowedHosts = "https://example.com";
-  settings.command.enabled = true;
-  settings.command.workingDirectory = "../outside";
 
   assert.deepEqual(validateCompletionVerification(settings), [
-    "Citation host must not include a scheme, port, or path: https://example.com.",
-    "Command working directory cannot escape the verification workspace."
+    "Citation host must not include a scheme, port, or path: https://example.com."
   ]);
 });
 
