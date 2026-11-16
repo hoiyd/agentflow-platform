@@ -31,7 +31,7 @@ Capture, Run Budget, Usage Ledger, and Progress Guard.
 Tool-enabled rounds use native streaming completion (`stream: true`, currently visible
 `tools`, `tool_choice: auto`). Answer chunks are forwarded immediately, even
 when enabled Tools are not used. No extra answer-generation request or typing
-animation is added. Tool-free and explicitly simulated Chat keep their paths.
+animation is added. Tool-free Chat uses the same Provider adapter without Tool definitions.
 
 [Lazy discovery](tool-discovery.md) can add authorized schemas between rounds;
 the default eager mode exposes all ready definitions. Neither mode changes

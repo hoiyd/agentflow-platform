@@ -25,7 +25,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	if err := postgresStore.UpdateConversationTitle(conversation.ID, " Updated title "); err != nil {
 		t.Fatalf("update conversation title: %v", err)
 	}
-	conversations, err := postgresStore.ListConversations()
+	conversations, err := postgresStore.ListConversationsByWorkspace(conversation.WorkspaceID)
 	if err != nil || !containsConversation(conversations, conversation.ID, "Updated title") {
 		t.Fatalf("list conversations: items=%#v err=%v", conversations, err)
 	}
@@ -73,8 +73,8 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	if err != nil || !containsAgent(agents, agent.ID) {
 		t.Fatalf("list agents: items=%#v err=%v", agents, err)
 	}
-	if defaultAgent, found, err := postgresStore.GetDefaultAgent(); err != nil || !found || defaultAgent.ID == "" {
-		t.Fatalf("get default agent: found=%v agent=%#v err=%v", found, defaultAgent, err)
+	if template, found, err := postgresStore.GetAgent("agent_planner"); err != nil || !found || !template.IsTemplate {
+		t.Fatalf("get planner template: found=%v agent=%#v err=%v", found, template, err)
 	}
 	if err := postgresStore.ArchiveAgent(agent.ID); err != nil {
 		t.Fatalf("archive agent: %v", err)
@@ -173,7 +173,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	if err != nil || !containsRun(staleRuns, run.ID) {
 		t.Fatalf("list stale runs: runs=%#v err=%v", staleRuns, err)
 	}
-	runs, err := postgresStore.ListRuns()
+	runs, err := postgresStore.ListRunsByWorkspace(conversation.WorkspaceID)
 	if err != nil || !containsRun(runs, run.ID) {
 		t.Fatalf("list runs: runs=%#v err=%v", runs, err)
 	}

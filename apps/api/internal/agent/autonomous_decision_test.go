@@ -98,7 +98,7 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	retriever := &recordingKnowledgeRetriever{}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, KnowledgeRetriever: retriever, Autonomous: AutonomousLimits{
 		MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-	}}, newLocalFallbackOpenAIClientForTest())
+	}}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)

@@ -210,4 +210,10 @@ Budget or execute a Handler. See
 - Waiting and queue time do not consume active runtime.
 - Snapshot compatibility does not silently apply new limits to legacy Runs.
 
-Focused commands are listed in [Manual tests](../operations/manual-tests.md).
+From `apps/api`, with `TEST_DATABASE_URL` pointing to a disposable pgvector test server:
+
+```bash
+go test ./internal/store -run 'TestPostgresRunUsage|TestPostgresActiveRuntime' -count=1
+```
+
+For workbench observations, see [Manual tests](../operations/manual-tests.md#run-budget).

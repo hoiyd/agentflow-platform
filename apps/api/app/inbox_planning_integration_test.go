@@ -94,7 +94,7 @@ func TestProductionInboxPlanningIntentBoundary(t *testing.T) {
 			}
 			chat := domain.ChatRequest{ConversationID: conv.ID, AgentID: agent.ID, Mode: "single", Message: "planning-gate: propose only", ExecutionConstraint: domain.ExecutionPlanOnly}
 			call(t, "/api/chat", chat, 200)
-			runs, err := s.ListRuns()
+			runs, err := s.ListRunsByWorkspace(workspace)
 			if err != nil {
 				t.Fatal(err)
 			}

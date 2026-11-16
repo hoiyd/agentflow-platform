@@ -78,7 +78,7 @@ func TestCollaborationTailRecoveryPreservesRequests(t *testing.T) {
 			t.Cleanup(server.Close)
 			storage := fixturestore.New()
 			client := openai.NewClient("fixture", server.URL, "fixture")
-			options := RuntimeOptions{Store: storage, RouterMode: RouterModeQuery, EmbeddingClient: newLocalFallbackOpenAIClientForTest()}
+			options := RuntimeOptions{Store: storage, RouterMode: RouterModeQuery, EmbeddingClient: newHTTPFixtureClientForTest()}
 			runtime := newRuntimeForTest(options, client)
 			conversation, err := storage.CreateConversation("Synthetic collaboration recovery")
 			if err != nil {

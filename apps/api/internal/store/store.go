@@ -24,7 +24,6 @@ func IsNotFound(err error) bool {
 }
 
 type ConversationStore interface {
-	ListConversations() ([]domain.Conversation, error)
 	ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error)
 	CreateConversation(title string) (domain.Conversation, error)
 	CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error)
@@ -52,7 +51,6 @@ type AgentStore interface {
 	GetAgent(id string) (domain.Agent, bool, error)
 	UpdateAgent(agent domain.Agent) (domain.Agent, error)
 	ArchiveAgent(id string) error
-	GetDefaultAgent() (domain.Agent, bool, error)
 }
 
 type RunStore interface {
@@ -64,7 +62,6 @@ type RunStore interface {
 	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)
 	GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error)
-	ListRuns() ([]domain.Run, error)
 	ListRunsByWorkspace(workspaceID string) ([]domain.Run, error)
 }
 
@@ -162,7 +159,6 @@ type DocumentStore interface {
 	GetDocumentBySource(workspaceID, sourceKey string) (domain.Document, bool, error)
 	UpdateDocumentMetadata(workspaceID, id string, update domain.DocumentMetadataUpdate) (domain.Document, error)
 	CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error)
-	ListDocuments() ([]domain.Document, error)
 	ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error)
 	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error)

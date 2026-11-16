@@ -13,7 +13,7 @@ import (
 func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	custom, err := fixtureStore.CreateAgent(domain.Agent{
 		Name:             "Resume Reviewer",
 		Description:      "Reviews resumes against job descriptions.",
@@ -53,7 +53,7 @@ func TestMultiAgentWorkerRunsAsIsolatedParentStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	retriever := &recordingKnowledgeRetriever{}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, KnowledgeRetriever: retriever}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, KnowledgeRetriever: retriever}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)

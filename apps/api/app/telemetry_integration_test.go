@@ -123,6 +123,16 @@ func TestProductionTelemetryCommittedExecution(t *testing.T) {
 	server := httptest.NewServer(application.server.Handler)
 	defer server.Close()
 	client := &http.Client{Timeout: 30 * time.Second}
+	response, err := client.Get(server.URL + "/api/workspaces")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var workspaces []domain.Workspace
+	err = json.NewDecoder(response.Body).Decode(&workspaces)
+	response.Body.Close()
+	if err != nil || response.StatusCode != 200 || len(workspaces) != 1 {
+		t.Fatalf("owned workspaces: %+v %v", workspaces, err)
+	}
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
 		data, _ := json.Marshal(map[string]string{"message": "owner-tools: PRIVATE_OTEL_CANARY check time zones", "mode": mode})
 		response, err := client.Post(server.URL+"/api/chat", "application/json", bytes.NewReader(data))
@@ -135,7 +145,7 @@ func TestProductionTelemetryCommittedExecution(t *testing.T) {
 			t.Fatalf("%s chat failed: status=%d error=%v %s", mode, response.StatusCode, err, body)
 		}
 		if mode == "multi_agent" {
-			runs, err := application.store.ListRuns()
+			runs, err := application.store.ListRunsByWorkspace(workspaces[0].ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -159,7 +169,7 @@ func TestProductionTelemetryCommittedExecution(t *testing.T) {
 			}
 		}
 	}
-	runs, err := application.store.ListRuns()
+	runs, err := application.store.ListRunsByWorkspace(workspaces[0].ID)
 	if err != nil || len(runs) != 3 {
 		t.Fatalf("runs: %d %v", len(runs), err)
 	}

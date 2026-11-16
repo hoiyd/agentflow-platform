@@ -110,23 +110,6 @@ func (s *Store) ArchiveAgent(id string) error {
 	return errors.New("agent not found")
 }
 
-func (s *Store) GetDefaultAgent() (domain.Agent, bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, item := range s.data.Agents {
-		if item.ID == "agent_planner" && !item.Archived {
-			return domain.NormalizeAgentConfig(item), true, nil
-		}
-	}
-	for _, item := range s.data.Agents {
-		if !item.Archived {
-			return domain.NormalizeAgentConfig(item), true, nil
-		}
-	}
-	return domain.Agent{}, false, nil
-}
-
 func (s *Store) seedDefaultAgentsLocked() {
 	s.data.Agents = store.DefaultAgents(time.Now().UTC())
 	for i := range s.data.Agents {

@@ -1,15 +1,28 @@
 package agent
 
 import (
+	"os"
+	"testing"
+	"time"
+
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/testsupport/modelroute"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool/policy"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
+var fixtureModelServer = modelstream.NewServer()
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	fixtureModelServer.Close()
+	os.Exit(code)
+}
+
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	catalog, err := modelroute.Catalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
 	if err != nil {
 		panic(err)
@@ -32,6 +45,6 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	}
 }
 
-func newLocalFallbackOpenAIClientForTest() *openai.Client {
-	return openai.NewSimulatedClient()
+func newHTTPFixtureClientForTest() *openai.Client {
+	return openai.NewClientWithTimeoutAndEmbeddingModel("fixture-only", fixtureModelServer.URL, fixtureModelServer.URL, "fixture-model", "local_hash_embedding", 1536, time.Second)
 }

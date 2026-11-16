@@ -162,26 +162,6 @@ func (s *PostgresStore) ArchiveAgent(id string) error {
 	return nil
 }
 
-func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
-	if agent, ok, err := s.GetAgent("agent_planner"); err != nil || (ok && !agent.Archived) {
-		return agent, ok, err
-	}
-	row := s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, skill_policies
-		FROM agents
-		WHERE deleted_at IS NULL
-		ORDER BY created_at ASC
-		LIMIT 1`)
-	agent, err := scanAgent(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Agent{}, false, nil
-	}
-	if err != nil {
-		return domain.Agent{}, false, err
-	}
-	return agent, true, nil
-}
-
 func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
 	for _, agent := range DefaultAgents(time.Now().UTC()) {
 		existing, ok, err := s.GetAgent(agent.ID)

@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/inference/hashembedding"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/provider"
 )
@@ -89,7 +90,7 @@ func (e *embeddingProfileError) FailureInfo() failure.Info {
 type embeddingPhaseKey struct{}
 
 type evaluationEmbedder struct {
-	client  *openai.Client
+	client  provider.Embedder
 	options EmbeddingProfileOptions
 
 	mu       sync.Mutex
@@ -102,14 +103,12 @@ func newEvaluationEmbedder(options EmbeddingProfileOptions) (*evaluationEmbedder
 	if err != nil {
 		return nil, err
 	}
-	client := openai.NewClientWithTimeoutAndEmbeddingModel(normalized.APIKey, "", normalized.BaseURL, "", normalized.Model, normalized.Dimensions, normalized.Timeout)
-	if normalized.Name == EmbeddingProfileHash {
-		client = openai.NewSimulatedClient()
-	}
-	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: normalized.RetryMaxAttempts})
-	embedder := &evaluationEmbedder{client: client, options: normalized, usage: EmbeddingUsage{Source: "estimated_input_tokens_and_physical_requests"}}
+	embedder := &evaluationEmbedder{client: hashembedding.Embedder{}, options: normalized, usage: EmbeddingUsage{Source: "estimated_input_tokens_and_physical_requests"}}
 	if normalized.Name != EmbeddingProfileHash {
+		client := openai.NewEmbeddingClient(normalized.APIKey, normalized.BaseURL, normalized.Model, normalized.Dimensions, normalized.Timeout)
+		client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: normalized.RetryMaxAttempts})
 		client.SetRequestLimiter(embedder)
+		embedder.client = client
 	}
 	return embedder, nil
 }

@@ -100,7 +100,7 @@ func TestProductionPlanningContractAndExecution(t *testing.T) {
 			}
 			base := domain.ChatRequest{ConversationID: conv.ID, AgentID: owned.ID, Mode: mode, Message: "planning-gate: inspect report.md and propose a report", ExecutionConstraint: domain.ExecutionPlanOnly}
 			call(t, "/api/chat", base, 200)
-			all, err := s.ListRuns()
+			all, err := s.ListRunsByWorkspace(workspace)
 			runs := []domain.Run{}
 			for _, item := range all {
 				if item.ConversationID == conv.ID {
@@ -194,7 +194,7 @@ func TestProductionPlanningContractAndExecution(t *testing.T) {
 	}
 	call(t, "/api/chat", domain.ChatRequest{ConversationID: conv.ID, AgentID: owned.ID, Mode: "single", Message: "planning-gate: propose a report", ExecutionConstraint: domain.ExecutionPlanOnly,
 		CompletionContract: &domain.CompletionContract{SubjectType: "run_output", Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationFailRun}, Verifiers: []domain.VerifierSpec{{ID: "quality", Type: domain.VerifierTextConstraints, Required: true, Config: map[string]any{"forbidden_phrases": []string{"Proposed report"}}}}}}, 200)
-	runs, err := s.ListRuns()
+	runs, err := s.ListRunsByWorkspace(workspace)
 	if err != nil {
 		t.Fatal(err)
 	}

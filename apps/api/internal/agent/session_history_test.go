@@ -63,7 +63,7 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 		t.Fatalf("create current event: %v", err)
 	}
 
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	items := runtime.contextSessions.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "What was the exact release-2026-08 error?")
 
 	wantMessage := "message:" + oldMessage.ID
@@ -90,7 +90,7 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	if items := runtime.contextSessions.retrieveSessionHistory(context.Background(), "missing", "conv", "release-42"); items != nil {
 		t.Fatalf("missing run returned history: %#v", items)
 	}
@@ -122,7 +122,7 @@ func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	want := errors.New("message history unavailable")
-	runtime := newRuntimeForTest(RuntimeOptions{Store: sessionHistoryErrorStore{Store: fixtureStore, messageErr: want}}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: sessionHistoryErrorStore{Store: fixtureStore, messageErr: want}}, newHTTPFixtureClientForTest())
 	if items := runtime.contextSessions.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "recover release-42"); items != nil {
 		t.Fatalf("failed search returned history: %#v", items)
 	}

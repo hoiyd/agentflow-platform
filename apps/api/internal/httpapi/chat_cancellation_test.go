@@ -37,7 +37,7 @@ func TestRunStreamFailureUsesDurableCancellationState(t *testing.T) {
 			if _, err := storage.UpdateRunStatus(run.ID, tc.status, ""); err != nil {
 				t.Fatal(err)
 			}
-			runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage}, newLocalFallbackOpenAIClientForTest())
+			runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage}, newHTTPFixtureClientForTest())
 			handler := &Handler{store: storage, agentRuntime: canceledContinuation{AgentRuntimeOperations: runtime, err: tc.err}, runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/continue", strings.NewReader(`{"plan":"test"}`))

@@ -18,7 +18,7 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 	}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
 		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-	}}, newLocalFallbackOpenAIClientForTest())
+	}}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
@@ -77,7 +77,7 @@ func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 	}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
 		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-	}}, newLocalFallbackOpenAIClientForTest())
+	}}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)

@@ -53,7 +53,7 @@ func authorizationFixture(t *testing.T) (*Handler, *store.PostgresStore, *sql.DB
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	provider := memorypkg.NewBuiltinProvider(storage, newLocalFallbackOpenAIClientForTest(), memorypkg.ProviderOptions{})
+	provider := memorypkg.NewBuiltinProvider(storage, newHTTPFixtureClientForTest(), memorypkg.ProviderOptions{})
 	if err := provider.Initialize(t.Context()); err != nil {
 		t.Fatal(err)
 	}

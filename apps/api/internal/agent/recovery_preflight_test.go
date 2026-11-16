@@ -15,7 +15,7 @@ func TestRecoveryPreflightRejectsWithoutMutation(t *testing.T) {
 	for _, entry := range []string{"human", "autonomous", "collaboration", "continue"} {
 		t.Run(entry, func(t *testing.T) {
 			storage := fixturestore.New()
-			runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, newLocalFallbackOpenAIClientForTest())
+			runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, newHTTPFixtureClientForTest())
 			conv, err := storage.CreateConversation("Preflight rejection")
 			if err != nil {
 				t.Fatal(err)
@@ -59,7 +59,7 @@ func TestAutonomousForwardedExecutionFailureIsNotPreflight(t *testing.T) {
 	for _, recoverable := range []bool{false, true} {
 		t.Run(map[bool]string{false: "human input", true: "recovery"}[recoverable], func(t *testing.T) {
 			storage := &postResumeReadFailure{Store: fixturestore.New()}
-			runtime := newRuntimeForTest(RuntimeOptions{Store: storage, CheckpointProvider: &checkpointProviderStub{}}, newLocalFallbackOpenAIClientForTest())
+			runtime := newRuntimeForTest(RuntimeOptions{Store: storage, CheckpointProvider: &checkpointProviderStub{}}, newHTTPFixtureClientForTest())
 			conv, err := storage.CreateConversation("Post-resume failure")
 			if err != nil {
 				t.Fatal(err)

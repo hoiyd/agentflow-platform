@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 )
 
 func TestBudgetWrapsPhysicalRetriesAndCapsCompletion(t *testing.T) {
@@ -153,8 +154,10 @@ func TestRecorderFailurePreventsProviderRequest(t *testing.T) {
 	}
 }
 
-func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
-	client := NewSimulatedClient()
+func TestHTTPCompletionCapturesCanonicalRequest(t *testing.T) {
+	server := modelstream.NewServer()
+	t.Cleanup(server.Close)
+	client := NewClient("fixture-only", server.URL, "fixture-model")
 	observations := []requestcontrol.Observation{}
 	client.SetRequestRecorder(requestRecorderFunc(func(_ context.Context, observation requestcontrol.Observation) error {
 		observations = append(observations, observation)
@@ -169,11 +172,11 @@ func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
 	}
 
 	completion, err := client.CompletePreparedText(context.Background(), prepared)
-	if err != nil || completion.Model != "local_fallback" || len(observations) != 1 {
+	if err != nil || completion.Model != "fixture-model" || len(observations) != 1 {
 		t.Fatalf("local completion capture failed: completion=%#v observations=%#v err=%v", completion, observations, err)
 	}
 	observation := observations[0]
-	if observation.Operation != "simulated.completion" || observation.Provider != "simulated" ||
+	if observation.Operation != "chat.completion" || observation.Provider != "local" ||
 		observation.ModelCallID != prepared.Manifest.ModelCallID || observation.ContextManifestID != prepared.Manifest.ID ||
 		observation.SourceTokenBreakdown["system"] != 2 || !json.Valid(observation.Payload) {
 		t.Fatalf("unexpected local request observation: %#v", observation)

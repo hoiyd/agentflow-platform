@@ -17,16 +17,7 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 		return c.embedTextWithOllama(ctx, input)
 	}
 	if c.apiKey == "" {
-		if !c.simulated {
-			return Embedding{}, missingCredentialError("embedding.openai_compatible")
-		}
-		return Embedding{
-			Vector:     deterministicEmbedding(input, c.embeddingDimensions),
-			Model:      "local_hash_embedding",
-			Provider:   "simulated",
-			Estimated:  true,
-			Dimensions: c.embeddingDimensions,
-		}, nil
+		return Embedding{}, missingCredentialError("embedding.openai_compatible")
 	}
 	payload, err := c.embeddingRequestPayload(input)
 	if err != nil {

@@ -138,7 +138,7 @@ func TestDurableInputStartupCancellationPostgres(t *testing.T) {
 				if err != nil || len(messages) != 1 || messages[0].ID != receipt.ID {
 					t.Errorf("input message duplicated/lost: %+v %v", messages, err)
 				}
-				runs, err := reopened.ListRuns()
+				runs, err := reopened.ListRunsByWorkspace(workspace)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -178,7 +178,7 @@ func TestProductionDurableClarification(t *testing.T) {
 					return
 				}
 				if scenario == "legacy_invalid" {
-					runs, err := application.store.ListRuns()
+					runs, err := application.store.ListRunsByWorkspace(agent.WorkspaceID)
 					if err != nil || len(runs) != 1 || runs[0].Status != domain.RunFailed {
 						t.Fatalf("invalid question accepted: %+v %v %s", runs, err, payload)
 					}
@@ -196,7 +196,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				if strings.Contains(payload, "event: error") || !strings.Contains(payload, "waiting_for_user") {
 					t.Fatalf("not paused: %s", payload)
 				}
-				runs, err := application.store.ListRuns()
+				runs, err := application.store.ListRunsByWorkspace(agent.WorkspaceID)
 				if err != nil || len(runs) != 1 {
 					t.Fatalf("runs: %+v %v", runs, err)
 				}

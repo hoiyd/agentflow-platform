@@ -29,12 +29,13 @@ func (c *blockingPreparedClient) CompletePreparedText(ctx context.Context, _ pro
 }
 
 func (c *blockingPreparedClient) StreamAnswer(ctx context.Context, _ provider.PreparedChat, _ provider.ChatStreamKind, _ provider.ChatTrace, _ chan<- provider.StreamEvent) (bool, error) {
-	select {
-	case c.started <- struct{}{}:
-	default:
-	}
-	<-ctx.Done()
-	return false, ctx.Err()
+	_, err := c.CompletePreparedText(ctx, provider.PreparedText{})
+	return false, err
+}
+
+func (c *blockingPreparedClient) StreamToolRound(ctx context.Context, _ provider.PreparedChat, _ []map[string]any, _ provider.ChatTrace, _ chan<- provider.StreamEvent) (provider.ChatChoice, error) {
+	_, err := c.CompletePreparedText(ctx, provider.PreparedText{})
+	return provider.ChatChoice{}, err
 }
 
 func TestCancelRunStopsActiveWorkerStage(t *testing.T) {
@@ -43,7 +44,7 @@ func TestCancelRunStopsActiveWorkerStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	client := &blockingPreparedClient{Client: newHTTPFixtureClientForTest(), started: make(chan struct{}, 1)}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, client)
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
@@ -96,7 +97,7 @@ func TestCancelRunStopsActiveSingleTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	client := &blockingPreparedClient{Client: newHTTPFixtureClientForTest(), started: make(chan struct{}, 1)}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, client)
 	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
@@ -133,7 +134,7 @@ func TestCancelRunStopsActivePlannerStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	client := &blockingPreparedClient{Client: newHTTPFixtureClientForTest(), started: make(chan struct{}, 1)}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, client)
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
@@ -173,7 +174,7 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
 		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-	}}, newLocalFallbackOpenAIClientForTest())
+	}}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
@@ -210,7 +211,7 @@ func TestAutonomousCancelClosesActiveStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	client := &blockingPreparedClient{Client: newHTTPFixtureClientForTest(), started: make(chan struct{}, 1)}
 	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, client)
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {

@@ -24,7 +24,7 @@ func TestHarnessRegistrationPreservesAutomaticToolsAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = storage.Close() })
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Clarifications: storage, KnowledgeTools: knowledge.NewKnowledgeBase(storage, client).ToolBindings(storage)}, client)
 	want := []string{clarification.ToolName, taskstate.UpdateToolName, artifact.ReadToolName, artifact.SearchToolName, domain.KnowledgeSearchToolName, domain.KnowledgeReadToolName}
 	if got := runtime.withHarnessTools(nil); !reflect.DeepEqual(got, want) {

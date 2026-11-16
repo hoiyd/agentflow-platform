@@ -18,8 +18,8 @@ The root harness adds this Tool when Tool Calling is available, subject to
 Workspace availability. **Existing Workspaces may need to enable it in Tools**;
 adding a Tool never silently grants it to an existing owner. No new environment
 switch is required. Ordinary text questions in Single/Multi are not parsed into
-forms. The model must choose the structured Tool; local simulated responses
-cannot prove real-model question selection.
+forms. The model must choose the structured Tool; deterministic HTTP fixtures
+prove the protocol, not real-model question selection.
 
 ## Durable protocol
 

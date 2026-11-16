@@ -14,7 +14,7 @@ import (
 )
 
 func TestRuntimeDoesNotInferOptionalCapabilitiesFromStore(t *testing.T) {
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	routes, err := modelroute.Catalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestRuntimeStoreRequiresOnlyEffectReads(t *testing.T) {
 			t.Errorf("RuntimeStore unnecessarily exposes %s", name)
 		}
 	}
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	routes, err := modelroute.Catalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
 	if err != nil {
 		t.Fatal(err)

@@ -51,7 +51,7 @@ func newStageRecoverableCollaboration(t *testing.T) (*Runtime, *fixturestore.Sto
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)

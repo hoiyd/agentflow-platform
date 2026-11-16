@@ -31,7 +31,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	guard, err := runtime.progressGuardForRun(run.ID, run.RuntimeSnapshot)
 	if err != nil {
 		t.Fatal(err)

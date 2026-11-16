@@ -34,7 +34,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	if direct.Code != http.StatusOK || !strings.Contains(direct.Body.String(), "event: done") || !strings.Contains(direct.Body.String(), "event: model.delta") {
 		t.Fatalf("unexpected direct chat response: status=%d body=%s", direct.Code, direct.Body.String())
 	}
-	runs, err := fullStore.ListRuns()
+	runs, err := fullStore.ListRunsByWorkspace(domain.DefaultWorkspaceID)
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("direct run lifecycle: runs=%#v err=%v", runs, err)
 	}
@@ -43,7 +43,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	if multi.Code != http.StatusOK || !strings.Contains(multi.Body.String(), "event: done") || !strings.Contains(multi.Body.String(), `"status":"waiting_for_user"`) {
 		t.Fatalf("unexpected collaboration response: status=%d body=%s", multi.Code, multi.Body.String())
 	}
-	runs, err = fullStore.ListRuns()
+	runs, err = fullStore.ListRunsByWorkspace(domain.DefaultWorkspaceID)
 	if err != nil {
 		t.Fatalf("list collaboration runs: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestChatRouteExecutesBoundedAutonomousLifecycle(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "event: run.progress") || !strings.Contains(response.Body.String(), `"mode":"autonomous"`) || !strings.Contains(response.Body.String(), "event: done") {
 		t.Fatalf("unexpected autonomous response: status=%d body=%s", response.Code, response.Body.String())
 	}
-	runs, err := fullStore.ListRuns()
+	runs, err := fullStore.ListRunsByWorkspace(domain.DefaultWorkspaceID)
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("autonomous run lifecycle: runs=%#v err=%v", runs, err)
 	}
@@ -110,7 +110,7 @@ func TestChatRunCompletesAfterRequestDisconnect(t *testing.T) {
 		t.Fatal("detached run did not finish")
 	}
 
-	runs, err := fullStore.ListRuns()
+	runs, err := fullStore.ListRunsByWorkspace(domain.DefaultWorkspaceID)
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("run continuity failed: runs=%#v err=%v", runs, err)
 	}

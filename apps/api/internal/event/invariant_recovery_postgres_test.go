@@ -21,7 +21,7 @@ func TestRecoverableLifecyclePostgresReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	agent, _, err := s.GetDefaultAgent()
+	agent, _, err := s.GetAgent("agent_planner")
 	if err != nil {
 		t.Fatal(err)
 	}

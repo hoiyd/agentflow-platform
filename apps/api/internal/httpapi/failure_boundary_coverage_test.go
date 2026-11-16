@@ -330,7 +330,7 @@ func newBoundaryRunningRun(t *testing.T, contract *domain.CompletionContract) (*
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	return &Handler{store: httpStore, agentRuntime: runtime}, workspace, run, conversation
 }
 

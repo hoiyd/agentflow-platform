@@ -4,7 +4,6 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
@@ -21,7 +20,7 @@ func newRuntimeForTest(options agent.RuntimeOptions, client provider.Client) *ag
 		options.Store = fixturestore.New()
 	}
 	if client == nil {
-		client = openai.NewSimulatedClient()
+		client = newHTTPFixtureClientForTest()
 	}
 	if options.ModelRoutes == nil {
 		routes, err := modelroute.Catalog(client, options.ContextAssembly, options.RunBudget)

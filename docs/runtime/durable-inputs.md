@@ -67,7 +67,6 @@ answer and starts another bounded request, preserving provider continuation
 fields. A steer arriving after that last check remains visibly queued; it is not
 silently converted to a follow-up. Parent orchestration text stages apply inputs
 before the next request; an isolated Multi-Agent Worker never receives them.
-Local simulated answers only have the initial assembly boundary.
 
 Applied steering originals are reloaded for subsequent requests and supported
 mode-specific Resume, even if history has been compacted. Their original

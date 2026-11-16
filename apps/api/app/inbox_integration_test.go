@@ -113,9 +113,10 @@ func TestProductionInboxFinalBoundaryAndDispatch(t *testing.T) {
 	if !observed {
 		t.Fatalf("stream did not reach gate: %v", scanner.Err())
 	}
-	runs, err := application.store.ListRuns()
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("runs: %+v %v", runs, err)
+	var runs []domain.Run
+	call("GET", "/api/runs", nil, 200, &runs)
+	if len(runs) != 1 {
+		t.Fatalf("runs: %+v", runs)
 	}
 	run := runs[0]
 	path := "/api/conversations/" + run.ConversationID + "/inputs"

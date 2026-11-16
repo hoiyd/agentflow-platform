@@ -90,7 +90,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 		t.Fatalf("same source/version accepted different content: %v", err)
 	}
 
-	documents, err := documentStore.ListDocuments()
+	documents, err := documentStore.ListDocumentsByWorkspace(workspaceID)
 	if err != nil {
 		t.Fatalf("list documents: %v", err)
 	}

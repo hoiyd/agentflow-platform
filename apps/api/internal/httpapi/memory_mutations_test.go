@@ -19,7 +19,7 @@ import (
 func TestMemoryMutationAPI(t *testing.T) {
 	s := fixturestore.New()
 
-	p := memorypkg.NewBuiltinProvider(s, newLocalFallbackOpenAIClientForTest(), memorypkg.ProviderOptions{MaxAttempts: 1})
+	p := memorypkg.NewBuiltinProvider(s, newHTTPFixtureClientForTest(), memorypkg.ProviderOptions{MaxAttempts: 1})
 	if err := p.Initialize(context.Background()); err != nil {
 		t.Fatal(err)
 	}

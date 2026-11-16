@@ -133,34 +133,6 @@ func getDocumentBySource(db documentQueryer, workspaceID, sourceKey string) (dom
 	return document, err == nil, err
 }
 
-func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
-	rows, err := s.db.Query(`
-		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
-			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
-			COUNT(DISTINCT c.id) AS chunk_count,
-			COUNT(e.chunk_id) AS embedding_count
-		FROM documents d
-		LEFT JOIN document_chunks c ON c.document_id = d.id
-		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
-		GROUP BY d.id
-		ORDER BY d.created_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []domain.Document{}
-	for rows.Next() {
-		document, err := scanDocument(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, document)
-	}
-	return items, rows.Err()
-}
-
 func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
 	rows, err := s.db.Query(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,

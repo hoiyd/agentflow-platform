@@ -210,7 +210,7 @@ func TestFrozenToolRequiresRuntimePrerequisitesOnResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtureStore := fixturestore.New()
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, Tools: ready}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, Tools: ready}, newHTTPFixtureClientForTest())
 	agent, err := fixtureStore.CreateAgent(domain.Agent{Name: "Research", Tools: []string{"web_search"}})
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +271,7 @@ func TestV14MultiAgentSnapshotIsReplayOnly(t *testing.T) {
 	snapshot.Mode = ChatModeMultiAgent
 	snapshot.AutonomousLimits = nil
 	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixturestore.New()}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixturestore.New()}, newHTTPFixtureClientForTest())
 	_, err := runtime.restoreRuntime(domain.Run{ID: "run_v14", RuntimeSnapshot: &snapshot})
 	if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) {
 		t.Fatalf("v14 snapshot should be replay-only, got %v", err)
