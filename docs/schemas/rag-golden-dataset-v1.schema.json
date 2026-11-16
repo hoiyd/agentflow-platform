@@ -203,12 +203,6 @@
         "answerable": {
           "type": "boolean"
         },
-        "metadata": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
         "metadata_filter": {
           "$ref": "#/$defs/metadataFilter"
         },

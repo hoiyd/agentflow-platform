@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/domain"
+
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -17,11 +19,11 @@ func TestGoldenCaseFiltersReachRetrievalAndContext(t *testing.T) {
 	files := map[string]string{
 		"atlas.md":      "# Rollback\n\nROLLBACK-42 uses the Atlas production release procedure.",
 		"boreal.md":     "# Rollback\n\nROLLBACK-42 uses the Boreal staging release procedure.",
-		"manifest.json": `{"dataset_id":"metadata","version":"1","documents":[{"file":"atlas.md","title":"Atlas","metadata":{"product":"Atlas"}},{"file":"boreal.md","title":"Boreal","metadata":{"product":"Boreal"}}]}`,
+		"manifest.json": `{"dataset_id":"metadata","version":"1","documents":[{"file":"atlas.md","title":"Atlas","metadata_schema_version":"knowledge-metadata-v1","metadata":{"product":"Atlas"}},{"file":"boreal.md","title":"Boreal","metadata_schema_version":"knowledge-metadata-v1","metadata":{"product":"Boreal"}}]}`,
 		"dataset.json": `{"schema_version":"rag-golden-dataset-v1","id":"metadata","version":"1","cases":[
-		{"id":"atlas","query":"ROLLBACK-42","answerable":true,"require_filter":true,"metadata":{"product":"Atlas"},"expected_sources":[{"source_uri":"atlas.md"}],"forbidden_sources":[{"source_uri":"boreal.md"}]},
-		{"id":"boreal","query":"ROLLBACK-42","answerable":true,"require_filter":true,"metadata":{"product":"Boreal"},"expected_sources":[{"source_uri":"boreal.md"}],"forbidden_sources":[{"source_uri":"atlas.md"}]},
-		{"id":"none","query":"ROLLBACK-42","answerable":false,"require_filter":true,"metadata":{"product":"Missing"},"forbidden_sources":[{"source_uri":"atlas.md"},{"source_uri":"boreal.md"}]}]}`,
+		{"id":"atlas","query":"ROLLBACK-42","answerable":true,"require_filter":true,"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}},"expected_sources":[{"source_uri":"atlas.md"}],"forbidden_sources":[{"source_uri":"boreal.md"}]},
+		{"id":"boreal","query":"ROLLBACK-42","answerable":true,"require_filter":true,"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Boreal"}},"expected_sources":[{"source_uri":"boreal.md"}],"forbidden_sources":[{"source_uri":"atlas.md"}]},
+		{"id":"none","query":"ROLLBACK-42","answerable":false,"require_filter":true,"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Missing"}},"forbidden_sources":[{"source_uri":"atlas.md"},{"source_uri":"boreal.md"}]}]}`,
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0600); err != nil {
@@ -42,18 +44,18 @@ func TestGoldenCaseFiltersReachRetrievalAndContext(t *testing.T) {
 	var wire struct {
 		Samples []struct {
 			Evidence struct {
-				Metadata         map[string]string `json:"metadata"`
-				ContextLeakCount int               `json:"context_leak_count"`
-				ExpectedSources  int               `json:"expected_sources"`
-				MatchedSources   int               `json:"matched_sources"`
-				ContextTokens    int               `json:"context_tokens"`
+				MetadataFilter   *domain.MetadataFilter `json:"metadata_filter"`
+				ContextLeakCount int                    `json:"context_leak_count"`
+				ExpectedSources  int                    `json:"expected_sources"`
+				MatchedSources   int                    `json:"matched_sources"`
+				ContextTokens    int                    `json:"context_tokens"`
 			} `json:"evidence"`
 		} `json:"samples"`
 	}
 	if err := json.Unmarshal(data, &wire); err != nil {
 		t.Fatal(err)
 	}
-	if e := wire.Samples[0].Evidence; e.Metadata["product"] != "Atlas" || e.ContextLeakCount != 0 || e.ExpectedSources != 1 || e.MatchedSources != 1 || e.ContextTokens < 1 {
+	if e := wire.Samples[0].Evidence; e.MetadataFilter == nil || e.MetadataFilter.Where.Value != "Atlas" || e.ContextLeakCount != 0 || e.ExpectedSources != 1 || e.MatchedSources != 1 || e.ContextTokens < 1 {
 		t.Fatalf("missing filter/context evidence: %s", data)
 	}
 }
@@ -128,7 +130,7 @@ func TestMetadataGoldenDetectsDroppedFilter(t *testing.T) {
 	dataset.Cases = dataset.Cases[:1]
 	// Deliberately opt out of the required-filter guard: the independent source
 	// and Context oracle must still catch the broadened retrieval result.
-	dataset.Cases[0].Metadata, dataset.Cases[0].RequireFilter = nil, false
+	dataset.Cases[0].MetadataFilter, dataset.Cases[0].RequireFilter = nil, false
 	data, err := json.Marshal(dataset)
 	if err != nil {
 		t.Fatal(err)

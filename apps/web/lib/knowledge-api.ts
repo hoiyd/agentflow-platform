@@ -337,7 +337,6 @@ type RAGEvaluationRunInput = {
   dataset: RAGGoldenDataset;
   top_k?: number;
   min_similarity?: number;
-  metadata?: Record<string, string>;
   metadata_filter?: components["schemas"]["MetadataFilter"];
 };
 

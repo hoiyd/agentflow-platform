@@ -28,16 +28,17 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 	embedding[0] = 1
 
 	document, err := documentStore.CreateDocument(domain.Document{
-		ID:          documentID,
-		WorkspaceID: workspaceID,
-		Title:       "Authentication error catalog",
-		Version:     "2026-07",
-		ContentHash: "sha256:document-contract",
-		SourceType:  "markdown",
-		SourceURI:   "auth-errors.md",
-		MimeType:    "text/markdown",
-		Content:     "# Authentication\n\nAUTH-7F31 means the refresh token has expired.",
-		Metadata:    map[string]any{"project": "agentflow"},
+		ID:                    documentID,
+		WorkspaceID:           workspaceID,
+		Title:                 "Authentication error catalog",
+		Version:               "2026-07",
+		ContentHash:           "sha256:document-contract",
+		SourceType:            "markdown",
+		SourceURI:             "auth-errors.md",
+		MimeType:              "text/markdown",
+		Content:               "# Authentication\n\nAUTH-7F31 means the refresh token has expired.",
+		Metadata:              map[string]any{"product": "agentflow"},
+		MetadataSchemaVersion: "knowledge-metadata-v1",
 	}, []domain.DocumentChunk{{
 		ID: chunkID,
 		ChunkSource: domain.ChunkSource{
@@ -50,7 +51,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 		},
 		Content:    "AUTH-7F31 means the refresh token has expired.",
 		TokenCount: 10,
-		Metadata:   map[string]any{"project": "agentflow", "chunk_type": "paragraph"},
+		Metadata:   map[string]any{"product": "agentflow", "chunk_type": "paragraph"},
 	}}, []domain.DocumentChunkEmbedding{{
 		Provider:   "contract",
 		Model:      "contract-1536",
@@ -73,10 +74,11 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 	duplicate, err := documentStore.CreateDocument(domain.Document{
 		WorkspaceID: workspaceID, Title: document.Title, Version: document.Version, ContentHash: document.ContentHash,
 		SourceType: document.SourceType, SourceURI: document.SourceURI, MimeType: document.MimeType,
-		Content: "# Authentication\n\nAUTH-7F31 means the refresh token has expired.", Metadata: map[string]any{"project": "agentflow"},
+		Content: "# Authentication\n\nAUTH-7F31 means the refresh token has expired.", Metadata: map[string]any{"product": "agentflow"},
+		MetadataSchemaVersion: document.MetadataSchemaVersion,
 	}, []domain.DocumentChunk{{
 		ChunkSource: domain.ChunkSource{ParentID: "section_authentication", SectionPath: []string{"Authentication"}, StartOffset: 18, EndOffset: 66, DocumentVersion: "2026-07", ContentHash: "sha256:chunk-contract"},
-		Content:     "AUTH-7F31 means the refresh token has expired.", TokenCount: 10, Metadata: map[string]any{"project": "agentflow", "chunk_type": "paragraph"},
+		Content:     "AUTH-7F31 means the refresh token has expired.", TokenCount: 10, Metadata: map[string]any{"product": "agentflow", "chunk_type": "paragraph"},
 	}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
 	if err != nil || duplicate.ID != document.ID || !duplicate.UpdatedAt.Equal(document.UpdatedAt) {
 		t.Fatalf("identical ingest was not idempotent: document=%#v err=%v", duplicate, err)
@@ -85,6 +87,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 	_, err = documentStore.CreateDocument(domain.Document{
 		WorkspaceID: workspaceID, Title: document.Title, Version: document.Version, ContentHash: "sha256:different-content",
 		SourceType: document.SourceType, SourceURI: document.SourceURI, Content: "different content",
+		MetadataSchemaVersion: document.MetadataSchemaVersion, Metadata: document.Metadata,
 	}, []domain.DocumentChunk{{Content: "different content"}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
 	if !IsDocumentVersionConflict(err) {
 		t.Fatalf("same source/version accepted different content: %v", err)
@@ -118,7 +121,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 		EmbeddingProvider: "contract",
 		EmbeddingModel:    "contract-1536",
 		WorkspaceID:       workspaceID,
-		Metadata:          map[string]string{"project": "agentflow"},
+		MetadataFilter:    &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "agentflow"}},
 		Limit:             5,
 		MinSimilarity:     0.9,
 	})
@@ -130,11 +133,11 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 	}
 
 	lexicalResults, err := documentStore.SearchDocumentChunksLexical(domain.DocumentSearch{
-		Query:        "AUTH-7F31",
-		LexicalTerms: []string{"auth", "7f31"},
-		WorkspaceID:  workspaceID,
-		Metadata:     map[string]string{"project": "agentflow"},
-		Limit:        5,
+		Query:          "AUTH-7F31",
+		LexicalTerms:   []string{"auth", "7f31"},
+		WorkspaceID:    workspaceID,
+		MetadataFilter: &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "agentflow"}},
+		Limit:          5,
 	})
 	if err != nil {
 		t.Fatalf("lexical search: %v", err)
@@ -149,7 +152,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 		ParentID:       "section_authentication",
 		ChunkIndex:     0,
 		NeighborWindow: 1,
-		Metadata:       map[string]string{"project": "agentflow"},
+		MetadataFilter: &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "agentflow"}},
 	})
 	if err != nil {
 		t.Fatalf("list document context: %v", err)
@@ -175,10 +178,11 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspa
 	updated, err := documentStore.CreateDocument(domain.Document{
 		WorkspaceID: workspaceID, Title: "Authentication error catalog", Version: "2026-08", ContentHash: "sha256:document-contract-v2",
 		SourceType: "markdown", SourceURI: "auth-errors.md", MimeType: "text/markdown", Content: updatedContent,
-		Metadata: map[string]any{"project": "agentflow"},
+		Metadata:              map[string]any{"product": "agentflow"},
+		MetadataSchemaVersion: document.MetadataSchemaVersion,
 	}, []domain.DocumentChunk{{
 		ChunkSource: domain.ChunkSource{ParentID: "section_authentication_v2", SectionPath: []string{"Authentication"}, StartOffset: 0, EndOffset: len(updatedContent), DocumentVersion: "2026-08", ContentHash: "sha256:chunk-contract-v2"},
-		Content:     updatedContent, TokenCount: 11, Metadata: map[string]any{"project": "agentflow", "chunk_type": "paragraph"},
+		Content:     updatedContent, TokenCount: 11, Metadata: map[string]any{"product": "agentflow", "chunk_type": "paragraph"},
 	}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
 	if err != nil || updated.ID != document.ID || updated.Version != "2026-08" || !updated.CreatedAt.Equal(document.CreatedAt) {
 		t.Fatalf("new source version was not atomically installed: document=%#v err=%v", updated, err)

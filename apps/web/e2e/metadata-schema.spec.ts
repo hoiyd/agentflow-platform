@@ -67,7 +67,7 @@ test("versioned metadata validates ownership and survives update, retrieval and 
   expect(patched.body.metadata_schema_version).toBe(version);
   const afterCounter = await (await request.get(`${api}/__fixture/contracts`)).json();
   expect(afterCounter.embedding_requests).toBe(counter.embedding_requests);
-  const search = await call("POST", "/api/rag/search", { query: "AgentFlow production release", metadata: { product: "AgentFlow" }, limit: 10 });
+  const search = await call("POST", "/api/rag/search", { query: "AgentFlow production release", metadata_filter: { schema_version: version, where: { field: "document.metadata.product", op: "eq", value: "AgentFlow" } }, limit: 10 });
   expect(search.status).toBe(200);
   expect(search.body.items.some((item: { document: { id: string; metadata_schema_version: string } }) => item.document.id === created.body.id && item.document.metadata_schema_version === version)).toBe(true);
   await page.reload();

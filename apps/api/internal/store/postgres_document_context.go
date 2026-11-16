@@ -23,10 +23,6 @@ func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextS
 	conditions := []string{"d.id = $1"}
 	args = append(args, search.WorkspaceID)
 	conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
-	for key, value := range search.Metadata {
-		args = append(args, key, value)
-		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
-	}
 	conditions = append(conditions, predicate.SQL(&args))
 
 	contextConditions := make([]string, 0, 2)

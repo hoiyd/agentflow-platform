@@ -1426,6 +1426,7 @@ export interface components {
             source_uri?: string;
             content_contains?: string[];
         };
+        /** @description Case metadata_filter intersects the request filter. The retired metadata query field is rejected. */
         RAGEvaluationCase: {
             id: string;
             query: string;
@@ -1435,9 +1436,6 @@ export interface components {
             required_source_count?: number;
             min_acceptable_rank?: number;
             tags?: string[];
-            metadata?: {
-                [key: string]: string;
-            };
             metadata_filter?: components["schemas"]["MetadataFilter"];
             /** @description Require a nonempty effective case or request restriction. Omission keeps legacy unfiltered behavior. */
             require_filter?: boolean;
@@ -1452,18 +1450,16 @@ export interface components {
             tags?: string[];
             cases: components["schemas"]["RAGEvaluationCase"][];
         };
-        /** @description A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization. */
+        /** @description A versioned Golden Dataset is required. Legacy cases, expectation fields and metadata query maps are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization. */
         RAGEvaluationRunRequest: {
             dataset: components["schemas"]["RAGGoldenDataset"];
             workspace_id?: string;
-            metadata?: {
-                [key: string]: string;
-            };
             metadata_filter?: components["schemas"]["MetadataFilter"];
             top_k?: number;
             min_similarity?: number;
         };
         RAGEvaluationEvidence: {
+            /** @description Read-only legacy evidence retained in historical reports; not accepted in new queries. */
             metadata?: {
                 [key: string]: string;
             };
@@ -1497,13 +1493,10 @@ export interface components {
                 source_chunk_ids?: string[];
             }[];
         };
+        /** @description Optional metadata_filter is the only metadata query restriction. The retired metadata query field is rejected before embedding, even when empty or null. */
         KnowledgeSearchRequest: {
             query: string;
             workspace_id?: string;
-            /** @description Legacy exact-text equality; ANDed with metadata_filter. */
-            metadata?: {
-                [key: string]: string;
-            };
             metadata_filter?: components["schemas"]["MetadataFilter"];
             limit?: number;
             min_similarity?: number;

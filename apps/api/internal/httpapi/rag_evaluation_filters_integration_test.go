@@ -55,7 +55,7 @@ func TestRAGEvaluationFilterHTTPContract(t *testing.T) {
 			t.Fatalf("unsafe batch: %s %d %s", body, response.Code, response.Body.String())
 		}
 	}
-	body := `{"metadata":{"product":"Atlas"},"dataset":{"schema_version":"rag-golden-dataset-v1","id":"scope","version":"1","cases":[{"id":"atlas","query":"ROLLBACK-42","answerable":true,"require_filter":true,"expected_sources":[{"source_uri":"Atlas.md"}],"forbidden_sources":[{"source_uri":"Boreal.md"}]}]}}`
+	body := `{"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}},"dataset":{"schema_version":"rag-golden-dataset-v1","id":"scope","version":"1","cases":[{"id":"atlas","query":"ROLLBACK-42","answerable":true,"require_filter":true,"expected_sources":[{"source_uri":"Atlas.md"}],"forbidden_sources":[{"source_uri":"Boreal.md"}]}]}}`
 	var input apicontract.RAGEvaluationRunRequest
 	if err := json.Unmarshal([]byte(body), &input); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestRAGEvaluationFilterHTTPContract(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Cases) != 1 || !result.Cases[0].Hit || result.Cases[0].Evidence.Metadata["product"] != "Atlas" {
+	if len(result.Cases) != 1 || !result.Cases[0].Hit || result.Cases[0].Evidence.MetadataFilter == nil || result.Cases[0].Evidence.MetadataFilter.Where.Value != "Atlas" {
 		t.Fatalf("lost contract: %s", response.Body.String())
 	}
 	evidence, err := json.Marshal(result.Cases[0].Evidence)

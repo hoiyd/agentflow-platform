@@ -113,7 +113,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 	// KnowledgeBase preflight (including an ingest racing the metadata update).
 	direct := original
 	direct.Content = input["content"].(string)
-	direct.Metadata = map[string]any{"format": "markdown", "environment": "changed", "product": "AgentFlow"}
+	direct.Metadata = map[string]any{"format": "markdown", "environment": "development", "product": "AgentFlow"}
 	indexEmbeddings := make([]domain.DocumentChunkEmbedding, len(beforeChunks))
 	vector := make([]float64, 1536)
 	vector[0] = 1
@@ -164,7 +164,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 		payload any
 		status  int
 	}{
-		{"stale", workspace, map[string]any{"expected_updated_at": original.UpdatedAt, "metadata": map[string]any{"environment": "old"}}, 409},
+		{"stale", workspace, map[string]any{"expected_updated_at": original.UpdatedAt, "metadata": map[string]any{"environment": "development"}}, 409},
 		{"missing_token", workspace, map[string]any{"metadata": map[string]any{}}, 400},
 		{"null", workspace, map[string]any{"expected_updated_at": updated.UpdatedAt, "metadata": nil}, 400},
 		{"protected", workspace, map[string]any{"expected_updated_at": updated.UpdatedAt, "metadata": map[string]any{"format": "text"}}, 409},
@@ -193,15 +193,23 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 	}
 	// RAG-042 minimum regression: both recall modes and expansion must stop
 	// matching the old inherited value, not just display the new Document label.
+	// Typed querying requires explicit adoption; the preceding legacy-write
+	// contract remains independent of schema validation.
+	status, data = call("PATCH", path, workspace, map[string]any{"expected_updated_at": updated.UpdatedAt, "metadata": updated.Metadata, "metadata_schema_version": "knowledge-metadata-v1"})
+	if status != 200 || embedder.calls.Load() != calls {
+		t.Fatalf("schema adoption: %d %s", status, data)
+	}
+	updated = decode(data)
+	input["metadata_schema_version"] = updated.MetadataSchemaVersion
 	for _, environment := range []string{"staging", "production"} {
-		search := domain.DocumentSearch{WorkspaceID: workspace, Query: "AgentFlow release", LexicalTerms: []string{"agentflow", "release"}, Embedding: vector, Metadata: map[string]string{"environment": environment}, Limit: 20}
+		search := domain.DocumentSearch{WorkspaceID: workspace, Query: "AgentFlow release", LexicalTerms: []string{"agentflow", "release"}, Embedding: vector, MetadataFilter: &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "chunk.metadata.environment", Op: "eq", Value: environment}}, Limit: 20}
 		for name, lookup := range map[string]func(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error){"semantic": backend.SearchDocumentChunks, "keyword": backend.SearchDocumentChunksLexical} {
 			hits, err := lookup(search)
 			if err != nil || (len(hits) > 0) != (environment == "production") {
 				t.Fatalf("%s %s: %d %v", name, environment, len(hits), err)
 			}
 		}
-		expanded, err := backend.ListDocumentContextChunks(domain.DocumentContextSearch{DocumentID: original.ID, WorkspaceID: workspace, ParentID: chunks[0].ParentID, Metadata: search.Metadata})
+		expanded, err := backend.ListDocumentContextChunks(domain.DocumentContextSearch{DocumentID: original.ID, WorkspaceID: workspace, ParentID: chunks[0].ParentID, MetadataFilter: search.MetadataFilter})
 		if err != nil || (len(expanded) > 0) != (environment == "production") {
 			t.Fatalf("parent filter: %v %v", expanded, err)
 		}
@@ -209,7 +217,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 	// Concurrent different payloads cannot both commit against the same token.
 	results := make(chan int, 2)
 	start := make(chan struct{})
-	for _, value := range []string{"production-a", "production-b"} {
+	for _, value := range []string{"staging", "test"} {
 		go func(value string) {
 			<-start
 			code, _ := call("PATCH", path, workspace, map[string]any{"expected_updated_at": updated.UpdatedAt, "metadata": map[string]any{"environment": value}})
@@ -241,7 +249,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 			if err != nil {
 				t.Fatal(err)
 			}
-			status, _ := call("PATCH", path, workspace, map[string]any{"expected_updated_at": current.UpdatedAt, "metadata": map[string]any{"environment": "rollback"}})
+			status, _ := call("PATCH", path, workspace, map[string]any{"expected_updated_at": current.UpdatedAt, "metadata": map[string]any{"environment": "development"}})
 			if status != 500 {
 				t.Fatalf("failed chunk write: %d", status)
 			}
@@ -255,7 +263,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 		}
 	}
 	// Same-source/body conditional ingestion is the same zero-embedding mutation.
-	input["expected_updated_at"], input["metadata"] = current.UpdatedAt, map[string]any{"environment": "reingested"}
+	input["expected_updated_at"], input["metadata"] = current.UpdatedAt, map[string]any{"environment": "production"}
 	status, data = call("POST", "/api/documents", workspace, input)
 	if status != 201 || decode(data).ID != original.ID || embedder.calls.Load() != calls {
 		t.Fatalf("conditional ingest: %d %s calls=%d", status, data, embedder.calls.Load())
@@ -335,7 +343,7 @@ func runMetadataHTTPContract(t *testing.T, backend store.Store, workspace, forei
 		}
 		defer reopened.Close()
 		persisted, _, found, err := reopened.GetDocumentInWorkspace(workspace, original.ID)
-		if err != nil || !found || persisted.Metadata["environment"] != "reingested" {
+		if err != nil || !found || persisted.Metadata["environment"] != "production" {
 			t.Fatalf("restart: %#v %v", persisted, err)
 		}
 		closed := backend.(*store.PostgresStore)

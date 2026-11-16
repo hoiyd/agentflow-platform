@@ -10,7 +10,7 @@ import (
 
 // SQL appends bind values to the caller's argument list. Only validated fixed
 // column/operator tokens become SQL; schema, keys and values are parameters.
-// The caller ANDs this with Workspace, legacy filters and source identity.
+// The caller ANDs this with Workspace and source identity.
 func (p Predicate) SQL(args *[]any) string {
 	if p.root == nil {
 		return p.lifecycleSQL(args)

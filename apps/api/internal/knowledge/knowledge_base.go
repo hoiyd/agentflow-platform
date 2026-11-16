@@ -160,9 +160,6 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 	if err := redaction.ValidateText(search.Query); err != nil {
 		return domain.DocumentSearchResponse{}, err
 	}
-	if err := redaction.ValidateValue(search.Metadata); err != nil {
-		return domain.DocumentSearchResponse{}, err
-	}
 	if err := redaction.ValidateValue(search.MetadataFilter); err != nil {
 		return domain.DocumentSearchResponse{}, err
 	}

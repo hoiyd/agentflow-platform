@@ -33,7 +33,7 @@ func TestEvaluationJSONRejectsAmbiguousConstraints(t *testing.T) {
 		}
 	}
 	var request domain.RAGGoldenDataset
-	if err := DecodeEvaluationJSON([]byte(`{"cases":[{"query":"x","metadata":{"CaseSensitive":"x","casesensitive":"y"}}]}`), &request); err != nil {
+	if err := DecodeEvaluationJSON([]byte(`{"cases":[{"query":"x","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"in","value":["Atlas","atlas"]}}}]}`), &request); err != nil {
 		t.Fatal(err)
 	}
 }

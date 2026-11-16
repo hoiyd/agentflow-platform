@@ -54,8 +54,8 @@ case-sensitive. JSON ingestion is bounded to 2 MiB; PATCH remains 64 KiB.
 The Knowledge detail view shows the stored schema and separate expandable
 Document/Chunk metadata tables with declaration ownership. It is read-only;
 legacy records are labeled **Legacy / unvalidated**, even for familiar field names.
-For query semantics, see [equality filters](metadata-filters.md) and
-[typed filters](typed-metadata-filters.md); for execution, see
+For query semantics, see [typed filters](typed-metadata-filters.md) and the
+[query migration boundary](metadata-filters.md); for execution, see
 [Runtime Knowledge scope](runtime-knowledge-filters.md). The schema endpoint
 advertises `typed_filtering` and `runtime_filtering` capabilities.
 

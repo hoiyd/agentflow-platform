@@ -19,6 +19,7 @@ test("conditional knowledge metadata updates preserve the index and survive relo
     return { status: response.status, body: await response.json() };
   }, { method, path, body, scope });
   const input = { source_key: "metadata-browser-release", title: "Metadata release guide", source_type: "markdown",
+    metadata_schema_version: "knowledge-metadata-v1",
     content: "# Release\n\nDeploy AgentFlow production release safely.\n\n## Recovery\n\nRollback AgentFlow production release.",
     metadata: { product: "AgentFlow", environment: "staging" } };
   const created = await call("POST", "/api/documents", input);
@@ -33,7 +34,7 @@ test("conditional knowledge metadata updates preserve the index and survive relo
   expect(updated.body.index_identity).toEqual(created.body.index_identity);
   const retry = await call("PATCH", path, patch);
   expect(retry).toEqual(updated);
-  const stale = await call("PATCH", path, { ...patch, metadata: { environment: "stale" } });
+  const stale = await call("PATCH", path, { ...patch, metadata: { environment: "development" } });
   expect(stale.status).toBe(409);
   const foreign = await call("POST", "/api/workspaces", { name: "Foreign metadata workspace" });
   expect(foreign.status).toBe(201);
@@ -56,7 +57,7 @@ test("conditional knowledge metadata updates preserve the index and survive relo
   }
   const searches = [];
   for (const environment of ["staging", "production"]) {
-    const result = await call("POST", "/api/rag/search", { query: "AgentFlow production release", metadata: { environment }, limit: 10 });
+    const result = await call("POST", "/api/rag/search", { query: "AgentFlow production release", metadata_filter: { schema_version: "knowledge-metadata-v1", where: { field: "chunk.metadata.environment", op: "eq", value: environment } }, limit: 10 });
     expect(result.status).toBe(200);
     expect(result.body.items.length > 0).toBe(environment === "production");
     searches.push({ environment, result });

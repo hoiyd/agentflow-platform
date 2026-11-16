@@ -1,7 +1,7 @@
 {
   "schema_version": "rag-golden-dataset-v1",
   "id": "agentflow-metadata-regression",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Deterministic metadata eligibility and expanded Context regression; not semantic quality or Document ACL evidence.",
   "cases": [
     {
@@ -9,10 +9,6 @@
       "query": "ROLLBACK-42",
       "answerable": true,
       "require_filter": true,
-      "metadata": {
-        "product": "Atlas",
-        "environment": "production"
-      },
       "expected_sources": [
         {
           "source_uri": "atlas-production.md"
@@ -40,19 +36,50 @@
       ],
       "tags": [
         "calibration",
-        "legacy-map",
+        "typed-migrated",
         "parent-expansion"
-      ]
+      ],
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "all": [
+            {
+              "any": [
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Atlas"
+                },
+                {
+                  "field": "chunk.metadata.product",
+                  "op": "eq",
+                  "value": "Atlas"
+                }
+              ]
+            },
+            {
+              "any": [
+                {
+                  "field": "document.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                },
+                {
+                  "field": "chunk.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                }
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "id": "atlas-staging",
       "query": "ROLLBACK-42",
       "answerable": true,
       "require_filter": true,
-      "metadata": {
-        "product": "Atlas",
-        "environment": "staging"
-      },
       "expected_sources": [
         {
           "source_uri": "atlas-staging.md"
@@ -66,17 +93,48 @@
       "tags": [
         "holdout",
         "same-query"
-      ]
+      ],
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "all": [
+            {
+              "any": [
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Atlas"
+                },
+                {
+                  "field": "chunk.metadata.product",
+                  "op": "eq",
+                  "value": "Atlas"
+                }
+              ]
+            },
+            {
+              "any": [
+                {
+                  "field": "document.metadata.environment",
+                  "op": "eq",
+                  "value": "staging"
+                },
+                {
+                  "field": "chunk.metadata.environment",
+                  "op": "eq",
+                  "value": "staging"
+                }
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "id": "boreal-production",
       "query": "ROLLBACK-42",
       "answerable": true,
       "require_filter": true,
-      "metadata": {
-        "product": "Boreal",
-        "environment": "production"
-      },
       "expected_sources": [
         {
           "source_uri": "boreal-production.md"
@@ -90,30 +148,75 @@
       "tags": [
         "holdout",
         "same-query"
-      ]
+      ],
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "all": [
+            {
+              "any": [
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Boreal"
+                },
+                {
+                  "field": "chunk.metadata.product",
+                  "op": "eq",
+                  "value": "Boreal"
+                }
+              ]
+            },
+            {
+              "any": [
+                {
+                  "field": "document.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                },
+                {
+                  "field": "chunk.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                }
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "id": "no-product",
       "query": "ROLLBACK-42",
       "answerable": false,
       "require_filter": true,
-      "metadata": {
-        "product": "Missing"
-      },
       "tags": [
         "holdout",
         "no-answer"
-      ]
+      ],
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "any": [
+            {
+              "field": "document.metadata.product",
+              "op": "eq",
+              "value": "Missing"
+            },
+            {
+              "field": "chunk.metadata.product",
+              "op": "eq",
+              "value": "Missing"
+            }
+          ]
+        }
+      }
     },
     {
       "id": "missing-environment",
       "query": "ROLLBACK-42",
       "answerable": false,
       "require_filter": true,
-      "metadata": {
-        "product": "Unclassified",
-        "environment": "production"
-      },
       "forbidden_sources": [
         {
           "source_uri": "missing-field.md"
@@ -122,7 +225,42 @@
       "tags": [
         "holdout",
         "missing-field"
-      ]
+      ],
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "all": [
+            {
+              "any": [
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Unclassified"
+                },
+                {
+                  "field": "chunk.metadata.product",
+                  "op": "eq",
+                  "value": "Unclassified"
+                }
+              ]
+            },
+            {
+              "any": [
+                {
+                  "field": "document.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                },
+                {
+                  "field": "chunk.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                }
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "id": "typed-number-range",
@@ -170,22 +308,37 @@
       "query": "ROLLBACK-42",
       "answerable": true,
       "require_filter": true,
-      "metadata": {
-        "environment": "production"
-      },
       "metadata_filter": {
         "schema_version": "knowledge-metadata-v1",
         "where": {
-          "any": [
+          "all": [
             {
-              "field": "document.metadata.product",
-              "op": "eq",
-              "value": "Atlas"
+              "any": [
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Atlas"
+                },
+                {
+                  "field": "document.metadata.product",
+                  "op": "eq",
+                  "value": "Boreal"
+                }
+              ]
             },
             {
-              "field": "document.metadata.product",
-              "op": "eq",
-              "value": "Boreal"
+              "any": [
+                {
+                  "field": "document.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                },
+                {
+                  "field": "chunk.metadata.environment",
+                  "op": "eq",
+                  "value": "production"
+                }
+              ]
             }
           ]
         }
@@ -348,23 +501,27 @@
       ]
     },
     {
-      "id": "legacy-string-compatible",
+      "id": "typed-excludes-legacy",
       "query": "ROLLBACK-42",
-      "answerable": true,
+      "answerable": false,
       "require_filter": true,
-      "metadata": {
-        "product": "Legacy",
-        "priority": "80"
-      },
-      "expected_sources": [
+      "tags": [
+        "calibration",
+        "schema-exclusion"
+      ],
+      "forbidden_sources": [
         {
           "source_uri": "legacy-types.md"
         }
       ],
-      "tags": [
-        "calibration",
-        "legacy-map"
-      ]
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "field": "document.metadata.product",
+          "op": "eq",
+          "value": "Legacy"
+        }
+      }
     }
   ]
 }

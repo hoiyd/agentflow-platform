@@ -14,7 +14,7 @@ func TestContextSelectorPrefersScopedParentChunks(t *testing.T) {
 
 	items, selection, security, err := NewContextSelector(store).Select(domain.DocumentSearch{
 		WorkspaceID:               "workspace-1",
-		Metadata:                  map[string]string{"project": "agentflow"},
+		MetadataFilter:            &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "agentflow"}},
 		KnowledgeContextMaxTokens: 20,
 	}, []domain.RetrievedDocumentChunk{match})
 	if err != nil {
@@ -45,7 +45,7 @@ func TestContextSelectorPrefersScopedParentChunks(t *testing.T) {
 		t.Fatalf("expected one scoped context lookup, got %#v", store.contextSearch)
 	}
 	scope := store.contextSearch[0]
-	if scope.DocumentID != "doc-1" || scope.WorkspaceID != "workspace-1" || scope.ParentID != "parent-1" || scope.NeighborWindow != 1 || scope.Metadata["project"] != "agentflow" {
+	if scope.DocumentID != "doc-1" || scope.WorkspaceID != "workspace-1" || scope.ParentID != "parent-1" || scope.NeighborWindow != 1 || scope.MetadataFilter == nil || scope.MetadataFilter.Where.Value != "agentflow" {
 		t.Fatalf("context lookup lost scope: %#v", scope)
 	}
 }
@@ -124,7 +124,8 @@ func contextTestItem(documentID string, workspaceID string, chunkID string, pare
 		ID:          documentID,
 		WorkspaceID: workspaceID,
 		Title:       "Context test",
-		Metadata:    map[string]any{"project": "agentflow"},
+		MetadataSchemaVersion: "knowledge-metadata-v1",
+		Metadata:    map[string]any{"product": "agentflow"},
 	}
 	chunk := domain.DocumentChunk{
 		ID:         chunkID,
@@ -135,7 +136,7 @@ func contextTestItem(documentID string, workspaceID string, chunkID string, pare
 		ChunkIndex: chunkIndex,
 		Content:    content,
 		TokenCount: tokens,
-		Metadata:   map[string]any{"project": "agentflow"},
+		Metadata:   map[string]any{"product": "agentflow"},
 		Document:   document,
 	}
 	return domain.RetrievedDocumentChunk{Document: document, Chunk: chunk, Similarity: 0.8, Score: 0.8}

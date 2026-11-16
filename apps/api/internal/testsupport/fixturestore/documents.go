@@ -281,7 +281,7 @@ func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.Ret
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) || !predicate.Matches(document, chunk) {
+		if !ok || !documentMatchesWorkspace(document, search.WorkspaceID) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		embedding, ok := embeddingByChunkID[chunk.ID]
@@ -341,7 +341,7 @@ func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]dom
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) || !predicate.Matches(document, chunk) {
+		if !ok || !documentMatchesWorkspace(document, search.WorkspaceID) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		lexicalScore := DocumentChunkLexicalScore(search, document, chunk)
@@ -395,10 +395,9 @@ func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) (
 		return []domain.RetrievedDocumentChunk{}, nil
 	}
 
-	filter := domain.DocumentSearch{WorkspaceID: search.WorkspaceID, Metadata: search.Metadata}
 	items := make([]domain.RetrievedDocumentChunk, 0)
 	for _, chunk := range s.data.DocumentChunks {
-		if chunk.DocumentID != documentID || !DocumentChunkMatchesSearch(document, chunk, filter) || !predicate.Matches(document, chunk) {
+		if chunk.DocumentID != documentID || !documentMatchesWorkspace(document, search.WorkspaceID) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		sameParent := strings.TrimSpace(search.ParentID) != "" && chunk.ParentID == strings.TrimSpace(search.ParentID)

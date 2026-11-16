@@ -10,8 +10,8 @@ import (
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
-// Matches never interprets legacy metadata as validated data. Workspace and
-// legacy equality remain separate mandatory predicates, outside user OR groups.
+// Matches never interprets unversioned metadata as validated data. The caller
+// enforces Workspace scope outside user OR groups.
 func (p Predicate) Matches(document domain.Document, chunk domain.DocumentChunk) bool {
 	return lifecycleMatches(document.Lifecycle, p.at) && (p.root == nil || document.MetadataSchemaVersion == metadataschema.Version && p.root.matches(document.Metadata, chunk.Metadata))
 }
