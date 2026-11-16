@@ -186,7 +186,8 @@ is instructed to cite `[S1]`, and Manifest selection determines eligibility.
 Completion resolves markers against actual selected Context plus the trusted
 catalog, deduplicates first appearances, and persists structured citations with
 the Message/terminal SSE. Unknown/excluded markers are reported invalid, never
-enriched with source metadata.
+enriched with source metadata. Terminal output exposes `invalid_citation_ids`;
+the `citation.resolved` event exposes `invalid_source_ids`.
 
 Standalone search aliases are local to its response. Inside a Run, automatic
 retrieval and Knowledge Tools share aliases keyed by Document/version/Chunk.
@@ -206,6 +207,10 @@ see [grounded answers](../runtime/verification.md#grounded-knowledge-answers).
 spoofing, system/developer prompt exfiltration, execution requests, fake boundary
 markers and credential-shaped content. Rejected candidates cannot enter RRF or
 model Context. Audit retains IDs/action/reasons, not the blocked raw payload.
+For an otherwise matching blocked chunk, Search reports a security-specific
+no-match reason; `security` includes `policy_version`, `blocked_candidates` and
+decisions such as `instruction_override` / `system_prompt_exfiltration`. Replay
+records the same `knowledge_security` summary.
 
 All remaining knowledge is still untrusted. System policy and
 `<untrusted_knowledge_context>` / `<untrusted_knowledge_document>` delimiters keep
@@ -221,6 +226,18 @@ Rules favor precision and cannot detect every semantic attack.
   `similarity: 0` without `vector_rank`; Semantic-only hits omit lexical rank/score.
 - `no_match` means no candidate passed the current gate, not that no answer exists.
 - Embed/Store errors are failures, not `no_match` or accepted low-confidence evidence.
+
+## Verification
+
+From `apps/api`, with `TEST_DATABASE_URL` pointing to a disposable pgvector test server:
+
+```bash
+go test ./internal/store -run TestPostgresStoreLexicalRecall -count=1
+go test ./internal/rag ./internal/knowledge -count=1
+```
+
+These cover recall, guards, index compatibility and Context selection, not live answer quality.
+For UI/Runtime persistence and source revocation, use the [focused functional gates](../operations/functional-regression-testing.md#gate-index).
 
 ## Failure and Quality Boundaries
 

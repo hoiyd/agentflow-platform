@@ -174,8 +174,9 @@ Use `grounded_answer`, not the external-link `citation` verifier, for `[S#]` sou
 ```
 
 `grounded-answer-lexical-v1` splits claims and checks coverage plus exact numeric,
-code and named anchors in cited selected Context. It records unsupported claims,
-scores, IDs and missing anchors, not duplicate source text. Tool-only evidence is
+code and named anchors in cited selected Context. Evidence records
+`algorithm=lexical_claim_support`, unsupported claims, scores, IDs and missing
+anchors, not duplicate source text. Tool-only evidence is
 the immutable read content actually selected, not unread current source bytes.
 
 No selected source permits only a configured insufficient-evidence phrase without
