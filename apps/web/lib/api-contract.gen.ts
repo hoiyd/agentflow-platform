@@ -1427,15 +1427,12 @@ export interface components {
             content_contains?: string[];
         };
         RAGEvaluationCase: {
-            id?: string;
+            id: string;
             query: string;
-            answerable?: boolean;
+            answerable: boolean;
             expected_sources?: components["schemas"]["RAGGoldenSource"][];
             forbidden_sources?: components["schemas"]["RAGGoldenSource"][];
             required_source_count?: number;
-            expected_document_ids?: string[];
-            expected_chunk_ids?: string[];
-            expected_chunk_contains?: string[];
             min_acceptable_rank?: number;
             tags?: string[];
             metadata?: {
@@ -1455,10 +1452,9 @@ export interface components {
             tags?: string[];
             cases: components["schemas"]["RAGEvaluationCase"][];
         };
-        /** @description Provide dataset OR cases, not both. Request restrictions are mandatory AND constraints outside case OR expressions; Workspace is resolved by authorization, not by dataset contents. */
+        /** @description A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization. */
         RAGEvaluationRunRequest: {
-            dataset?: components["schemas"]["RAGGoldenDataset"];
-            cases?: components["schemas"]["RAGEvaluationCase"][];
+            dataset: components["schemas"]["RAGGoldenDataset"];
             workspace_id?: string;
             metadata?: {
                 [key: string]: string;

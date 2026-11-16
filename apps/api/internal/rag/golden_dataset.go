@@ -9,22 +9,8 @@ import (
 )
 
 func ResolveEvaluationCases(request domain.RAGEvaluationRunRequest) ([]domain.RAGEvaluationCase, *domain.RAGGoldenDatasetInfo, error) {
-	if request.Dataset != nil && len(request.Cases) > 0 {
-		return nil, nil, errors.New("provide either dataset or cases, not both")
-	}
 	if request.Dataset == nil {
-		if len(request.Cases) == 0 {
-			return nil, nil, errors.New("at least one evaluation case is required")
-		}
-		if len(request.Cases) > 50 {
-			return nil, nil, errors.New("at most 50 evaluation cases are supported")
-		}
-		for _, c := range request.Cases {
-			if _, err := EvaluationSearch(request, c); err != nil {
-				return nil, nil, err
-			}
-		}
-		return request.Cases, nil, nil
+		return nil, nil, errors.New("a Golden Dataset is required")
 	}
 
 	dataset := request.Dataset
@@ -66,9 +52,6 @@ func ResolveEvaluationCases(request domain.RAGEvaluationRunRequest) ([]domain.RA
 		}
 		if evalCase.Answerable == nil {
 			return nil, nil, fmt.Errorf("dataset case %q requires answerable", caseID)
-		}
-		if hasLegacyExpectations(evalCase) {
-			return nil, nil, fmt.Errorf("dataset case %q must use expected_sources instead of legacy expected fields", caseID)
 		}
 		if *evalCase.Answerable && len(evalCase.ExpectedSources) == 0 {
 			return nil, nil, fmt.Errorf("answerable dataset case %q requires expected_sources", caseID)
@@ -131,10 +114,6 @@ func validateTags(owner string, tags []string) error {
 		seen[tag] = struct{}{}
 	}
 	return nil
-}
-
-func hasLegacyExpectations(evalCase domain.RAGEvaluationCase) bool {
-	return len(evalCase.ExpectedDocumentIDs) > 0 || len(evalCase.ExpectedChunkIDs) > 0 || len(evalCase.ExpectedChunkContains) > 0
 }
 
 func hasNonEmptyString(values []string) bool {

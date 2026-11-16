@@ -160,7 +160,7 @@ export type DocumentSearchResponse = {
 
 export type RAGEvaluationCase = components["schemas"]["RAGEvaluationCase"];
 export type RAGGoldenSource = components["schemas"]["RAGGoldenSource"];
-type RAGGoldenCaseBase = Omit<RAGEvaluationCase, "answerable" | "expected_sources" | "expected_document_ids" | "expected_chunk_ids" | "expected_chunk_contains"> & { id: string };
+type RAGGoldenCaseBase = Omit<RAGEvaluationCase, "answerable" | "expected_sources"> & { id: string };
 
 export type RAGGoldenCase = RAGGoldenCaseBase &
   (
@@ -333,10 +333,8 @@ export async function searchRAG(input: components["schemas"]["KnowledgeSearchReq
   };
 }
 
-type RAGEvaluationRunInput = (
-  | { dataset: RAGGoldenDataset; cases?: never }
-  | { cases: RAGEvaluationCase[]; dataset?: never }
-) & {
+type RAGEvaluationRunInput = {
+  dataset: RAGGoldenDataset;
   top_k?: number;
   min_similarity?: number;
   metadata?: Record<string, string>;

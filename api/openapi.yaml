@@ -1960,7 +1960,7 @@ components:
     RAGEvaluationCase:
       type: object
       additionalProperties: false
-      required: [query]
+      required: [id, query, answerable]
       properties:
         id: { type: string }
         query: { type: string }
@@ -1968,9 +1968,6 @@ components:
         expected_sources: { type: array, items: { $ref: '#/components/schemas/RAGGoldenSource' } }
         forbidden_sources: { type: array, items: { $ref: '#/components/schemas/RAGGoldenSource' } }
         required_source_count: { type: integer }
-        expected_document_ids: { type: array, items: { type: string } }
-        expected_chunk_ids: { type: array, items: { type: string } }
-        expected_chunk_contains: { type: array, items: { type: string } }
         min_acceptable_rank: { type: integer }
         tags: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: { type: string } }
@@ -1991,10 +1988,10 @@ components:
     RAGEvaluationRunRequest:
       type: object
       additionalProperties: false
-      description: Provide dataset OR cases, not both. Request restrictions are mandatory AND constraints outside case OR expressions; Workspace is resolved by authorization, not by dataset contents.
+      required: [dataset]
+      description: A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
       properties:
         dataset: { $ref: '#/components/schemas/RAGGoldenDataset' }
-        cases: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/RAGEvaluationCase' } }
         workspace_id: { type: string }
         metadata: { type: object, additionalProperties: { type: string } }
         metadata_filter: { $ref: '#/components/schemas/MetadataFilter' }

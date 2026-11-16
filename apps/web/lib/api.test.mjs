@@ -671,7 +671,7 @@ test("RAG search exposes an unsuccessful HTTP status", async (t) => {
   );
 });
 
-test("RAG evaluation sends cases and preserves the result", async (t) => {
+test("RAG evaluation sends dataset restrictions and preserves the result", async (t) => {
   let requestBody = {};
   mockFetch(t, {
     summary: { total: 1, hit_at_1: 1, hit_at_3: 1, hit_at_5: 1, misses: 0 },
@@ -681,7 +681,7 @@ test("RAG evaluation sends cases and preserves the result", async (t) => {
   });
 
   const response = await runRAGEvaluation({
-    cases: [{ id: "auth-error", query: "AUTH-7F31" }],
+    dataset: { schema_version: "rag-golden-dataset-v1", id: "auth", version: "1", cases: [{ id: "auth-error", query: "AUTH-7F31", answerable: false }] },
     top_k: 3,
     min_similarity: 0.2,
     metadata: { project: "agentflow" }
@@ -690,6 +690,8 @@ test("RAG evaluation sends cases and preserves the result", async (t) => {
   assert.equal(requestBody.top_k, 3);
   assert.equal(requestBody.min_similarity, 0.2);
   assert.deepEqual(requestBody.metadata, { project: "agentflow" });
+  assert.equal(requestBody.cases, undefined);
+  assert.equal(requestBody.dataset.id, "auth");
   assert.equal(response.summary.hit_at_1, 1);
   assert.equal(response.cases[0].id, "auth-error");
 });

@@ -80,9 +80,9 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	}
 
 	evaluation, err := knowledgeBase.Evaluate(context.Background(), domain.RAGEvaluationRunRequest{
-		Cases: []domain.RAGEvaluationCase{{
-			ID: "launch", Query: "launch password", ExpectedDocumentIDs: []string{document.ID},
-		}},
+		Dataset: &domain.RAGGoldenDataset{SchemaVersion: domain.RAGGoldenDatasetSchemaVersion, ID: "launch", Version: "1", Cases: []domain.RAGEvaluationCase{{
+			ID: "launch", Query: "launch password", Answerable: new(true), ExpectedSources: []domain.RAGGoldenSource{{DocumentID: document.ID}},
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("evaluate knowledge: %v", err)

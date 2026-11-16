@@ -33,7 +33,9 @@ func TestRAGEvaluationFilterHTTPContract(t *testing.T) {
 		h.runRAGEvaluation(w, r)
 		return w
 	}
-	for _, body := range []string{
+	for index, body := range []string{
+		`{"cases":[{"id":"legacy","query":"ROLLBACK-42","expected_chunk_contains":["ROLLBACK-42"]}]}`,
+		`{"dataset":{"schema_version":"rag-golden-dataset-v1","id":"legacy","version":"1","cases":[{"id":"x","query":"ROLLBACK-42","answerable":true,"expected_sources":[{"source_uri":"Atlas.md"}],"expected_chunk_ids":[]}]}}`,
 		`{"cases":[{"id":"valid","query":"ROLLBACK-42"},{"id":"missing","query":"ROLLBACK-42","require_filter":true}]}`,
 		`{"cases":[{"id":"x","query":"ROLLBACK-42","metadata_filter":null}]}`,
 		`{"cases":[{"id":"x","query":"ROLLBACK-42","metadata":{"product":null}}]}`,
@@ -41,13 +43,19 @@ func TestRAGEvaluationFilterHTTPContract(t *testing.T) {
 		`{"cases":[{"id":"x","query":"ROLLBACK-42","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.priority","op":"gte","value":"80"}}}]}`,
 		`{"workspace_id":"2","cases":[{"id":"x","query":"ROLLBACK-42"}]}`,
 	} {
+		if index >= 2 {
+			// Preserve malformed/duplicate restrictions verbatim inside the new envelope.
+			body = strings.Replace(body, `"cases":[`, `"dataset":{"schema_version":"rag-golden-dataset-v1","id":"invalid","version":"1","cases":[`, 1)
+			body = strings.ReplaceAll(body, `"query":`, `"answerable":false,"query":`)
+			body = body[:len(body)-1] + "}}"
+		}
 		before := embedder.calls.Load()
 		response := call(body)
 		if response.Code != http.StatusBadRequest || embedder.calls.Load() != before {
 			t.Fatalf("unsafe batch: %s %d %s", body, response.Code, response.Body.String())
 		}
 	}
-	body := `{"metadata":{"product":"Atlas"},"cases":[{"id":"atlas","query":"ROLLBACK-42","require_filter":true,"expected_sources":[{"source_uri":"Atlas.md"}],"forbidden_sources":[{"source_uri":"Boreal.md"}]}]}`
+	body := `{"metadata":{"product":"Atlas"},"dataset":{"schema_version":"rag-golden-dataset-v1","id":"scope","version":"1","cases":[{"id":"atlas","query":"ROLLBACK-42","answerable":true,"require_filter":true,"expected_sources":[{"source_uri":"Atlas.md"}],"forbidden_sources":[{"source_uri":"Boreal.md"}]}]}}`
 	var input apicontract.RAGEvaluationRunRequest
 	if err := json.Unmarshal([]byte(body), &input); err != nil {
 		t.Fatal(err)

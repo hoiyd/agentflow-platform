@@ -87,7 +87,7 @@ func metadataGoldenStore(t *testing.T, backend store.Store, workspace, foreign s
 	bounded.ExpectedSources, bounded.RequiredSourceCount = dataset.Cases[0].ExpectedSources, 1
 	bounded.ForbiddenSources = append(append([]domain.RAGGoldenSource(nil), bounded.ForbiddenSources...), dataset.Cases[2].ExpectedSources...)
 	filter := &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "Atlas"}}
-	intersected, err := base.Evaluate(withEmbeddingPhase(t.Context(), phaseQuery), domain.RAGEvaluationRunRequest{Cases: []domain.RAGEvaluationCase{bounded}, WorkspaceID: workspace, MetadataFilter: filter})
+	intersected, err := base.Evaluate(withEmbeddingPhase(t.Context(), phaseQuery), domain.RAGEvaluationRunRequest{Dataset: &domain.RAGGoldenDataset{SchemaVersion: domain.RAGGoldenDatasetSchemaVersion, ID: "intersection", Version: "1", Cases: []domain.RAGEvaluationCase{bounded}}, WorkspaceID: workspace, MetadataFilter: filter})
 	if err != nil || !intersected.Cases[0].Hit || len(intersected.Cases[0].Evidence.MetadataFilter.Where.All) != 2 {
 		t.Fatalf("request scope widened: %+v %v", intersected, err)
 	}
@@ -116,7 +116,7 @@ func metadataGoldenStore(t *testing.T, backend store.Store, workspace, foreign s
 	noMatch := dataset.Cases[0]
 	noMatch.Answerable, noMatch.ExpectedSources = &no, nil
 	noMatch.ForbiddenSources = append(append([]domain.RAGGoldenSource(nil), noMatch.ForbiddenSources...), dataset.Cases[0].ExpectedSources...)
-	changed, err := base.Evaluate(withEmbeddingPhase(t.Context(), phaseQuery), domain.RAGEvaluationRunRequest{Cases: []domain.RAGEvaluationCase{noMatch}, WorkspaceID: workspace})
+	changed, err := base.Evaluate(withEmbeddingPhase(t.Context(), phaseQuery), domain.RAGEvaluationRunRequest{Dataset: &domain.RAGGoldenDataset{SchemaVersion: domain.RAGGoldenDatasetSchemaVersion, ID: "no-match", Version: "1", Cases: []domain.RAGEvaluationCase{noMatch}}, WorkspaceID: workspace})
 	if err != nil || !changed.Cases[0].Hit {
 		t.Fatalf("metadata update not effective: %+v %v", changed, err)
 	}

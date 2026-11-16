@@ -1,5 +1,11 @@
 # RAG Golden Dataset v1
 
+Online evaluation accepts only `{ "dataset": <Golden Dataset>, ...options }`.
+Bare case arrays, top-level `cases` and legacy `expected_document_ids`,
+`expected_chunk_ids` / `expected_chunk_contains` inputs are rejected before
+embedding. Use `expected_sources` matchers instead; there is no implicit
+conversion. Historical result fields remain readable, not executable inputs.
+
 AgentFlow's canonical retrieval dataset is
 [`agentflow-rag-baseline@1.2.0`](../../examples/knowledge/golden-dataset.v1.json).
 It is a small, versioned engineering baseline rather than a claim of

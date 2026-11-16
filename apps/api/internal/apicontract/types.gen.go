@@ -2312,14 +2312,11 @@ type RAGCitation struct {
 
 // RAGEvaluationCase defines model for RAGEvaluationCase.
 type RAGEvaluationCase struct {
-	Answerable            *bool              `json:"answerable,omitempty"`
-	ExpectedChunkContains *[]string          `json:"expected_chunk_contains,omitempty"`
-	ExpectedChunkIds      *[]string          `json:"expected_chunk_ids,omitempty"`
-	ExpectedDocumentIds   *[]string          `json:"expected_document_ids,omitempty"`
-	ExpectedSources       *[]RAGGoldenSource `json:"expected_sources,omitempty"`
-	ForbiddenSources      *[]RAGGoldenSource `json:"forbidden_sources,omitempty"`
-	Id                    *string            `json:"id,omitempty"`
-	Metadata              *map[string]string `json:"metadata,omitempty"`
+	Answerable       bool               `json:"answerable"`
+	ExpectedSources  *[]RAGGoldenSource `json:"expected_sources,omitempty"`
+	ForbiddenSources *[]RAGGoldenSource `json:"forbidden_sources,omitempty"`
+	Id               string             `json:"id"`
+	Metadata         *map[string]string `json:"metadata,omitempty"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
 	MetadataFilter    *MetadataFilter `json:"metadata_filter,omitempty"`
@@ -2365,12 +2362,10 @@ type RAGEvaluationEvidence struct {
 	WorkspaceId    string          `json:"workspace_id"`
 }
 
-// RAGEvaluationRunRequest Provide dataset OR cases, not both. Request restrictions are mandatory AND constraints outside case OR expressions; Workspace is resolved by authorization, not by dataset contents.
+// RAGEvaluationRunRequest A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
 type RAGEvaluationRunRequest struct {
-	Cases *[]RAGEvaluationCase `json:"cases,omitempty"`
-
 	// Dataset Golden cases additionally require id, answerable and expected_sources for answerable cases. See the published Golden JSON Schema.
-	Dataset  *RAGGoldenDataset  `json:"dataset,omitempty"`
+	Dataset  RAGGoldenDataset   `json:"dataset"`
 	Metadata *map[string]string `json:"metadata,omitempty"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.

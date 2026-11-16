@@ -258,22 +258,23 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		"top_k": 5,
 		"min_similarity": 0,
 		"metadata": {"project": "agentflow"},
-		"cases": [
+		"dataset": {"schema_version":"rag-golden-dataset-v1","id":"launch","version":"1","cases": [
 			{
 				"id": "launch_password",
 				"query": "What is the launch password?",
-				"expected_document_ids": ["` + document.ID + `"],
-				"expected_chunk_contains": ["amber-9137"],
+				"answerable": true,
+				"expected_sources": [{"document_id":"` + document.ID + `", "content_contains":["amber-9137"]}],
 				"min_acceptable_rank": 3,
 				"tags": ["smoke"]
 			},
 			{
 				"id": "missing_case",
 				"query": "What is the launch password?",
-				"expected_chunk_contains": ["not-in-the-document"],
+				"answerable": true,
+				"expected_sources": [{"content_contains":["not-in-the-document"]}],
 				"min_acceptable_rank": 3
 			}
-		]
+		]}
 	}`)
 	evalReq := httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(evalBody))
 	evalRecorder := httptest.NewRecorder()

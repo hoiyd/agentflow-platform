@@ -85,11 +85,18 @@ test("metadata Golden cases retain constraints and Context evidence across updat
   expect(rejected.status()).toBe(400);
   await expect(page.locator(".rag-evaluation").getByRole("alert")).toContainText("requires a nonempty filter");
   const invalid = await page.request.post(`${api}/api/rag/evaluations/run`, { headers, data: {
-    cases: [{ id: "null-filter", query: "ROLLBACK-42", metadata_filter: null }]
+    dataset: { ...dataset, cases: [{ ...dataset.cases[0], metadata_filter: null }] }
   } });
   expect(invalid.status()).toBe(400);
+  const legacy = await page.request.post(`${api}/api/rag/evaluations/run`, { headers, data: {
+    cases: [{ id: "legacy", query: "ROLLBACK-42", expected_chunk_contains: ["ROLLBACK-42"] }]
+  } });
+  expect(legacy.status()).toBe(400);
+  await page.getByRole("textbox", { name: "Golden dataset" }).fill("[]");
+  await page.getByRole("button", { name: "Run evaluation", exact: true }).click();
+  await expect(page.locator(".rag-evaluation").getByRole("alert")).toContainText("Golden Dataset object");
   expect(errors).toEqual([]);
   await testInfo.attach("metadata-golden-browser.json", { body: JSON.stringify({ schema: "metadata-golden-browser-v1", workspace,
-    dataset, corpus_manifest: manifest, initial, updated, after_update: afterUpdate, rejected_status: rejected.status(),
+    dataset, corpus_manifest: manifest, initial, updated, after_update: afterUpdate, rejected_status: rejected.status(), legacy_status: legacy.status(),
     limitations: ["production API and Postgres; controlled embedding transport", "retrieval/Context regression, not live answer quality or Document ACL"] }, null, 2), contentType: "application/json" });
 });
