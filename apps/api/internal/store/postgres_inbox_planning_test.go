@@ -22,7 +22,7 @@ func TestPostgresInboxPlanningIntentBoundary(t *testing.T) {
 	}
 	defer s.Close()
 	ctx := context.Background()
-	agent, _, err := s.GetDefaultAgent()
+	agent, _, err := s.GetAgent("agent_planner")
 	if err != nil {
 		t.Fatal(err)
 	}

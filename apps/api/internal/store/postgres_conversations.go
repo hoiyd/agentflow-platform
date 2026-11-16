@@ -11,27 +11,6 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 )
 
-func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
-	rows, err := s.db.Query(`
-		SELECT id, workspace_id::text, title, created_at, updated_at
-		FROM conversations
-		ORDER BY updated_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []domain.Conversation{}
-	for rows.Next() {
-		var item domain.Conversation
-		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
 func (s *PostgresStore) ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error) {
 	rows, err := s.db.Query(`SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE workspace_id = $1 ORDER BY updated_at DESC`, NormalizeWorkspaceID(workspaceID))
 	if err != nil {

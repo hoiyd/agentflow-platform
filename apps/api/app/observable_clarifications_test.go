@@ -27,7 +27,7 @@ func TestClarificationCommittedEventsReachHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, _ := base.GetDefaultAgent()
+	agent, _, _ := base.GetAgent("agent_planner")
 	run, err := base.CreateRunWithContract(agent.ID, c.ID, domain.RuntimeSnapshot{SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", Agent: domain.RuntimeAgentSnapshot{ID: agent.ID, Executor: domain.DefaultAgentExecutor}, RunBudget: &domain.RuntimeRunBudget{}, Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "local", Model: "fixture", BaseURL: "http://localhost:11434/api/embed", Dimensions: 1}, ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 128000, OutputReserveTokens: 8192, SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000, KnowledgeMaxTokens: 16000}}, nil)
 	if err != nil {
 		t.Fatal(err)

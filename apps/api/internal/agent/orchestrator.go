@@ -327,7 +327,3 @@ func NormalizeRouterMode(mode string) string {
 		return RouterModeAuto
 	}
 }
-
-func IsAgentNotFound(err error) bool {
-	return store.IsNotFound(err)
-}

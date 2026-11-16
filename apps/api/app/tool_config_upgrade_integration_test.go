@@ -173,7 +173,7 @@ esac
 		t.Fatal(err)
 	}
 	request(http.MethodPost, "/api/chat", domain.ChatRequest{ConversationID: conversation.ID, AgentID: owned.ID, Mode: "single", Message: "sandbox-gate: validate the existing operator grant"}, 200)
-	runs, err := storage.ListRuns()
+	runs, err := storage.ListRunsByWorkspace(workspace)
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("real sandbox Run did not complete: %+v %v", runs, err)
 	}

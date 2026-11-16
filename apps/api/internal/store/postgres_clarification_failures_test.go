@@ -26,7 +26,7 @@ func TestPostgresClarificationFailureAndRaceBoundaries(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		a, _, _ := s.GetDefaultAgent()
+		a, _, _ := s.GetAgent("agent_planner")
 		run, err := s.CreateRunWithContract(a.ID, conv.ID, testRuntimeSnapshot(), nil)
 		if err != nil {
 			t.Fatal(err)

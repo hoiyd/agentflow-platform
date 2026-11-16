@@ -32,7 +32,7 @@ func TestPostgresInboxFailureAndRecoveryBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, _ := s.GetDefaultAgent()
+	agent, _, _ := s.GetAgent("agent_planner")
 	snapshot := testRuntimeSnapshot()
 	run, err := s.CreateRunWithContract(agent.ID, conv.ID, snapshot, nil)
 	if err != nil {
@@ -163,7 +163,7 @@ func TestPostgresFollowupCreationIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, _ := s.GetDefaultAgent()
+	agent, _, _ := s.GetAgent("agent_planner")
 	snapshot := testRuntimeSnapshot()
 	run, err := s.CreateRunWithContract(agent.ID, conv.ID, snapshot, nil)
 	if err != nil {
@@ -240,7 +240,7 @@ func TestPostgresInboxProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, _ := s.GetDefaultAgent()
+	agent, _, _ := s.GetAgent("agent_planner")
 	run, err := s.CreateRunWithContract(agent.ID, conv.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestPostgresInboxByteBoundsRetentionAndRollback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, err := s.GetDefaultAgent()
+	agent, _, err := s.GetAgent("agent_planner")
 	if err != nil {
 		t.Fatal(err)
 	}

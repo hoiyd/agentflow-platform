@@ -125,7 +125,7 @@ func TestChatHTTPStreamsToolAnswerBeforeProviderDone(t *testing.T) {
 	if !first || !done || resets != 1 || answer.String() != "The answer is 2" || rounds.Load() != 2 {
 		t.Fatalf("early=%t done=%t resets=%d output=%q rounds=%d", first, done, resets, answer.String(), rounds.Load())
 	}
-	runs, err := storage.ListRuns()
+	runs, err := storage.ListRunsByWorkspace(domain.DefaultWorkspaceID)
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("runs=%#v err=%v", runs, err)
 	}

@@ -62,9 +62,9 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 		{system: "You are the finalizer.", want: "Final answer:"},
 		{system: "You are concise.", want: "Generated response:"},
 	} {
-		completion, err := client.CompleteText(context.Background(), testCase.system, "answer the task")
-		if err != nil || !strings.Contains(completion, testCase.want) {
-			t.Fatalf("complete with %q: output=%q err=%v", testCase.system, completion, err)
+		completion, err := client.CompleteTextDetailed(context.Background(), testCase.system, "answer the task")
+		if err != nil || !strings.Contains(completion.Text, testCase.want) {
+			t.Fatalf("complete with %q: output=%q err=%v", testCase.system, completion.Text, err)
 		}
 	}
 
@@ -79,7 +79,7 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 
 func TestMissingChatCredentialDoesNotSimulate(t *testing.T) {
 	client := NewClient("", "https://example.test/v1", "gpt-test")
-	if _, err := client.CompleteText(context.Background(), "system", "hello"); err == nil {
+	if _, err := client.CompleteTextDetailed(context.Background(), "system", "hello"); err == nil {
 		t.Fatal("missing credential must not produce a simulated completion")
 	}
 	if _, err := client.PrepareAgentChat(context.Background(), provider.ChatRequest{Latest: "hello"}); err == nil {

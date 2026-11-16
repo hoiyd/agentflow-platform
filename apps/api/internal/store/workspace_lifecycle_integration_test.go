@@ -157,7 +157,7 @@ func TestWorkspaceAdmissionAndUncertainEffectBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _, err := s.GetDefaultAgent()
+	agent, _, err := s.GetAgent("agent_planner")
 	if err != nil {
 		t.Fatal(err)
 	}

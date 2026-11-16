@@ -340,27 +340,6 @@ func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain
 	return run, true, nil
 }
 
-func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
-	rows, err := s.db.Query(`
-		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
-		FROM runs
-		ORDER BY created_at DESC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []domain.Run{}
-	for rows.Next() {
-		run, err := scanRun(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, run)
-	}
-	return items, rows.Err()
-}
-
 func (s *PostgresStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
 		SELECT id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at

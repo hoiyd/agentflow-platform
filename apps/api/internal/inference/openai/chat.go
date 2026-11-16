@@ -10,14 +10,6 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 )
 
-func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt string) (string, error) {
-	completion, err := c.CompleteTextDetailed(ctx, systemPrompt, prompt)
-	if err != nil {
-		return "", err
-	}
-	return completion.Text, nil
-}
-
 func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, prompt string) (TextCompletion, error) {
 	prepared, err := c.PrepareText(ctx, systemPrompt, prompt)
 	if err != nil {
