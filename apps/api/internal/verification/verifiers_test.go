@@ -4,37 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
-
-func TestCommandVerifierRunsWithoutShellAndEnforcesBoundaries(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("host supervision requires Linux or macOS")
-	}
-	root := t.TempDir()
-	registry := NewRegistry(Options{AllowHostCommands: true, WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/printf", "/usr/bin/false"}, MaxArtifactBytes: 4})
-	verifier, _ := registry.Resolve(domain.VerifierCommand)
-
-	passed := verifier.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/printf", "abcdef"}}}, Subject{})
-	if passed.Status != domain.VerificationPassed || len(passed.Artifacts) != 1 || passed.Artifacts[0].Content != "abcd" || !passed.Artifacts[0].Truncated || passed.Artifacts[0].ByteSize != 6 {
-		t.Fatalf("unexpected command result: %#v", passed)
-	}
-	failed := verifier.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/false"}}}, Subject{})
-	if failed.Status != domain.VerificationFailed || failed.ExitCode == nil || *failed.ExitCode == 0 {
-		t.Fatalf("expected command assertion failure, got %#v", failed)
-	}
-	blocked := verifier.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{"args": []string{"rm", "-rf", "."}}}, Subject{})
-	if blocked.Status != domain.VerificationBlocked {
-		t.Fatalf("expected non-allowlisted command to be blocked, got %#v", blocked)
-	}
-	if blocked.Details["reason_code"] != BlockedPolicyDenied {
-		t.Fatalf("expected stable policy reason, got %#v", blocked.Details)
-	}
-}
 
 func TestHTTPVerifierChecksStatusCapsOutputAndRestrictsHosts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

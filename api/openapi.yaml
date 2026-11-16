@@ -2315,7 +2315,8 @@ components:
       enum: [not_required, pending, running, passed, failed, blocked, stale]
     VerifierType:
       type: string
-      enum: [command, http, json_schema, text_constraints, citation, answer_relevance, grounded_answer]
+      description: Supported new-contract verifier types. Historical evidence may still contain the retired command type.
+      enum: [http, json_schema, text_constraints, citation, answer_relevance, grounded_answer]
 
     VerifierSpecInput:
       type: object

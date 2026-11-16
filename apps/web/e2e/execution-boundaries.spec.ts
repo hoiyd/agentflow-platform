@@ -4,7 +4,7 @@ import { createWorkspaceChatAgent } from "./fixtures/workspace-agent";
 const api = "http://127.0.0.1:18080";
 test.skip(process.env.AGENTFLOW_EXECUTION_BOUNDARY_TEST !== "1", "requires isolated OIDC and governed HTTP fixtures");
 
-test("HTTP boundaries and OIDC command denial survive persistence and reload", async ({ page }, info) => {
+test("HTTP boundaries and command retirement survive persistence and reload", async ({ page }, info) => {
   const browserErrors: string[] = [];
   page.on("pageerror", error => browserErrors.push(error.message));
   await page.goto("/workspace");
@@ -69,9 +69,9 @@ test("HTTP boundaries and OIDC command denial survive persistence and reload", a
   await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
   await page.getByRole("button", { name: /^Verification/ }).click();
   const dialog = page.getByRole("dialog", { name: "Verification" });
-  await dialog.getByRole("tab", { name: "Command", exact: true }).click();
-  await expect(dialog.getByLabel("Use command check", { exact: true })).toBeDisabled();
-  await expect(dialog).toContainText("requires an isolated runner");
+  await expect(dialog.getByRole("tab", { name: "Command", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("tab")).toHaveCount(6);
+  await page.screenshot({ path: info.outputPath("supported-verifiers.png") });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   // Bypass the UI to prove the backend enforces the same rule. Origin/session
   // and owner scope remain real; only the candidate model response is a fixture.
@@ -82,15 +82,9 @@ test("HTTP boundaries and OIDC command denial survive persistence and reload", a
       policy: { mode: "all_must_pass", max_attempts: 1, on_exhausted: "fail" }
     } }
   });
-  expect(response.ok()).toBe(true);
-  const stream = await response.text();
-  expect(stream).toContain('"verification_status":"blocked"');
-  const identity = /"run_id":"(run_[^"]+)"/.exec(stream);
-  expect(identity).not.toBeNull();
-  const denied = await read(`/api/runs/${identity![1]}/replay`);
-  expect(denied.run.agent_id).toBe(agent.id);
-  expect(denied.run.workspace_id).toBe(session.personal_workspace);
-  expect(denied.verification_evidence[0].details.reason_code).toBe("policy_denied");
+  expect(response.status()).toBe(400);
+  const rejected = await response.json();
+  expect(rejected.error).toContain("retired");
   const final = await read("/__fixture/execution-boundary");
   expect(final.allowed_requests).toBe(3);
   expect(final.forbidden_requests).toBe(0);
@@ -99,8 +93,8 @@ test("HTTP boundaries and OIDC command denial survive persistence and reload", a
   await info.attach("execution-boundary-evidence.json", {
     body: JSON.stringify({ schema: "execution-boundary-evidence-v1", auth: "signed-oidc-fixture", persistence: "disposable-postgres",
       workspace: session.personal_workspace, agent: agent.id,
-      scenarios: evidence, command: { run: denied.run, verification: denied.verification_evidence }, observed: final,
-      limitations: ["DNS rebinding and subprocess cleanup covered separately by isolated backend tests", "not an OS sandbox", "not live provider quality"] }, null, 2),
+      scenarios: evidence, command: { status: response.status(), rejection: rejected }, observed: final,
+      limitations: ["DNS rebinding covered separately by isolated backend tests", "not an OS sandbox", "not live provider quality"] }, null, 2),
     contentType: "application/json"
   });
 });

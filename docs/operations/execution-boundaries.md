@@ -18,10 +18,6 @@ These cases define the implementation and regression checks:
 | Environment HTTP proxy is set | Do not use it for governed egress |
 | Cancellation, timeout, broken or oversized response | Bounded failure, never implicit verification success |
 | Binary output contains NUL/invalid UTF-8 | Sanitize retained text, preserve observed byte count/hash; Evidence persists in Postgres |
-| Remote/OIDC caller requests an allowlisted host command | `blocked`, `policy_denied`; no process is started |
-| Trusted local command uses escaping/symlinked cwd or relative executable | Rejected before process creation |
-| Trusted local command inspects inherited provider/OIDC credentials | Credentials absent; child environment is explicitly constructed |
-| Trusted local command times out with subprocesses | Terminate its process group on supported platforms; bound pipe wait |
 | Skill resource is a symlink, escapes its opened root, or exceeds limits | Existing Loader rejects it; no shell or arbitrary file access |
 
 ## Scope
@@ -64,19 +60,10 @@ ranges remain denied even if an operator lists them as an origin.
   never produces a full-body hash claim or passes on status alone.
 - Tavily uses the same dial policy for its fixed HTTPS origin and sends its
   own scoped credential only to `/search`; it cannot select another destination.
-- Host commands require `AUTH_MODE=local`, a configured root and absolute
-  executable allowlist. Children receive only fixed PATH/locale values, never
-  inherited service credentials. Linux/macOS process groups are terminated on
-  cancellation and after execution, with bounded pipe wait. Other platforms deny.
-
-Canonical cwd checks prevent accidental root escapes but are **not** a file
-sandbox or a race-proof capability for hostile scripts. Local mode trusts the
-operator and must not be exposed to untrusted callers. Programs can still read
-host files (including configuration), write outside cwd, use the network and
-deliberately escape process groups. OIDC mode denies host commands before exec;
-[The sbx command runner](sandbox-execution.md) supplies a separate, opt-in
-mountless execution boundary. It does not make this host Command Verifier
-sandboxed or authorize Skill scripts, mounts or third-party integrations.
+Host Command Verifier is retired in all auth modes. New command contracts are
+rejected before Run creation; historical command contracts cannot Resume,
+Continue or Reverify. Their Evidence and Artifacts remain readable. The separate
+[sbx Tool](sandbox-execution.md) is not an automatic verifier replacement.
 Skill resources already use `os.Root`, regular-file and symlink checks, text
 limits and frozen content; they do not inherit command permissions.
 
@@ -98,7 +85,7 @@ The focused gate uses a signed OIDC fixture, production application composition,
 real local destination servers and disposable Postgres. It verifies an allowed
 HTTP check, denied port, forbidden redirect and oversized binary response,
 then reloads persisted Evidence in Run Replay. A deliberately allowlisted host
-command is rejected both in the UI and through direct authenticated HTTP;
+command is absent from the UI and rejected before Run creation through direct authenticated HTTP;
 destination hit counters and a command marker prove no prohibited action ran.
 `execution-boundary-evidence.json` records contracts, Run identities, Evidence,
 operator grants, observations and limits in `apps/web/test-results` and CI

@@ -40,6 +40,7 @@ const (
 type VerifierType string
 
 const (
+	// VerifierCommand is retained only for historical Contract/Evidence decoding.
 	VerifierCommand         VerifierType = "command"
 	VerifierHTTP            VerifierType = "http"
 	VerifierJSONSchema      VerifierType = "json_schema"

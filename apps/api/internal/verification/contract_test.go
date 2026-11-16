@@ -58,8 +58,8 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 func TestFreezeContractRejectsCredentialContent(t *testing.T) {
 	registry := NewRegistry(Options{})
 	_, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
-		ID: "command", Type: domain.VerifierCommand, Required: true,
-		Config: map[string]any{"args": []any{"echo", "api_key=sk-abcdefgh"}},
+		ID: "text", Type: domain.VerifierTextConstraints, Required: true,
+		Config: map[string]any{"required_phrases": []any{"api_key=sk-abcdefgh"}},
 	}}})
 	if !errors.Is(err, redaction.ErrCredentialContent) {
 		t.Fatalf("credential verifier contract error=%v", err)
@@ -149,10 +149,6 @@ func TestFreezeContractRejectsNonGatingOrUnsafeDefinitions(t *testing.T) {
 		{name: "http embedded credentials", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "http", Type: domain.VerifierHTTP, Required: true,
 			Config: map[string]any{"method": "GET", "url": "https://user:secret@example.com", "expected_status": 200},
-		}}}},
-		{name: "absolute working directory", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
-			ID: "command", Type: domain.VerifierCommand, Required: true,
-			Config: map[string]any{"args": []string{"go", "test"}, "working_directory": "/tmp"},
 		}}}},
 	}
 	for _, test := range tests {

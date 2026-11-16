@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/agent"
@@ -12,6 +13,50 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 )
+
+// Retirement must reject before capacity, routing, model work or Run mutation.
+func TestRetiredCommandContractRejectsRecoveryAndReverify(t *testing.T) {
+	for _, mode := range []string{agent.ChatModeSingle, agent.ChatModeMultiAgent, agent.ChatModeAutonomous} {
+		for _, action := range []string{"resume", "continue", "reverify"} {
+			t.Run(mode+"/"+action, func(t *testing.T) {
+				storage := fixturestore.New()
+				conversation, err := storage.CreateConversation("retired command")
+				if err != nil {
+					t.Fatal(err)
+				}
+				run, err := storage.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: mode, RunBudget: &domain.RuntimeRunBudget{}}, &domain.CompletionContract{Verifiers: []domain.VerifierSpec{{ID: "host", Type: domain.VerifierCommand}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = storage.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "worker interrupted")
+				if err != nil {
+					t.Fatal(err)
+				}
+				before, _, _ := storage.GetRun(run.ID)
+				runtime := &recoveryRuntime{}
+				capacity := &recoveryCapacity{RunController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
+				commands := Commands{Store: storage, Runtime: runtime, Capacity: capacity}
+				scope := Scope{Workspace: domain.NewWorkspaceScope(run.WorkspaceID), Owner: "super"}
+				switch action {
+				case "resume":
+					err = commands.Resume(t.Context(), scope, run.ID, "", Observer{})
+				case "continue":
+					err = commands.Continue(t.Context(), scope, run.ID, "approved plan", domain.AgentRoutingRequirements{}, Observer{})
+				case "reverify":
+					_, err = commands.Reverify(t.Context(), scope, run.ID)
+				}
+				var rejection *Error
+				if !errors.As(err, &rejection) || rejection.Reason != Conflict || !strings.Contains(err.Error(), "retired") {
+					t.Errorf("wrong rejection: %v", err)
+				}
+				after, _, _ := storage.GetRun(run.ID)
+				if !reflect.DeepEqual(before, after) || capacity.reservations != 0 || runtime.called != "" || runtime.failed != 0 {
+					t.Fatalf("retired recovery performed work: run=%+v reservations=%d runtime=%+v", after, capacity.reservations, runtime)
+				}
+			})
+		}
+	}
+}
 
 // Failure inventory: wrong-mode dispatch, unanswered or unreadable questions,
 // duplicate reservation, unsupported Single mutation, and text-shaped execution failures.

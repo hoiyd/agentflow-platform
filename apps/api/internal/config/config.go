@@ -191,10 +191,6 @@ type Config struct {
 	ToolProgressBlockAfter int
 	// ToolProgressHaltAfter terminates the Turn when blocked attempts continue.
 	ToolProgressHaltAfter int
-	// VerificationWorkspaceRoot checks canonical cwd for trusted-local host commands, not an OS sandbox. Empty disables them.
-	VerificationWorkspaceRoot string
-	// VerificationAllowedCommands grants absolute executables only in local auth mode; OIDC cannot execute host commands.
-	VerificationAllowedCommands string
 	// VerificationAllowedHTTPHosts grants exact origins (bare public names mean HTTPS:443); no implicit loopback access.
 	VerificationAllowedHTTPHosts string
 	// VerificationMaxArtifactBytes caps retained output. HTTP consumption is separately capped at 1 MiB; hashes cover observed bytes.
@@ -318,8 +314,6 @@ func Load() Config {
 		ToolProgressWarnAfter:             getIntEnv("TOOL_PROGRESS_WARN_AFTER", 2),
 		ToolProgressBlockAfter:            getIntEnv("TOOL_PROGRESS_BLOCK_AFTER", 4),
 		ToolProgressHaltAfter:             getIntEnv("TOOL_PROGRESS_HALT_AFTER", 5),
-		VerificationWorkspaceRoot:         getEnv("VERIFICATION_WORKSPACE_ROOT", ""),
-		VerificationAllowedCommands:       getEnv("VERIFICATION_ALLOWED_COMMANDS", ""),
 		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		SandboxEnabled:                    getBoolEnv("SANDBOX_ENABLED", false),

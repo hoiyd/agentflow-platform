@@ -224,9 +224,6 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	}()
 	toolManager.SetWorkspaceResolver(mcpConnections.Catalog)
 	verifierRegistry := verification.NewRegistry(verification.Options{
-		AllowHostCommands:       cfg.AuthMode == "local",
-		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
-		AllowedCommands:         splitCSV(cfg.VerificationAllowedCommands),
 		AllowedHTTPHosts:        splitCSV(cfg.VerificationAllowedHTTPHosts),
 		MaxArtifactBytes:        cfg.VerificationMaxArtifactBytes,
 		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(embeddingClient),

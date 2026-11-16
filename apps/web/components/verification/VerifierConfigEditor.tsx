@@ -1,6 +1,4 @@
 import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
-import { useContext } from "react";
-import { TrustedHostCommands } from "../identity/WorkspaceContext";
 
 type VerifierConfigEditorProps = {
   disabled: boolean;
@@ -10,7 +8,6 @@ type VerifierConfigEditorProps = {
 };
 
 export function VerifierConfigEditor({ disabled, draft, onChange, type }: VerifierConfigEditorProps) {
-  const allowHostCommands = useContext(TrustedHostCommands);
   if (type === "answer_relevance") {
     const settings = draft.answerRelevance;
     const update = (next: Partial<typeof settings>) =>
@@ -141,27 +138,7 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
     );
   }
 
-  const settings = draft.command;
-  disabled = disabled || !allowHostCommands;
-  const update = (next: Partial<typeof settings>) => onChange({ command: { ...settings, ...next } });
-  return (
-    <VerifierSection checked={settings.enabled} disabled={disabled} label="Use command check" onToggle={(enabled) => update({ enabled })}>
-      <div className="verifier-field-grid command-fields">
-        <label className="verifier-field">
-          <span>Executable</span>
-          <input disabled={disabled || !settings.enabled} onChange={(event) => update({ executable: event.target.value })} value={settings.executable} />
-        </label>
-        <label className="verifier-field">
-          <span>Working directory</span>
-          <input disabled={disabled || !settings.enabled} onChange={(event) => update({ workingDirectory: event.target.value })} value={settings.workingDirectory} />
-        </label>
-      </div>
-      <TextAreaField disabled={disabled || !settings.enabled} label="Arguments" placeholder="One argument per line" value={settings.arguments} onChange={(argumentsValue) => update({ arguments: argumentsValue })} />
-      <small className="verifier-requirement">{allowHostCommands
-        ? "Trusted local execution only, not a sandbox. An absolute allowlisted executable and a directory within the configured workspace are required."
-        : "Unavailable in remote sessions: command verification requires an isolated runner."}</small>
-    </VerifierSection>
-  );
+  return null;
 }
 
 function VerifierSection({ checked, children, disabled, label, onToggle }: { checked: boolean; children: React.ReactNode; disabled: boolean; label: string; onToggle: (checked: boolean) => void }) {
