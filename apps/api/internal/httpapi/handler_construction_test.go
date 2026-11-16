@@ -117,7 +117,7 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	t.Helper()
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
 	if err := toolpkg.SaveConfig(toolPath, toolpkg.DefaultConfig()); err != nil {
 		t.Fatalf("save tools: %v", err)

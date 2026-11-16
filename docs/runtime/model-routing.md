@@ -62,9 +62,8 @@ as an assumed value. `seed` is accepted only when the route explicitly sets
 `capabilities.seed: true`. Unsupported or invalid values fail Catalog
 validation before a model request. Seed support is a provider claim, not a
 guarantee of identical output across calls or backend revisions.
-Offline simulated fixtures do not sample model tokens and therefore do not
-apply these profiles. Production routes require configured credentials; a
-missing key never selects a simulated model.
+Production routes require configured credentials; a missing key fails before
+Chat execution. There is no built-in simulated Chat provider.
 
 Request timeout is live client configuration from the route file, not a frozen
 Descriptor field. Request permits, retry, and timeout ownership remain in

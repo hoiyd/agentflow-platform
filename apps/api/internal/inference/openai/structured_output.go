@@ -12,7 +12,7 @@ func (c *Client) outputResponseFormat(ctx context.Context) (map[string]any, erro
 	if !ok || output.Mode == "local" {
 		return nil, nil
 	}
-	if output.Mode != "strict" || c.simulated || c.structuredOutputFormat != provider.OutputFormatOpenAIJSONSchema {
+	if output.Mode != "strict" || c.structuredOutputFormat != provider.OutputFormatOpenAIJSONSchema {
 		return nil, &ModelError{Kind: ErrorInvalidRequest, Operation: "chat.output", Message: "route has no declared strict JSON Schema wire format"}
 	}
 	return map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "run_output", "strict": true, "schema": output.Schema}}, nil

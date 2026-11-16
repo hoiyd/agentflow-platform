@@ -37,7 +37,7 @@ func TestWorkspaceRuntimeAuthorizationPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Tools: manager}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Tools: manager}, newHTTPFixtureClientForTest())
 	agent, err := storage.ForWorkspace(domain.NewWorkspaceScope(spaces[0])).CreateAgent(domain.Agent{Name: "Calculator owner", Tools: []string{"calculator"}})
 	if err != nil {
 		t.Fatal(err)

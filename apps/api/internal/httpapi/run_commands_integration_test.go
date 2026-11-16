@@ -17,7 +17,7 @@ import (
 func TestRunCommandDetachesOnlyAfterAdmission(t *testing.T) {
 	storage := fixturestore.New()
 	controller := concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: storage}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: storage}, newHTTPFixtureClientForTest())
 	type key struct{}
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), key{}, "request-metadata"))
 	defer cancel()

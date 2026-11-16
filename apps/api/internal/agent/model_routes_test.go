@@ -257,7 +257,7 @@ func TestRuntimeTurnModelRoutesCallsAcrossProviders(t *testing.T) {
 	store := fixturestore.New()
 	conversation, _ := store.CreateConversation("model routing")
 	config := domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100, SafetyMarginTokens: 50}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog, ContextAssembly: config}, nil)
+	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newHTTPFixtureClientForTest(), ModelRoutes: catalog, ContextAssembly: config}, nil)
 	agent, err := store.CreateAgent(domain.Agent{Name: "Routing agent", SystemPrompt: "help"})
 	if err != nil {
 		t.Fatal(err)
@@ -304,7 +304,7 @@ func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
 	}
 	store := fixturestore.New()
 	conversation, _ := store.CreateConversation("route affinity")
-	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
+	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newHTTPFixtureClientForTest(), ModelRoutes: catalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatal(err)

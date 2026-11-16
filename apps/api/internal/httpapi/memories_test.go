@@ -20,7 +20,7 @@ import (
 func TestMemoryCreateAndSearchAPI(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	provider := memorypkg.NewBuiltinProvider(fixtureStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {
 		t.Fatalf("initialize memory provider: %v", err)
@@ -71,7 +71,7 @@ func TestMemoryHandlersProjectDependencyFailures(t *testing.T) {
 func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	provider := memorypkg.NewBuiltinProvider(fixtureStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {
 		t.Fatalf("initialize memory provider: %v", err)

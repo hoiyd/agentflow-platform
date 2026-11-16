@@ -67,7 +67,7 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry)}
 	response := httptest.NewRecorder()
 
@@ -118,7 +118,7 @@ func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testin
 	}
 	run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
 	_, _ = fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry)}
 	response := httptest.NewRecorder()
 
@@ -162,7 +162,7 @@ func TestCompleteStreamingRunGroundsClaimsInSelectedKnowledge(t *testing.T) {
 	_, _ = fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
 		"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{{Source: "knowledge", CitationSourceID: "S1", Selected: true}}},
 	}})
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry)}
 	response := httptest.NewRecorder()
 	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
@@ -236,7 +236,7 @@ func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	want := fmt.Errorf("list messages failed")
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{
 		store: fixtureStore, agentRuntime: runtime,
 		verification: verification.NewEngine(fixtureStore, registry),
@@ -282,7 +282,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry), runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
 	first := httptest.NewRecorder()
 	if !handler.completeStreamingRun(first, first, nil, context.Background(), runCompletionRequest{
@@ -370,7 +370,7 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	memoryProvider := &recordingMemoryOperations{}
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime, memories: memoryProvider}
 	response := httptest.NewRecorder()
@@ -424,7 +424,7 @@ func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *tes
 		}},
 	}})
 
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
 	response := httptest.NewRecorder()
 	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
@@ -474,7 +474,7 @@ func TestCompleteStreamingRunPersistsOnlyWebSourcesInFinalModelContext(t *testin
 	_, _ = fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventModelCompleted, Payload: map[string]any{
 		"output": answer, "manifest_id": "manifest-final",
 	}})
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
 	response := httptest.NewRecorder()
 	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{

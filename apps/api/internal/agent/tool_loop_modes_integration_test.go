@@ -118,7 +118,7 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				}
 				client := openai.NewClientWithTimeout("fixture-not-a-secret", server.URL, "fixture-model", time.Second)
 				client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureFull}))
-				options := RuntimeOptions{Store: storage, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxToolCalls: 4, MaxRuntimeMS: 10000}, Autonomous: AutonomousLimits{MaxIterations: 1}}
+				options := RuntimeOptions{Store: storage, EmbeddingClient: newHTTPFixtureClientForTest(), RouterMode: RouterModeQuery, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxToolCalls: 4, MaxRuntimeMS: 10000}, Autonomous: AutonomousLimits{MaxIterations: 1}}
 				if display {
 					client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureMetadata}))
 					identity := client.RuntimeIdentity()

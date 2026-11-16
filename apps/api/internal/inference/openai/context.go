@@ -39,22 +39,6 @@ func toolDefinitionName(definition map[string]any) string {
 	return strings.TrimSpace(name)
 }
 
-func textPromptParts(messages []Message) (string, string) {
-	var system strings.Builder
-	var prompt strings.Builder
-	for _, message := range messages {
-		if message.Role == "system" {
-			system.WriteString(message.Content)
-			continue
-		}
-		if prompt.Len() > 0 {
-			prompt.WriteString("\n")
-		}
-		prompt.WriteString(message.Content)
-	}
-	return strings.TrimSpace(system.String()), strings.TrimSpace(prompt.String())
-}
-
 func contextTracePayload(manifest domain.ContextManifest) map[string]any {
 	if manifest.ID == "" {
 		return map[string]any{}

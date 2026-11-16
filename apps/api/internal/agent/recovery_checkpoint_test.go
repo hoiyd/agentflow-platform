@@ -30,7 +30,7 @@ func TestRejectedRecoveryPreservesCheckpoint(t *testing.T) {
 	for _, reason := range []string{"missing router", "Stop before resume"} {
 		t.Run(reason, func(t *testing.T) {
 			storage := &stopBeforeResumeStore{Store: fixturestore.New()}
-			runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, newLocalFallbackOpenAIClientForTest())
+			runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, newHTTPFixtureClientForTest())
 			conversation, err := storage.CreateConversation("Synthetic checkpoint rejection")
 			if err != nil {
 				t.Fatal(err)

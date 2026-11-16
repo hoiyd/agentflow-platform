@@ -1,19 +1,10 @@
 package openai
 
 import (
-	"crypto/sha256"
-	"math"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
-
-func suffix(index int, total int) string {
-	if index == total-1 {
-		return ""
-	}
-	return " "
-}
 
 func normalizeBaseURL(baseURL string) string {
 	baseURL = strings.TrimSpace(baseURL)
@@ -82,39 +73,12 @@ func estimateTokens(value string) int {
 	return len([]rune(value))/4 + 1
 }
 
-func deterministicEmbedding(input string, dimensions int) []float64 {
-	if dimensions <= 0 {
-		dimensions = 1536
+func truncateText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
 	}
-	vector := make([]float64, dimensions)
-	words := strings.Fields(strings.ToLower(input))
-	if len(words) == 0 {
-		words = []string{input}
-	}
-	for _, word := range words {
-		sum := sha256.Sum256([]byte(word))
-		for i := 0; i < len(sum); i += 2 {
-			index := int(sum[i])<<8 + int(sum[i+1])
-			index = index % dimensions
-			sign := 1.0
-			if sum[(i+1)%len(sum)]%2 == 0 {
-				sign = -1
-			}
-			vector[index] += sign
-		}
-	}
-	var norm float64
-	for _, value := range vector {
-		norm += value * value
-	}
-	if norm == 0 {
-		return vector
-	}
-	norm = math.Sqrt(norm)
-	for i := range vector {
-		vector[i] = vector[i] / norm
-	}
-	return vector
+	return value[:limit] + "..."
 }
 
 func tokenPayload(payload map[string]any, usage Usage) map[string]any {

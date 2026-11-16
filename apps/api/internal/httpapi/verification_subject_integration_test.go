@@ -417,7 +417,7 @@ func TestVerificationSubjectConcurrentResumeCannotReplaceVerifyingCandidate(t *t
 		return verification.AnswerRelevanceEmbedding{Vector: vector, Provider: "fixture", Model: "fixture", Dimensions: 2}, nil
 	}})
 	var calls atomic.Int32
-	client := verificationReplacementClient{Client: newLocalFallbackOpenAIClientForTest(), calls: &calls}
+	client := verificationReplacementClient{Client: newHTTPFixtureClientForTest(), calls: &calls}
 	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: f.storage}, client)
 	controller := concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 2, QueueSize: 2, WaitTimeout: 5 * time.Second})
 	handler := &Handler{store: f.storage, agentRuntime: runtime, verification: verification.NewEngine(f.storage, registry), runController: controller}

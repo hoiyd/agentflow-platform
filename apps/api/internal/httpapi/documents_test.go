@@ -104,7 +104,7 @@ func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
 func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	createBody := []byte(`{
@@ -174,8 +174,8 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("expected one result, got %d", len(items))
 	}
-	if searchResponse.Embedding.Provider != "simulated" || !searchResponse.Embedding.Estimated {
-		t.Fatalf("expected simulated estimated embedding metadata, got %#v", searchResponse.Embedding)
+	if searchResponse.Embedding.Provider != "openai_compatible" || searchResponse.Embedding.Estimated {
+		t.Fatalf("expected HTTP embedding metadata, got %#v", searchResponse.Embedding)
 	}
 	if searchResponse.Embedding.Model == "" {
 		t.Fatalf("expected embedding model metadata, got %#v", searchResponse.Embedding)
@@ -288,7 +288,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if evalResponse.Summary.Total != 2 || evalResponse.Summary.HitAt1 != 1 || evalResponse.Summary.HitAt3 != 1 || evalResponse.Summary.HitAt5 != 1 || evalResponse.Summary.Misses != 1 {
 		t.Fatalf("unexpected evaluation summary: %#v", evalResponse.Summary)
 	}
-	if evalResponse.Embedding.Provider != "simulated" || evalResponse.Embedding.Model == "" {
+	if evalResponse.Embedding.Provider != "openai_compatible" || evalResponse.Embedding.Model == "" {
 		t.Fatalf("expected evaluation embedding metadata, got %#v", evalResponse.Embedding)
 	}
 	if evalResponse.Fusion != searchResponse.Fusion {
@@ -406,7 +406,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 func TestRAGSearchBlocksPromptInjectionAndReturnsDecision(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	createBody := []byte(`{
@@ -470,7 +470,7 @@ func TestDeleteDocumentReturnsNotFoundForMissingDocument(t *testing.T) {
 func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	for _, tc := range []struct {
@@ -522,7 +522,7 @@ func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
 func TestUploadDocumentAPIRejectsUnsupportedAndEmptyFiles(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	for _, tc := range []struct {

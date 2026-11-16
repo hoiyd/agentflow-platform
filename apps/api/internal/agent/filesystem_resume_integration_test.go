@@ -55,7 +55,7 @@ func TestFilesystemFrozenRuntimePostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Tools: manager}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Tools: manager}, newHTTPFixtureClientForTest())
 	owned, err := storage.ForWorkspace(domain.NewWorkspaceScope(workspace)).CreateAgent(domain.Agent{Name: "File reader", Tools: []string{"file_list", "file_search", "file_read"}})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestFilesystemFrozenRuntimePostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime = newRuntimeForTest(RuntimeOptions{Store: storage, Tools: replacement}, newLocalFallbackOpenAIClientForTest())
+	runtime = newRuntimeForTest(RuntimeOptions{Store: storage, Tools: replacement}, newHTTPFixtureClientForTest())
 	for _, run := range runs {
 		if _, err = runtime.restoreRuntime(run); err != nil {
 			t.Fatal(err)

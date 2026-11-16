@@ -91,8 +91,9 @@ Embedding never participates in Chat routing. The default Ollama endpoint is
 `http://localhost:11434/api/embed`; set the actual model and dimension.
 For credentialed OpenAI-compatible embeddings, use its `/v1` base URL and
 `EMBEDDING_API_KEY`. A keyless non-Ollama call fails rather than returning
-synthetic vectors. Offline `simulated / local_hash_embedding` is explicit and
-not quality evidence.
+synthetic vectors. The offline `hash` evaluation profile uses a separate
+embedding-only implementation, retaining `simulated / local_hash_embedding`
+identity; it is not semantic quality evidence or a Chat fallback.
 
 Stored columns use `vector(1536)`. Choose matching output dimensions or migrate
 the vector columns; merely setting `EMBEDDING_DIMENSIONS` is not proof of

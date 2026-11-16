@@ -60,7 +60,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	}
 	writeBenchmarkReplayArtifact(t, "benchmark-recovery-before-replay.json", beforeResume)
 
-	client := newLocalFallbackOpenAIClientForTest()
+	client := newHTTPFixtureClientForTest()
 	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore, RouterMode: agent.RouterModeQuery, Autonomous: agent.AutonomousLimits{
 		MaxIterations:  2,
 		MaxRuntime:     time.Minute,
@@ -165,7 +165,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableStages(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore, RouterMode: agent.RouterModeQuery}, newLocalFallbackOpenAIClientForTest())
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore, RouterMode: agent.RouterModeQuery}, newHTTPFixtureClientForTest())
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)

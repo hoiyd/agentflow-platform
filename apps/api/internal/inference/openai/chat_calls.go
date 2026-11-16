@@ -2,9 +2,6 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
-	"log"
-	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/inference/provider"
@@ -12,17 +9,11 @@ import (
 )
 
 func (c *Client) PrepareAgentChat(ctx context.Context, request provider.ChatRequest) (provider.PreparedChat, error) {
-	if !c.HasAPIKey() && !c.simulated {
+	if !c.HasAPIKey() {
 		return provider.PreparedChat{}, missingCredentialError("chat.prepare")
 	}
 	raw := ensureCurrentInput(buildMessagesWithSystemPrompt(request.SystemPrompt, request.History, request.ToolNames), request.Latest)
-	model := c.model
-	definitions := request.Definitions
-	if c.simulated {
-		model = "local_fallback"
-		definitions = nil
-	}
-	prepared, err := c.prepareModelContextForModel(ctx, model, raw, definitions)
+	prepared, err := c.prepareModelContextForModel(ctx, c.model, raw, request.Definitions)
 	if err != nil {
 		return provider.PreparedChat{}, err
 	}
@@ -30,7 +21,7 @@ func (c *Client) PrepareAgentChat(ctx context.Context, request provider.ChatRequ
 }
 
 func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message, definitions []map[string]any) (provider.PreparedChat, error) {
-	if !c.HasAPIKey() && !c.simulated {
+	if !c.HasAPIKey() {
 		return provider.PreparedChat{}, missingCredentialError("chat.prepare_followup")
 	}
 	prepared, err := c.prepareModelContext(ctx, raw, definitions)
@@ -103,9 +94,6 @@ func toolNames(definitions []map[string]any) []string {
 }
 
 func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedChat, kind provider.ChatStreamKind, trace provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
-	if c.simulated {
-		return c.streamSimulatedAnswer(ctx, prepared, trace, events)
-	}
 	if !c.HasAPIKey() {
 		return false, missingCredentialError("chat.stream")
 	}
@@ -142,45 +130,4 @@ func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedCha
 	endPayload := map[string]any{"model": c.model, "output": output, "output_chars": len(output)}
 	trace.Recorder.LLMEnd(ctx, span, tokenPayload(endPayload, usage))
 	return emitted, nil
-}
-
-func (c *Client) streamSimulatedAnswer(ctx context.Context, prepared provider.PreparedChat, trace provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
-	log.Printf("chat_simulation latest_len=%d", len(prepared.Latest))
-	output := fallbackEventResponse(prepared.Latest)
-	callCtx := budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
-	callCtx = withRequestManifest(callCtx, prepared.Manifest)
-	reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)), c.routeID)
-	if err != nil {
-		return false, err
-	}
-	payload, err := json.Marshal(map[string]any{"model": "local_fallback", "messages": prepared.Messages, "stream": true, "simulated": true})
-	if err != nil {
-		return false, err
-	}
-	ref, err := c.recordModelRequest(callCtx, reservation.OperationID, "simulated.stream", "local_fallback", payload)
-	if err != nil {
-		return false, err
-	}
-	started := time.Now()
-	startPayload := mergePayload(map[string]any{
-		"model": "local_fallback", "provider": "simulated", "simulated": true, "system": prepared.SystemPrompt,
-		"input": prepared.Latest, "input_chars": len(prepared.Latest),
-	}, contextTracePayload(prepared.Manifest))
-	if len(trace.Memories) > 0 {
-		startPayload["retrieved_memories"] = retrievedMemoryPayload(trace.Memories)
-	}
-	if len(trace.Knowledge) > 0 {
-		startPayload["retrieved_chunks"] = retrievedChunkPayload(trace.Knowledge)
-	}
-	span := trace.Recorder.LLMStart(ctx, trace.RunID, trace.StepID, startPayload)
-	c.streamText(ctx, output, 45*time.Millisecond, events)
-	usage := estimateUsage(messagesToText(prepared.Messages), output)
-	c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, "simulated", ctx.Err())
-	if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
-		return false, err
-	}
-	trace.Recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
-		"model": "local_fallback", "provider": "simulated", "simulated": true, "output": output, "output_chars": len(output),
-	}, usage))
-	return true, nil
 }
