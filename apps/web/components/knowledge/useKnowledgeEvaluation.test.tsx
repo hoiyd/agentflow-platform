@@ -12,6 +12,15 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+it("rejects a legacy case array before sending a request", async () => {
+  const { result } = renderHook(() => useKnowledgeEvaluation());
+  act(() => result.current.setEvaluationCases('[{"id":"old","query":"ROLLBACK-42"}]'));
+  await act(async () => result.current.runEvaluation());
+  expect(runRAGEvaluation).not.toHaveBeenCalled();
+  expect(result.current.error).toContain("Golden Dataset object");
+  expect(result.current.isRunningEvaluation).toBe(false);
+});
+
 it("discards a pending evaluation when its threshold changes", async () => {
   let resolve!: (value: RAGEvaluationRunResponse) => void;
   runRAGEvaluation.mockReturnValue(new Promise<RAGEvaluationRunResponse>((complete) => { resolve = complete; }));

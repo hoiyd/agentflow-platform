@@ -55,9 +55,9 @@ func TestResolveEvaluationCasesRejectsInvalidGoldenDataset(t *testing.T) {
 		build func() domain.RAGEvaluationRunRequest
 		match string
 	}{
-		{name: "dataset and legacy cases", build: func() domain.RAGEvaluationRunRequest {
-			return domain.RAGEvaluationRunRequest{Dataset: validDataset(), Cases: []domain.RAGEvaluationCase{validCase}}
-		}, match: "either dataset or cases"},
+		{name: "missing dataset", build: func() domain.RAGEvaluationRunRequest {
+			return domain.RAGEvaluationRunRequest{}
+		}, match: "Golden Dataset"},
 		{name: "unsupported schema", build: func() domain.RAGEvaluationRunRequest {
 			dataset := validDataset()
 			dataset.SchemaVersion = "v2"
@@ -95,12 +95,6 @@ func TestResolveEvaluationCasesRejectsInvalidGoldenDataset(t *testing.T) {
 			dataset.Cases[0].RequiredSourceCount = 2
 			return domain.RAGEvaluationRunRequest{Dataset: dataset}
 		}, match: "cannot exceed expected_sources"},
-		{name: "legacy expectation inside dataset", build: func() domain.RAGEvaluationRunRequest {
-			dataset := validDataset()
-			dataset.Cases[0].ExpectedSources = nil
-			dataset.Cases[0].ExpectedDocumentIDs = []string{"doc-1"}
-			return domain.RAGEvaluationRunRequest{Dataset: dataset}
-		}, match: "legacy expected fields"},
 		{name: "empty forbidden source", build: func() domain.RAGEvaluationRunRequest {
 			dataset := validDataset()
 			dataset.Cases[0].ForbiddenSources = []domain.RAGGoldenSource{{}}

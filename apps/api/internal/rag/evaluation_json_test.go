@@ -27,12 +27,12 @@ func TestEvaluationJSONRejectsAmbiguousConstraints(t *testing.T) {
 		`{"cases":[{"query":"x","unknown":true}]}`,
 		`{"cases":[{"query":"x"}]} {}`,
 	} {
-		var request domain.RAGEvaluationRunRequest
+		var request domain.RAGGoldenDataset
 		if err := DecodeEvaluationJSON([]byte(raw), &request); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}
 	}
-	var request domain.RAGEvaluationRunRequest
+	var request domain.RAGGoldenDataset
 	if err := DecodeEvaluationJSON([]byte(`{"cases":[{"query":"x","metadata":{"CaseSensitive":"x","casesensitive":"y"}}]}`), &request); err != nil {
 		t.Fatal(err)
 	}

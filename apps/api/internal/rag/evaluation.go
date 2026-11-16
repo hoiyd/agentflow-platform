@@ -13,17 +13,14 @@ func EvaluateCase(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDoc
 		answerable = *evalCase.Answerable
 	}
 	result := domain.RAGEvaluationCaseResult{
-		ID:                    strings.TrimSpace(evalCase.ID),
-		Query:                 strings.TrimSpace(evalCase.Query),
-		Answerable:            answerable,
-		ExpectedSources:       evalCase.ExpectedSources,
-		ForbiddenSources:      evalCase.ForbiddenSources,
-		RequiredSourceCount:   evalCase.RequiredSourceCount,
-		ExpectedDocumentIDs:   evalCase.ExpectedDocumentIDs,
-		ExpectedChunkIDs:      evalCase.ExpectedChunkIDs,
-		ExpectedChunkContains: evalCase.ExpectedChunkContains,
-		Tags:                  evalCase.Tags,
-		Items:                 items,
+		ID:                  strings.TrimSpace(evalCase.ID),
+		Query:               strings.TrimSpace(evalCase.Query),
+		Answerable:          answerable,
+		ExpectedSources:     evalCase.ExpectedSources,
+		ForbiddenSources:    evalCase.ForbiddenSources,
+		RequiredSourceCount: evalCase.RequiredSourceCount,
+		Tags:                evalCase.Tags,
+		Items:               items,
 	}
 	if result.ID == "" {
 		result.ID = result.Query
@@ -80,15 +77,6 @@ func CountForbiddenMatches(evalCase domain.RAGEvaluationCase, items []domain.Ret
 }
 
 func expectedEvidenceRank(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) (int, int) {
-	if len(evalCase.ExpectedSources) == 0 {
-		for index, item := range items {
-			if ragCaseItemMatches(evalCase, item) {
-				return index + 1, 1
-			}
-		}
-		return 0, 0
-	}
-
 	required := evalCase.RequiredSourceCount
 	if required <= 0 {
 		required = 1
@@ -133,39 +121,6 @@ func assignExpectedSource(sourceIndex int, sources []domain.RAGGoldenSource, ite
 	return false
 }
 
-func ragCaseItemMatches(evalCase domain.RAGEvaluationCase, item domain.RetrievedDocumentChunk) bool {
-	if len(evalCase.ExpectedSources) > 0 {
-		return goldenSourceMatchesAny(evalCase.ExpectedSources, item)
-	}
-	hasExpectation := false
-	if len(evalCase.ExpectedDocumentIDs) > 0 {
-		hasExpectation = true
-		if !stringInSlice(item.Document.ID, evalCase.ExpectedDocumentIDs) {
-			return false
-		}
-	}
-	if len(evalCase.ExpectedChunkIDs) > 0 {
-		hasExpectation = true
-		if !stringInSlice(item.Chunk.ID, evalCase.ExpectedChunkIDs) {
-			return false
-		}
-	}
-	if len(evalCase.ExpectedChunkContains) > 0 {
-		hasExpectation = true
-		content := strings.ToLower(item.Chunk.Content)
-		for _, expected := range evalCase.ExpectedChunkContains {
-			expected = strings.ToLower(strings.TrimSpace(expected))
-			if expected == "" {
-				continue
-			}
-			if !strings.Contains(content, expected) {
-				return false
-			}
-		}
-	}
-	return hasExpectation
-}
-
 func goldenSourceMatchesAny(sources []domain.RAGGoldenSource, item domain.RetrievedDocumentChunk) bool {
 	for _, source := range sources {
 		if goldenSourceMatches(source, item) {
@@ -205,13 +160,4 @@ func goldenSourceMatches(source domain.RAGGoldenSource, item domain.RetrievedDoc
 		}
 	}
 	return hasMatcher
-}
-
-func stringInSlice(value string, values []string) bool {
-	for _, candidate := range values {
-		if strings.TrimSpace(candidate) == value {
-			return true
-		}
-	}
-	return false
 }

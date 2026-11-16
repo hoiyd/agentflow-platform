@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { runRAGEvaluation, type RAGEvaluationCase, type RAGEvaluationRunResponse, type RAGGoldenDataset } from "../../lib/knowledge-api";
+import { runRAGEvaluation, type RAGEvaluationRunResponse, type RAGGoldenDataset } from "../../lib/knowledge-api";
 import { createLatestRequestController } from "../../lib/latest-request";
 
 const DEFAULT_RAG_EVAL_CASES = `{
@@ -59,11 +59,8 @@ export function useKnowledgeEvaluation() {
       const parsed = JSON.parse(evaluationCases) as unknown;
       const parsedMinSimilarity = Number(minSimilarity);
       const options = { top_k: 5, min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0 };
-      const result = Array.isArray(parsed)
-        ? await runRAGEvaluation({ cases: parsed as RAGEvaluationCase[], ...options }, request.signal)
-        : isGoldenDataset(parsed)
-          ? await runRAGEvaluation({ dataset: parsed, ...options }, request.signal)
-          : (() => { throw new Error("Evaluation input must be a Golden Dataset object or a legacy case array"); })();
+      if (!isGoldenDataset(parsed)) throw new Error("Evaluation input must be a Golden Dataset object");
+      const result = await runRAGEvaluation({ dataset: parsed, ...options }, request.signal);
       if (request.isCurrent()) setEvaluationResult(result);
     } catch (evaluationError) {
       if (request.isCurrent()) setError(evaluationError instanceof Error ? evaluationError.message : "Failed to run retrieval evaluation");

@@ -38,21 +38,13 @@ remain available to settle an uncertain prior result.
 ## Legacy Data
 
 Unassigned, non-template Agents are not public templates and are not exposed by
-Workspace APIs. Migration requires an operator-selected target Workspace. Existing
-IDs and historical Run references are retained for the primary target; additional
-owners receive new independent Agent IDs. Never rewrite historical Snapshots.
+Workspace APIs. Startup schema upgrades and protection of private legacy profiles
+remain in place; startup never guesses ownership or publishes those profiles.
+The one-time ownership-assignment command is retired. Deployments with unassigned
+private Agents must stop here and complete explicit assignment using the command
+from revision `cca50fd`, with a restricted backup and the old API stopped, before
+upgrading. Existing IDs, Run references and Snapshots must not be rewritten.
 
-Stop the old API and take a restricted-access PostgreSQL backup first. Preview
-the assignment, then apply the same explicit targets:
-
-```sh
-go -C apps/api run ./cmd/migrate-workspace-agents --workspace <primary-id> --copy-workspace <optional-copy-id>
-go -C apps/api run ./cmd/migrate-workspace-agents --workspace <primary-id> --copy-workspace <optional-copy-id> --apply
-```
-
-Omit `--copy-workspace` if no additional copy is needed. The command initializes
-the schema and templates but assigns ownership only with `--apply`. Assignment is
-transactional and idempotent, and refuses inactive/missing targets or active Runs.
 Historical Runs in other Workspaces
 remain readable; they cannot resume using a now-foreign Agent. Reverting to an
 older globally scoped API would reopen access and is not a safe authorization rollback.

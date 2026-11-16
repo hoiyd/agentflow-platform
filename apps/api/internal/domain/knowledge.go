@@ -314,30 +314,26 @@ type RAGGoldenDatasetInfo struct {
 type RAGEvaluationCase struct {
 	// Case restrictions intersect the request scope; require_filter prevents an
 	// accidentally omitted constraint from becoming an unfiltered experiment.
-	Metadata              map[string]string `json:"metadata,omitempty"`
-	MetadataFilter        *MetadataFilter   `json:"metadata_filter,omitempty"`
-	RequireFilter         bool              `json:"require_filter,omitempty"`
-	ID                    string            `json:"id"`
-	Query                 string            `json:"query"`
-	Answerable            *bool             `json:"answerable,omitempty"`
-	ExpectedSources       []RAGGoldenSource `json:"expected_sources,omitempty"`
-	ForbiddenSources      []RAGGoldenSource `json:"forbidden_sources,omitempty"`
-	RequiredSourceCount   int               `json:"required_source_count,omitempty"`
-	ExpectedDocumentIDs   []string          `json:"expected_document_ids,omitempty"`
-	ExpectedChunkIDs      []string          `json:"expected_chunk_ids,omitempty"`
-	ExpectedChunkContains []string          `json:"expected_chunk_contains,omitempty"`
-	MinAcceptableRank     int               `json:"min_acceptable_rank,omitempty"`
-	Tags                  []string          `json:"tags,omitempty"`
+	Metadata            map[string]string `json:"metadata,omitempty"`
+	MetadataFilter      *MetadataFilter   `json:"metadata_filter,omitempty"`
+	RequireFilter       bool              `json:"require_filter,omitempty"`
+	ID                  string            `json:"id"`
+	Query               string            `json:"query"`
+	Answerable          *bool             `json:"answerable,omitempty"`
+	ExpectedSources     []RAGGoldenSource `json:"expected_sources,omitempty"`
+	ForbiddenSources    []RAGGoldenSource `json:"forbidden_sources,omitempty"`
+	RequiredSourceCount int               `json:"required_source_count,omitempty"`
+	MinAcceptableRank   int               `json:"min_acceptable_rank,omitempty"`
+	Tags                []string          `json:"tags,omitempty"`
 }
 
 type RAGEvaluationRunRequest struct {
-	Dataset        *RAGGoldenDataset   `json:"dataset,omitempty"`
-	Cases          []RAGEvaluationCase `json:"cases,omitempty"`
-	WorkspaceID    string              `json:"workspace_id,omitempty"`
-	Metadata       map[string]string   `json:"metadata,omitempty"`
-	MetadataFilter *MetadataFilter     `json:"metadata_filter,omitempty"`
-	TopK           int                 `json:"top_k,omitempty"`
-	MinSimilarity  float64             `json:"min_similarity,omitempty"`
+	Dataset        *RAGGoldenDataset `json:"dataset,omitempty"`
+	WorkspaceID    string            `json:"workspace_id,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
+	MetadataFilter *MetadataFilter   `json:"metadata_filter,omitempty"`
+	TopK           int               `json:"top_k,omitempty"`
+	MinSimilarity  float64           `json:"min_similarity,omitempty"`
 }
 
 type RAGEvaluationSummary struct {
