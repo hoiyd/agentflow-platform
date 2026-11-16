@@ -15,7 +15,7 @@ func (r *Runtime) suspendHumanInputClarification(ctx context.Context, prepared P
 	committed := false
 	defer func() {
 		if err != nil && !committed {
-			err = errors.Join(err, r.failResumedClarification(ctx, prepared.Run.ID, step.ID, err))
+			err = errors.Join(err, r.failResumedStage(ctx, prepared.Run.ID, step.ID, err))
 		}
 	}()
 	items, err := r.store.ListRunEvents(prepared.Run.ID)

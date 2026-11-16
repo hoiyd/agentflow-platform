@@ -56,7 +56,9 @@ repeat native streaming completion with paired observations until there are no
 more calls. Single forwards answer chunks immediately; if a round subsequently
 chooses Tools, its provisional commentary is retracted with `model.delta.reset`
 before continuing. Only the final answer becomes the persisted assistant Message.
-Tool-free and explicitly simulated Chat retain their existing streaming paths. Typed
+Tool-free Chat retains its existing streaming path. Completed Multi/Loop answers
+and recovered completed results are delivered in one `model.delta`, without
+simulated typing or per-word delays; this is not Provider token streaming. Typed
 retrieval, context, model, Tool, usage, and completion events are persisted.
 See [Bounded Tool loop](../tools/bounded-tool-loop.md).
 

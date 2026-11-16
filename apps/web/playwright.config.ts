@@ -1,9 +1,16 @@
 import { defineConfig } from "@playwright/test";
 import path from "node:path";
+import fs from "node:fs";
 
 if (!process.env.TEST_DATABASE_URL) {
   throw new Error("TEST_DATABASE_URL is required; browser tests never use the application database");
 }
+
+const buildId = process.env.AGENTFLOW_BROWSER_BUILD_ID;
+if (buildId && fs.readFileSync(path.resolve(__dirname, ".next-functional/BUILD_ID"), "utf8").trim() !== buildId) {
+  throw new Error("The functional frontend does not match this browser gate's build");
+}
+const output = process.env.AGENTFLOW_BROWSER_OUTPUT_DIR;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -12,7 +19,8 @@ export default defineConfig({
   retries: 0,
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  reporter: [["list"], ["html", { open: "never" }], ["json", { outputFile: "test-results/results.json" }]],
+  outputDir: output ? path.join(output, "artifacts") : "test-results",
+  reporter: [["list"], ["html", { open: "never", ...(output ? { outputFolder: path.join(output, "report") } : {}) }], ["json", { outputFile: output ? path.join(output, "results.json") : "test-results/results.json" }]],
   use: {
     actionTimeout: 15_000,
     baseURL: "http://127.0.0.1:13000",
@@ -33,7 +41,7 @@ export default defineConfig({
     },
     {
       name: "next-production",
-      command: "npm run build -- --webpack && npm run start -- --hostname 127.0.0.1 --port 13000",
+      command: `${buildId ? "" : "npm run build -- --webpack && "}npm run start -- --hostname 127.0.0.1 --port 13000`,
       env: {
         NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:18080",
         AGENTFLOW_TEST_DIST_DIR: ".next-functional"

@@ -13,6 +13,7 @@ const scopes = {
   "release-recovery-drill.sh": new Set(["TEST_DATABASE_URL", "RELEASE_DRILL_DATABASE_URL", "RELEASE_DRILL_REPORT_PATH", "RELEASE_DRILL_REPO_ROOT"]),
   "test.sh": null,
   "test-browser.sh": null,
+  "test-browser-ci.sh": null,
   "test-keycloak-auth.sh": null,
   "evaluation/eval.sh": null,
   "evaluation/benchmark-evidence.sh": null,

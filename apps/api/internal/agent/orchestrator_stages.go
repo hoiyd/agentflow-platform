@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
@@ -45,7 +44,7 @@ func (r *Runtime) runCollaborationTail(ctx context.Context, events chan<- domain
 			return err
 		}
 	}
-	r.emitFinalDeltas(ctx, prepared.Run.ID, final, events)
+	r.emitCompletedAnswer(ctx, prepared.Run.ID, final, events)
 	return nil
 }
 
@@ -167,19 +166,17 @@ func finalizerPrompt() string {
 	return "You are the Finalizer collaboration role. Produce the final user-facing answer by combining the plan, worker result, and reviewer notes. Be concise and do not mention internal implementation details unless relevant."
 }
 
-func (r *Runtime) emitFinalDeltas(ctx context.Context, runID string, text string, events chan<- domain.RunEvent) {
-	parts := strings.SplitAfter(strings.TrimSpace(text), " ")
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		item := liveDeltaEvent(runID, part)
-		select {
-		case <-ctx.Done():
-			return
-		case events <- item:
-			r.publishLive(item)
-			time.Sleep(15 * time.Millisecond)
-		}
+// Staged and recovered results are already complete; do not simulate tokens.
+func (r *Runtime) emitCompletedAnswer(ctx context.Context, runID string, text string, events chan<- domain.RunEvent) {
+	text = strings.TrimSpace(text)
+	if text == "" || ctx.Err() != nil {
+		return
+	}
+	item := liveDeltaEvent(runID, text)
+	select {
+	case <-ctx.Done():
+		return
+	case events <- item:
+		r.publishLive(item)
 	}
 }

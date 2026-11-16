@@ -10,6 +10,8 @@ The drill builds the current API revision, starts real API child processes
 against PostgreSQL, and drives them only through public HTTP endpoints. A local
 OpenAI-compatible fixture keeps the exercise deterministic and free of provider
 cost; it proves process and persistence behavior, not model quality.
+Setup creates an owned Workspace and Agent through HTTP and uses their returned
+IDs throughout the drill; it never invents resource identities.
 
 | Step | Fault or boundary | Required evidence |
 | --- | --- | --- |

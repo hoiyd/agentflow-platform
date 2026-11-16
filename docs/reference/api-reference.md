@@ -1,7 +1,7 @@
 # HTTP API Reference
 
-This page maps endpoints and operational semantics. Exact request/response DTOs
-are owned by [OpenAPI](../../api/openapi.yaml), not repeated JSON examples here.
+This page explains operational semantics and contract coverage. Defined
+request/response DTOs are owned by [OpenAPI](../../api/openapi.yaml), not repeated here.
 See [contract generation](../architecture/api-contract.md) before changing them.
 Chat/Continue/Resume use SSE; inspection and resource endpoints use JSON.
 [Structured clarification](../runtime/structured-clarification.md) saves bound answers
@@ -25,87 +25,27 @@ Workspace selection is not proof of identity or Membership. In OIDC mode the
 server checks the selected namespace against persisted memberships and forbids
 payload-only override. Authentication and owner-scoped Workspace-management
 endpoints do not depend on the currently selected Workspace. Archived mutations
-return 409; deleted or foreign spaces return 404. Shared Agent/Tool configuration
-is read-only for OIDC users and writable only by the trusted-local operator.
+return 409; deleted or foreign spaces return 404. Agent configuration and Tool
+availability are Workspace-owned; global Tool policy remains operator-only.
+See [Agent/Tool ownership](../architecture/workspace-agent-tools.md).
 See [lifecycle, closing conflicts and migration](../operations/workspace-lifecycle.md).
 
 ## Endpoint Map
 
-```txt
-GET    /health
+Use [OpenAPI `paths`](../../api/openapi.yaml) for defined operations, including
+Tool approval, MCP connections, project instructions and metadata updates.
+The [route registrations](../../apps/api/internal/httpapi/routes.go),
+[MCP registrations](../../apps/api/internal/httpapi/mcp_connections.go) and
+[identity registrations](../../apps/api/internal/identity/login.go) define the
+running HTTP surface. Do not maintain another complete endpoint list here.
 
-GET    /api/auth/session
-GET    /api/auth/login
-GET    /api/auth/register
-GET    /api/auth/callback
-POST   /api/auth/logout
+### Contract Coverage Gaps
 
-GET    /api/workspaces
-POST   /api/workspaces
-GET    /api/workspaces/{id}
-PATCH  /api/workspaces/{id}
-DELETE /api/workspaces/{id}
-
-GET    /api/conversations
-POST   /api/conversations
-PATCH  /api/conversations/{id}
-DELETE /api/conversations/{id}
-GET    /api/conversations/{id}/messages
-GET    /api/conversations/{id}/task-state
-PATCH  /api/conversations/{id}/task-state
-GET    /api/conversations/{id}/task-state/revisions
-GET    /api/conversations/{id}/task-state/revisions/{version}
-
-POST   /api/chat
-
-GET    /api/skills
-GET    /api/agents
-POST   /api/agents
-GET    /api/agents/{id}
-PATCH  /api/agents/{id}
-DELETE /api/agents/{id}
-
-GET    /api/runs
-GET    /api/runs/attention
-GET    /api/runs/{id}
-POST   /api/runs/{id}/continue
-POST   /api/runs/{id}/resume
-POST   /api/runs/{id}/cancel
-POST   /api/runs/{id}/verify
-GET    /api/runs/{id}/collaboration_steps
-GET    /api/runs/{id}/replay
-GET    /api/runs/{id}/projection
-GET    /api/runs/{id}/events
-GET    /api/runs/{id}/usage
-GET    /api/runs/{id}/model_requests
-GET    /api/runs/{id}/artifacts
-GET    /api/runs/{id}/artifacts/{artifact_id}
-GET    /api/runs/{id}/artifacts/{artifact_id}/search
-GET    /api/runs/{id}/tool-effects
-POST   /api/runs/{id}/tool-effects/{idempotency_key}/reconcile
-GET    /api/runs/{id}/episode
-GET    /api/runs/{id}/clarifications
-POST   /api/runs/{id}/clarifications/{question_id}/answers
-POST   /api/runs/{id}/clarifications/{question_id}/resume
-DELETE /api/runs/{id}/clarifications/{question_id}
-
-GET    /api/tools
-POST   /api/tools/{name}/enable
-POST   /api/tools/{name}/disable
-
-POST   /api/memories
-POST   /api/memories/search
-GET    /api/memories/{id}
-POST   /api/memories/{id}/mutations
-
-GET    /api/documents
-POST   /api/documents
-POST   /api/documents/upload
-GET    /api/documents/{id}
-DELETE /api/documents/{id}
-POST   /api/rag/search
-POST   /api/rag/evaluations/run
-```
+No uncovered operations remain among the current literal production route
+registrations. `TestHTTPRouteContractCoverage` checks their methods and paths;
+serialized resource regressions exercise request/response schemas, empty/null
+collections, range failures, mutation conflicts and foreign Workspace rejection.
+Route presence alone does not prove full behavioral or nested-schema coverage.
 
 ## Conversations and Agent Profiles
 

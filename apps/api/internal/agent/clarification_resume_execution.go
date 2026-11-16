@@ -25,7 +25,7 @@ func (r *Runtime) resumeClarificationHumanInput(ctx, executionCtx context.Contex
 	prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
 	release()
 	resumed, failures := r.runAutonomousFromState(ctx, prepared, firstAutonomousTask(steps), rebuildAutonomousState(steps, step))
-	return forwardClarificationResume(resumed, failures, events)
+	return forwardResumedEvents(resumed, failures, events)
 }
 
 func (r *Runtime) resumeClarificationTool(ctx, executionCtx context.Context, run domain.Run, record domain.Clarification, saved clarificationCheckpoint, plan clarificationResumePlan, release func(), events chan<- domain.RunEvent) error {
@@ -37,16 +37,7 @@ func (r *Runtime) resumeClarificationTool(ctx, executionCtx context.Context, run
 	if plan.completedStage != nil {
 		result.Output = plan.completedStage.Output
 	} else {
-		result, err = r.turnEngine.Execute(executionCtx, request, func(item turn.Event) {
-			forwardReasoning(events)(item)
-			if plan.restored.mode == ChatModeSingle && item.Type == turn.EventModelDelta {
-				event := liveDeltaEvent(run.ID, item.Delta)
-				if item.Reset {
-					event.Payload["reset"] = true
-				}
-				events <- event
-			}
-		})
+		result, err = r.turnEngine.Execute(executionCtx, request, resumedTurnEvents(run.ID, plan.restored.mode, events))
 		if err != nil {
 			return err
 		}
@@ -58,14 +49,10 @@ func (r *Runtime) resumeClarificationTool(ctx, executionCtx context.Context, run
 	if plan.completedStage != nil {
 		step = *plan.completedStage
 	} else {
-		step, err = r.store.UpdateCollaborationStep(record.StageID, domain.CollaborationStepCompleted, result.Output, "")
+		step, err = r.completeResumedStage(executionCtx, record.StageID, result.Output, events)
 		if err != nil {
 			return err
 		}
-		if err = r.publishStage(executionCtx, step, domain.EventStageCompleted); err != nil {
-			return err
-		}
-		events <- liveStageEvent(step)
 	}
 	if plan.restored.mode == ChatModeMultiAgent {
 		waiting, err := r.transitionRun(run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"source": "plan_approval"})
@@ -75,7 +62,7 @@ func (r *Runtime) resumeClarificationTool(ctx, executionCtx context.Context, run
 		events <- liveRunEvent(waiting)
 		return nil
 	}
-	return r.resumeClarificationAutonomous(ctx, run, step, plan.restored, release, events)
+	return r.resumeAutonomousAfterTurn(ctx, run, step, plan.restored, release, events)
 }
 
 func (r *Runtime) restoreClarificationTurn(saved clarificationCheckpoint, record domain.Clarification, restored restoredRuntime) (turn.Request, error) {
@@ -102,24 +89,4 @@ func (r *Runtime) restoreClarificationTurn(saved clarificationCheckpoint, record
 	}
 	request.Continuation, _ = json.Marshal(saved.Continuation)
 	return request, nil
-}
-
-func (r *Runtime) resumeClarificationAutonomous(ctx context.Context, run domain.Run, step domain.CollaborationStep, restored restoredRuntime, release func(), events chan<- domain.RunEvent) error {
-	steps, err := r.store.ListCollaborationSteps(run.ID)
-	if err != nil {
-		return err
-	}
-	state := rebuildRecoverableAutonomousState(steps, domain.CollaborationStep{})
-	state.NextIter = step.Iteration
-	state.OutputChars = 0
-	for _, s := range steps {
-		if s.Iteration < step.Iteration && s.Status == domain.CollaborationStepCompleted {
-			state.OutputChars += len(s.Output)
-		}
-	}
-	prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
-	release()
-	loopCtx := context.WithValue(ctx, resumedIterationKey{}, step.Iteration)
-	resumed, failures := r.runAutonomousFromState(loopCtx, prepared, firstAutonomousTask(steps), state)
-	return forwardClarificationResume(resumed, failures, events)
 }

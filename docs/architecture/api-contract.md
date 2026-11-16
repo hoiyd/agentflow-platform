@@ -19,7 +19,8 @@ DTOs and frontend path/schema types.
 
 The contract covers health, conversations/messages/Task State, streaming Chat,
 Agents, the primary Run lifecycle, Replay/Usage/Projection, Episode reports,
-request debug/capture, collaboration steps, and Tools/effect reconciliation.
+request debug/capture, collaboration steps, Tools/effect reconciliation, Memory,
+Document upload/list/delete, Task State revisions, and bounded Artifact reads/search.
 Replay nested DTOs come from the same schemas rather than hand-written frontend
 copies. Dynamic Snapshot/Manifest metadata and extension payloads remain open
 objects; this is not a schema for every internal persistence record.
@@ -27,8 +28,9 @@ Go nil collections are explicitly nullable where emitted. Frontend normalized
 views derive from the generated DTOs and default those collections to arrays;
 operation-specific UI command unions remain local. Serialized response tests
 check actual handlers against the nested schemas, including empty/default values.
-New endpoints should be added when they gain a frontend consumer or a stable
-external contract.
+Every literal production HTTP operation must be declared; the route coverage
+test rejects omissions. Multipart file bytes use a standard Go byte slice and a
+browser `File` adapter without adding another transport dependency.
 
 ## Change Workflow
 

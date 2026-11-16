@@ -9,10 +9,10 @@ import (
 	"agentflow-platform/apps/api/internal/store"
 )
 
-// CompleteClarification reuses a persisted candidate after execution recovery,
+// CompleteResumedTurn reuses a persisted candidate after execution recovery,
 // otherwise saving it through the ordinary completion gate. Resume does not
 // generate a title or enqueue another user turn for Memory.
-func CompleteClarification(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, answer string) (chunk domain.ChatChunk, resultErr error) {
+func CompleteResumedTurn(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, answer string) (chunk domain.ChatChunk, resultErr error) {
 	defer func() {
 		if resultErr == nil {
 			return

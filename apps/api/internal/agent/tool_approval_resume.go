@@ -76,7 +76,7 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 	}
 	defer func() {
 		if resultErr != nil && !turn.IsWaiting(resultErr) && record.StageID != "" {
-			resultErr = errors.Join(resultErr, r.failResumedClarification(ctx, runID, record.StageID, resultErr))
+			resultErr = errors.Join(resultErr, r.failResumedStage(ctx, runID, record.StageID, resultErr))
 		}
 	}()
 	var saved toolApprovalCheckpoint
@@ -150,23 +150,14 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 		}
 	}
 	if !completed {
-		result, err = r.turnEngine.Execute(executionCtx, request, func(item turn.Event) {
-			forwardReasoning(events)(item)
-			if restored.mode == ChatModeSingle && item.Type == turn.EventModelDelta {
-				event := liveDeltaEvent(runID, item.Delta)
-				if item.Reset {
-					event.Payload["reset"] = true
-				}
-				events <- event
-			}
-		})
+		result, err = r.turnEngine.Execute(executionCtx, request, resumedTurnEvents(runID, restored.mode, events))
 	}
 	if err != nil {
 		return err
 	}
 	if restored.mode == ChatModeSingle {
 		if completed {
-			r.emitFinalDeltas(executionCtx, runID, result.Output, events)
+			r.emitCompletedAnswer(executionCtx, runID, result.Output, events)
 		}
 		return nil
 	}
@@ -181,17 +172,13 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 		}
 	}
 	if !completed {
-		step, err = r.store.UpdateCollaborationStep(record.StageID, domain.CollaborationStepCompleted, result.Output, "")
+		step, err = r.completeResumedStage(executionCtx, record.StageID, result.Output, events)
 		if err != nil {
 			return err
 		}
-		if err = r.publishStage(executionCtx, step, domain.EventStageCompleted); err != nil {
-			return err
-		}
-		events <- liveStageEvent(step)
 	}
 	if restored.mode == ChatModeAutonomous {
-		return r.resumeClarificationAutonomous(ctx, run, step, restored, release, events)
+		return r.resumeAutonomousAfterTurn(ctx, run, step, restored, release, events)
 	}
 	if step.Role == "planner" {
 		waiting, err := r.transitionRun(run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"source": "plan_approval"})

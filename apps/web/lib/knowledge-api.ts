@@ -1,30 +1,7 @@
 import { apiArray, apiJSON, apiObject, apiVoid, expectObject } from "./api-client.ts";
 import type { components } from "./api-contract.gen.ts";
 
-export type DocumentInfo = {
-  id: string;
-  workspace_id?: string;
-  source_key?: string;
-  title: string;
-  version?: string;
-  content_hash?: string;
-  source_type: string;
-  source_uri?: string;
-  mime_type?: string;
-  metadata: Record<string, unknown>;
-  metadata_schema_version?: string;
-  lifecycle?: components["schemas"]["DocumentLifecycle"];
-  chunk_count?: number;
-  embedding_count?: number;
-  index_identity?: {
-    chunker_version: string;
-    embedding_provider: string;
-    embedding_model: string;
-    embedding_dimensions: number;
-  };
-  created_at: string;
-  updated_at: string;
-};
+export type DocumentInfo = components["schemas"]["KnowledgeDocument"];
 
 export type RetrievedDocumentChunk = {
   document: DocumentInfo;
@@ -281,7 +258,9 @@ export async function updateDocumentMetadata(
   );
 }
 
-export async function uploadDocument(input: { file: File; title?: string; metadata_schema_version?: string; metadata?: Record<string, unknown> }): Promise<DocumentInfo> {
+export async function uploadDocument(input: Omit<components["schemas"]["DocumentUploadRequest"], "file" | "metadata"> & {
+  file: File; metadata?: Record<string, unknown>;
+}): Promise<DocumentInfo> {
   const form = new FormData();
   form.append("file", input.file);
   if (input.metadata_schema_version) form.append("metadata_schema_version", input.metadata_schema_version);
