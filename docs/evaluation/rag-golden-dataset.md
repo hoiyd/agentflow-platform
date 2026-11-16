@@ -72,7 +72,7 @@ for the opt-in command and retrieval-mode comparison procedure.
 
 ## Metadata regression
 
-[`agentflow-metadata-regression@1.0.0`](../../examples/knowledge/metadata-golden-v1/dataset.json)
+[`agentflow-metadata-regression@2.0.0`](../../examples/knowledge/metadata-golden-v1/dataset.json)
 adds 12 gating cases with a separate corpus: identical queries across products and
 environments, missing fields, inherited Chunk arrays, typed number/date/boolean
 conditions, bounded OR, no match, and draft/withdrawn/expired/future exclusions.
@@ -88,13 +88,20 @@ go run ./cmd/eval rag \
   --enforce > /tmp/rag-metadata.json
 ```
 
-Cases may supply `metadata` (legacy text equality), `metadata_filter` (the existing
-[typed contract](../knowledge/typed-metadata-filters.md)), and `require_filter: true`.
-Case and request restrictions are intersected; conflicting legacy keys are rejected.
+Cases may supply `metadata_filter` (the
+[typed contract](../knowledge/typed-metadata-filters.md)) and `require_filter: true`.
+Case and request restrictions are intersected. The retired query field `metadata`
+is rejected, never translated or silently ignored.
 Workspace, schema eligibility and lifecycle always remain outside user OR clauses.
 All case constraints are preflighted before the first query; malformed/null/unknown
 constraints or an omitted required filter fail instead of broadening retrieval.
 Old datasets intentionally omitting these optional fields retain unfiltered behavior.
+
+The metadata profile's dataset version `2.0.0` uses explicit typed constraints;
+its unversioned source is now an exclusion case. Corpus content and labels are
+unchanged; the manifest version tracks the dataset. Earlier
+reports remain readable, including legacy `evidence.metadata`, but are not directly
+comparable to this changed experiment.
 
 Each case's `evidence` records applied restrictions, policy/schema versions,
 observation time, source revisions, Context selection/merge counts and source Chunk
@@ -116,7 +123,7 @@ quality improvement is claimed. Semantic embedding profiles remain explicitly op
   retrieval, divided by all declared expected sources (including failed/not-evaluated
   cases). It is `null` without expected sources. Context matches are recorded
   separately; `context_leak_count` counts selected entries that violate scope,
-  lifecycle, typed/legacy constraints or forbidden-source expectations.
+  lifecycle, typed constraints or forbidden-source expectations.
 - Per-case latency covers retrieval and Context selection; `context_tokens` is a
   local estimate of selected Context, not billed model usage. CLI embedding usage
   remains separately attributed to index/query phases; no answer is generated.

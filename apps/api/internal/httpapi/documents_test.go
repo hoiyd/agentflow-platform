@@ -111,7 +111,8 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		"source_key": "launch-notes",
 		"title": "Launch Notes",
 		"content": "The launch password is amber-9137. Keep it in the deployment notes.",
-		"metadata": {"project": "agentflow"}
+		"metadata_schema_version": "knowledge-metadata-v1",
+		"metadata": {"product": "agentflow"}
 	}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/api/documents", bytes.NewReader(createBody))
 	createRecorder := httptest.NewRecorder()
@@ -156,7 +157,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		}
 	}
 
-	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0,"knowledge_context_max_tokens":100}`)
+	searchBody := []byte(`{"query":"What is the launch password?","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"agentflow"}},"limit":3,"min_similarity":0,"knowledge_context_max_tokens":100}`)
 	searchReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(searchBody))
 	searchRecorder := httptest.NewRecorder()
 	handler.searchDocumentChunks(searchRecorder, searchReq)
@@ -239,7 +240,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		t.Fatalf("expected evidence score on relevant search result, got %#v", items[0])
 	}
 
-	unrelatedBody := []byte(`{"query":"dinner recipe ideas","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0}`)
+	unrelatedBody := []byte(`{"query":"dinner recipe ideas","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"agentflow"}},"limit":3,"min_similarity":0}`)
 	unrelatedReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(unrelatedBody))
 	unrelatedRecorder := httptest.NewRecorder()
 	handler.searchDocumentChunks(unrelatedRecorder, unrelatedReq)
@@ -257,7 +258,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	evalBody := []byte(`{
 		"top_k": 5,
 		"min_similarity": 0,
-		"metadata": {"project": "agentflow"},
+		"metadata_filter": {"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"agentflow"}},
 		"dataset": {"schema_version":"rag-golden-dataset-v1","id":"launch","version":"1","cases": [
 			{
 				"id": "launch_password",
@@ -361,7 +362,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		t.Fatalf("expected unknown dataset field status 400, got %d body=%s", unknownFieldRecorder.Code, unknownFieldRecorder.Body.String())
 	}
 
-	thresholdBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":1.01}`)
+	thresholdBody := []byte(`{"query":"What is the launch password?","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"agentflow"}},"limit":3,"min_similarity":1.01}`)
 	thresholdReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(thresholdBody))
 	thresholdRecorder := httptest.NewRecorder()
 	handler.searchDocumentChunks(thresholdRecorder, thresholdReq)

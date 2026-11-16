@@ -18,7 +18,7 @@ func DecodeEvaluationJSON(data []byte, target any) error {
 	}
 	check := json.NewDecoder(bytes.NewReader(data))
 	check.UseNumber()
-	if err := checkEvaluationJSON(check, 0, false); err != nil {
+	if err := checkEvaluationJSON(check, 0); err != nil {
 		return err
 	}
 	if _, err := check.Token(); err != io.EOF {
@@ -30,7 +30,7 @@ func DecodeEvaluationJSON(data []byte, target any) error {
 	return decoder.Decode(target)
 }
 
-func checkEvaluationJSON(decoder *json.Decoder, depth int, metadata bool) error {
+func checkEvaluationJSON(decoder *json.Decoder, depth int) error {
 	if depth > 32 {
 		return errors.New("evaluation JSON exceeds 32 nesting levels")
 	}
@@ -51,15 +51,12 @@ func checkEvaluationJSON(decoder *json.Decoder, depth int, metadata bool) error 
 				return err
 			}
 			key = token.(string)
-			name := key
-			if !metadata {
-				name = strings.ToLower(key)
-			}
+			name := strings.ToLower(key)
 			if seen[name] {
 				return errors.New("duplicate evaluation JSON key")
 			}
 			seen[name] = true
-			if !metadata && (name == "metadata_filter" || name == "metadata" || name == "require_filter") {
+			if name == "metadata_filter" || name == "require_filter" {
 				if key != name {
 					return errors.New("evaluation constraints require canonical field names")
 				}
@@ -75,27 +72,15 @@ func checkEvaluationJSON(decoder *json.Decoder, depth int, metadata bool) error 
 						return err
 					}
 				}
-				if name == "metadata" {
-					var labels map[string]json.RawMessage
-					if json.Unmarshal(raw, &labels) != nil {
-						return errors.New("evaluation metadata must be an object")
-					}
-					for _, value := range labels {
-						var text string
-						if bytes.Equal(bytes.TrimSpace(value), []byte("null")) || json.Unmarshal(value, &text) != nil {
-							return errors.New("evaluation metadata values must be strings")
-						}
-					}
-				}
 				child := json.NewDecoder(bytes.NewReader(raw))
 				child.UseNumber()
-				if err := checkEvaluationJSON(child, depth+1, name == "metadata"); err != nil {
+				if err := checkEvaluationJSON(child, depth+1); err != nil {
 					return err
 				}
 				continue
 			}
 		}
-		if err := checkEvaluationJSON(decoder, depth+1, metadata); err != nil {
+		if err := checkEvaluationJSON(decoder, depth+1); err != nil {
 			return err
 		}
 	}

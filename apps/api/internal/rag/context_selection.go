@@ -8,7 +8,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag/eligibility"
-	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 )
 
 const (
@@ -68,7 +67,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		if documentID == "" || !contextDocumentMatchesWorkspace(match.Document, search.WorkspaceID) {
 			continue
 		}
-		if !predicate.Matches(match.Document, match.Chunk) || !metadatafilter.Matches(match.Document.Metadata, match.Chunk.Metadata, search.Metadata) {
+		if !predicate.Matches(match.Document, match.Chunk) {
 			continue
 		}
 
@@ -92,7 +91,6 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 			ParentID:       strings.TrimSpace(match.Chunk.ParentID),
 			ChunkIndex:     match.Chunk.ChunkIndex,
 			NeighborWindow: DefaultContextNeighborWindow,
-			Metadata:       search.Metadata,
 			MetadataFilter: search.MetadataFilter,
 		}
 		candidates, err := s.store.ListDocumentContextChunks(scope)
@@ -198,10 +196,7 @@ func contextCandidateMatchesScope(candidate domain.RetrievedDocumentChunk, scope
 	if documentID == "" {
 		documentID = candidate.Chunk.DocumentID
 	}
-	if documentID != scope.DocumentID || !contextDocumentMatchesWorkspace(candidate.Document, scope.WorkspaceID) {
-		return false
-	}
-	return metadatafilter.Matches(candidate.Document.Metadata, candidate.Chunk.Metadata, scope.Metadata)
+	return documentID == scope.DocumentID && contextDocumentMatchesWorkspace(candidate.Document, scope.WorkspaceID)
 }
 
 func contextDocumentMatchesWorkspace(document domain.Document, workspaceID string) bool {

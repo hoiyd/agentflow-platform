@@ -8,7 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-// Missing, malformed, or conflicting constraints must fail before any query;
+// Missing or malformed constraints must fail before any query;
 // intentionally unfiltered Golden cases must remain executable.
 func TestEvaluationConstraintsPreflight(t *testing.T) {
 	for _, tc := range []struct {
@@ -17,13 +17,11 @@ func TestEvaluationConstraintsPreflight(t *testing.T) {
 	}{
 		{"unfiltered", `{"cases":[{"id":"unfiltered","query":"rollback"}]}`, true},
 		{"missing required", `{"cases":[{"query":"rollback","require_filter":true}]}`, false},
-		{"empty required", `{"cases":[{"query":"rollback","require_filter":true,"metadata":{}}]}`, false},
+		{"empty required", `{"cases":[{"query":"rollback","require_filter":true,"metadata_filter":{}}]}`, false},
 		{"unknown schema", `{"cases":[{"query":"rollback","metadata_filter":{"schema_version":"future","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}}}]}`, false},
 		{"wrong type", `{"cases":[{"query":"rollback","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.priority","op":"gte","value":"50"}}}]}`, false},
-		{"shared conflict", `{"metadata":{"product":"Atlas"},"cases":[{"query":"rollback","metadata":{"product":"Boreal"}}]}`, false},
-		{"shared satisfies required", `{"metadata":{"product":"Atlas"},"cases":[{"query":"rollback","require_filter":true}]}`, true},
+		{"shared satisfies required", `{"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}},"cases":[{"query":"rollback","require_filter":true}]}`, true},
 		{"schema mismatch", `{"metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}},"cases":[{"query":"rollback","metadata_filter":{"schema_version":"future","where":{"field":"document.metadata.product","op":"eq","value":"Atlas"}}}]}`, false},
-		{"credential label", `{"metadata":{"note":"api_key=sk-abcdefgh"},"cases":[{"query":"rollback"}]}`, false},
 		{"credential filter", `{"cases":[{"query":"rollback","metadata_filter":{"schema_version":"knowledge-metadata-v1","where":{"field":"document.metadata.product","op":"eq","value":"Authorization: Bearer private-token"}}}]}`, false},
 		{"later invalid case", `{"cases":[{"query":"first"},{"query":"second","metadata_filter":{}}]}`, false},
 	} {

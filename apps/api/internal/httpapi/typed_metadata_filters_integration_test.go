@@ -106,12 +106,8 @@ func typedMetadataHTTP(t *testing.T, backend store.Store, workspace, foreign str
 			t.Logf("typed-filter-http-evidence %s", data)
 		})
 	}
-	// Both optional contracts are ANDed; neither may silently replace the other.
-	result := call(request(`{"field":"document.metadata.product","op":"eq","value":"AgentFlow"}`, `,"metadata":{"product":"Other"}`), 200)
-	if len(result["items"].([]any)) != 0 {
-		t.Fatal("legacy constraint dropped")
-	}
 	before := embedder.calls.Load()
+	call(request(`{"field":"document.metadata.product","op":"eq","value":"AgentFlow"}`, `,"metadata":{"product":"Other"}`), 400)
 	for _, invalid := range []string{
 		`{}`, `null`, `{"schema_version":"future","where":{"field":"document.metadata.product","op":"eq","value":"AgentFlow"}}`,
 		filter(`{}`), filter(`{"any":[]}`), filter(`{"all":[]}`),
@@ -153,14 +149,14 @@ func typedMetadataHTTP(t *testing.T, backend store.Store, workspace, foreign str
 		t.Fatal("invalid filter called embedder")
 	}
 	// SQL-like values are ordinary data, not executable predicates.
-	result = call(request(`{"field":"document.metadata.product","op":"eq","value":"' OR 1=1 --"}`, ""), 200)
+	result := call(request(`{"field":"document.metadata.product","op":"eq","value":"' OR 1=1 --"}`, ""), 200)
 	if len(result["items"].([]any)) != 0 {
 		t.Fatal("injection value matched")
 	}
 	// Omission remains backwards compatible and admits both legacy and typed rows.
-	result = call(`{"query":"ROLLBACK-42","metadata":{"product":"AgentFlow"}}`, 200)
-	if len(result["items"].([]any)) != 2 {
-		t.Fatal("legacy behavior changed")
+	result = call(`{"query":"ROLLBACK-42"}`, 200)
+	if len(result["items"].([]any)) != 3 {
+		t.Fatal("unfiltered Workspace scope changed")
 	}
 	// Model an adapter regression, not a mocked successful API: the actual
 	// Store runs without its typed constraint in exactly one recall path.

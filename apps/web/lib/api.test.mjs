@@ -684,12 +684,13 @@ test("RAG evaluation sends dataset restrictions and preserves the result", async
     dataset: { schema_version: "rag-golden-dataset-v1", id: "auth", version: "1", cases: [{ id: "auth-error", query: "AUTH-7F31", answerable: false }] },
     top_k: 3,
     min_similarity: 0.2,
-    metadata: { project: "agentflow" }
+    metadata_filter: { schema_version: "knowledge-metadata-v1", where: { field: "document.metadata.product", op: "eq", value: "agentflow" } }
   });
 
   assert.equal(requestBody.top_k, 3);
   assert.equal(requestBody.min_similarity, 0.2);
-  assert.deepEqual(requestBody.metadata, { project: "agentflow" });
+  assert.deepEqual(requestBody.metadata_filter, { schema_version: "knowledge-metadata-v1", where: { field: "document.metadata.product", op: "eq", value: "agentflow" } });
+  assert.equal(requestBody.metadata, undefined);
   assert.equal(requestBody.cases, undefined);
   assert.equal(requestBody.dataset.id, "auth");
   assert.equal(response.summary.hit_at_1, 1);

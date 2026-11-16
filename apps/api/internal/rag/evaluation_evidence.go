@@ -6,7 +6,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag/eligibility"
-	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
@@ -32,7 +31,7 @@ func EvaluateSearchResult(c domain.RAGEvaluationCase, search domain.DocumentSear
 			forbidden = forbidden || goldenSourceMatchesAny(c.ForbiddenSources, source)
 		}
 		if err != nil || domain.NormalizeWorkspaceID(item.Document.WorkspaceID) != e.WorkspaceID ||
-			!predicate.Matches(item.Document, item.Chunk) || !metadatafilter.Matches(item.Document.Metadata, item.Chunk.Metadata, search.Metadata) || forbidden {
+			!predicate.Matches(item.Document, item.Chunk) || forbidden {
 			e.ContextLeakCount++
 		}
 		e.ContextSources = append(e.ContextSources, domain.RAGEvaluationSourceRevision{DocumentID: item.Document.ID,
@@ -51,7 +50,7 @@ func EvaluateSearchResult(c domain.RAGEvaluationCase, search domain.DocumentSear
 // Retain restrictions and expected-source denominators even when a query fails
 // or indexing prevents it from running. Missing measurements stay zero.
 func EvaluationEvidence(c domain.RAGEvaluationCase, search domain.DocumentSearch, started time.Time) *domain.RAGEvaluationEvidence {
-	return &domain.RAGEvaluationEvidence{Metadata: search.Metadata, MetadataFilter: search.MetadataFilter,
+	return &domain.RAGEvaluationEvidence{MetadataFilter: search.MetadataFilter,
 		SchemaVersion: metadataschema.Version, ScopePolicy: eligibility.ScopePolicyVersion,
 		LifecyclePolicy: eligibility.LifecyclePolicyVersion, WorkspaceID: domain.NormalizeWorkspaceID(search.WorkspaceID),
 		ObservedAt: started.UTC(), ExpectedSources: len(c.ExpectedSources),

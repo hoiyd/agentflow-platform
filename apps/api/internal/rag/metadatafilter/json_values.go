@@ -1,5 +1,5 @@
-// Package metadatafilter owns the legacy exact-text metadata predicate shared
-// by fixture recall and context scope checks. PostgreSQL's ->> is the contract.
+// Package metadatafilter preserves JSONB value identity for metadata writes and
+// typed comparisons. It does not implement a query filter.
 package metadatafilter
 
 import (
@@ -10,18 +10,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// Matches ANDs keys; each key may match either layer, including conflicts.
-// Missing/JSON null never match. This is text equality, not typed comparison,
-// collection membership, inheritance/override, normalization, or authorization.
-func Matches(document, chunk map[string]any, filter map[string]string) bool {
-	for key, expected := range filter {
-		if !matchesValue(chunk[key], expected) && !matchesValue(document[key], expected) {
-			return false
-		}
-	}
-	return true
-}
 
 // EqualJSON compares literal JSONB values, including types and decimal scale.
 // It is not typed-filter equality: the string "1" differs from the number 1.
@@ -50,31 +38,7 @@ func CanonicalJSON(value any) (string, bool) {
 	return jsonbText(value)
 }
 
-func matchesValue(value any, expected string) bool {
-	if value == nil {
-		return false
-	}
-	if text, ok := value.(string); ok {
-		return text == expected
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return false
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil || value == nil {
-		return false
-	}
-	if text, ok := value.(string); ok {
-		return text == expected
-	}
-	text, ok := jsonbText(value)
-	return ok && text == expected
-}
-
-// Arrays/objects retain their literal JSONB text behavior; this adds no new
-// filter operator. Keep key ordering, spacing and number scale aligned with SQL.
+// Keep literal JSONB key ordering, spacing and number scale aligned with SQL.
 func jsonbText(value any) (string, bool) {
 	switch typed := value.(type) {
 	case string:

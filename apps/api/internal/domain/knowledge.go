@@ -103,20 +103,18 @@ type DocumentMetadataUpdate struct {
 	ExpectedIndexInputs *Document `json:"-"`
 }
 
-// DocumentSearch.Metadata uses exact text equality: AND across keys, Chunk OR
-// Document per key. Missing/null never match; whitespace and case are significant.
+// DocumentSearch applies typed eligibility before recall and context expansion.
 type DocumentSearch struct {
-	Query                     string            `json:"query"`
-	Embedding                 []float64         `json:"-"`
-	EmbeddingProvider         string            `json:"-"`
-	EmbeddingModel            string            `json:"-"`
-	LexicalTerms              []string          `json:"-"`
-	WorkspaceID               string            `json:"workspace_id,omitempty"`
-	Metadata                  map[string]string `json:"metadata,omitempty"`
-	MetadataFilter            *MetadataFilter   `json:"metadata_filter,omitempty"`
-	Limit                     int               `json:"limit,omitempty"`
-	MinSimilarity             float64           `json:"min_similarity,omitempty"`
-	KnowledgeContextMaxTokens int               `json:"knowledge_context_max_tokens,omitempty"`
+	Query                     string          `json:"query"`
+	Embedding                 []float64       `json:"-"`
+	EmbeddingProvider         string          `json:"-"`
+	EmbeddingModel            string          `json:"-"`
+	LexicalTerms              []string        `json:"-"`
+	WorkspaceID               string          `json:"workspace_id,omitempty"`
+	MetadataFilter            *MetadataFilter `json:"metadata_filter,omitempty"`
+	Limit                     int             `json:"limit,omitempty"`
+	MinSimilarity             float64         `json:"min_similarity,omitempty"`
+	KnowledgeContextMaxTokens int             `json:"knowledge_context_max_tokens,omitempty"`
 }
 
 type DocumentContextSearch struct {
@@ -125,7 +123,6 @@ type DocumentContextSearch struct {
 	ParentID       string
 	ChunkIndex     int
 	NeighborWindow int
-	Metadata       map[string]string
 	MetadataFilter *MetadataFilter
 }
 
@@ -314,7 +311,6 @@ type RAGGoldenDatasetInfo struct {
 type RAGEvaluationCase struct {
 	// Case restrictions intersect the request scope; require_filter prevents an
 	// accidentally omitted constraint from becoming an unfiltered experiment.
-	Metadata            map[string]string `json:"metadata,omitempty"`
 	MetadataFilter      *MetadataFilter   `json:"metadata_filter,omitempty"`
 	RequireFilter       bool              `json:"require_filter,omitempty"`
 	ID                  string            `json:"id"`
@@ -330,7 +326,6 @@ type RAGEvaluationCase struct {
 type RAGEvaluationRunRequest struct {
 	Dataset        *RAGGoldenDataset `json:"dataset,omitempty"`
 	WorkspaceID    string            `json:"workspace_id,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
 	MetadataFilter *MetadataFilter   `json:"metadata_filter,omitempty"`
 	TopK           int               `json:"top_k,omitempty"`
 	MinSimilarity  float64           `json:"min_similarity,omitempty"`
@@ -372,6 +367,7 @@ type RAGEvaluationCaseResult struct {
 // RAGEvaluationEvidence measures accepted retrieval separately from selected
 // Context. Token counts describe local Context estimates, not billed LLM usage.
 type RAGEvaluationEvidence struct {
+	// Metadata is read-only legacy evidence; new queries accept only MetadataFilter.
 	Metadata              map[string]string             `json:"metadata,omitempty"`
 	MetadataFilter        *MetadataFilter               `json:"metadata_filter,omitempty"`
 	SchemaVersion         string                        `json:"schema_version"`

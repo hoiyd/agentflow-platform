@@ -58,7 +58,8 @@ test("metadata Golden cases retain constraints and Context evidence across updat
   await expect(page.getByText("Eligible source recall", { exact: true })).toBeVisible();
   const first = page.locator(".evaluation-case").first();
   await first.getByText("Applied constraints and source revisions", { exact: true }).click();
-  await expect(first.locator("pre")).toContainText('"product": "Atlas"');
+  await expect(first.locator("pre")).toContainText('"field": "document.metadata.product"');
+  await expect(first.locator("pre")).toContainText('"value": "Atlas"');
   await page.screenshot({ path: testInfo.outputPath("metadata-golden-evidence.png") });
   // Owner metadata updates change eligibility immediately, without re-ingestion.
   const atlas = documents["atlas-production.md"];
@@ -79,7 +80,7 @@ test("metadata Golden cases retain constraints and Context evidence across updat
   expect(afterUpdate.cases[0].items).toEqual([]);
   await expect(page.getByText("correct no-answer", { exact: true })).toBeVisible();
   // A typo/omission must be rejected, never converted into an unfiltered search.
-  const missing = { ...dataset, cases: [{ ...dataset.cases[0], metadata: undefined }] };
+  const missing = { ...dataset, cases: [{ ...dataset.cases[0], metadata_filter: undefined }] };
   await page.getByRole("textbox", { name: "Golden dataset" }).fill(JSON.stringify(missing));
   const rejected = await run();
   expect(rejected.status()).toBe(400);

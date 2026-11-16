@@ -2,9 +2,9 @@
 
 ## Request Contract
 
-`POST /api/rag/search` accepts optional `metadata_filter`, independently of the
-[legacy equality map](metadata-filters.md). When both are present they are
-**ANDed**. The authorized Workspace and the required stored schema version wrap
+`POST /api/rag/search` accepts optional `metadata_filter`; the
+[retired equality map](metadata-filters.md) is rejected. The authorized Workspace
+and the required stored schema version wrap
 the complete expression; a user `any` cannot widen either constraint.
 
 ```json
@@ -52,8 +52,8 @@ lookup or implicit "either metadata layer" operator is provided.
 
 Typed queries admit only Documents whose persisted version equals the supplied
 schema version. Legacy/unknown-version records are excluded, not coerced or
-automatically adopted. Without `metadata_filter`, the existing behavior and
-legacy map contract are unchanged. Unknown extension labels such as
+automatically adopted. Without `metadata_filter`, no metadata restriction is
+applied; Workspace and lifecycle still apply. Unknown extension labels such as
 `access_scope` cannot be used as typed authorization facts.
 
 `rag/eligibility` validates a detached predicate and supplies equivalent Go and
@@ -88,9 +88,9 @@ For Workbench controls, Run/Tool propagation and execution boundaries, see
 | --- | --- |
 | Unknown field/schema/operator, wrong type, null or empty set | Reject before embedding, never fall back to an unfiltered search |
 | Oversized/deep expression, ambiguous JSON or unknown properties | Bounded validation error, no provider call |
-| Legacy or missing metadata | No typed match; legacy map semantics remain unchanged |
+| Legacy or missing metadata | No typed match; no automatic schema adoption |
 | Conflicting Document/Chunk values | Evaluate only the explicitly addressed layer |
-| User OR or SQL-like text | Cannot widen Workspace, schema or legacy constraints; values stay parameters |
+| User OR or SQL-like text | Cannot widen Workspace or schema constraints; values stay parameters |
 | Eligible rows below the global recall limit | Filter before ranking/limits, in both recall paths |
 | Parent/neighbor has different labels | Exclude during lookup and selector recheck |
 | A recall implementation returns an ineligible row | Shared pipeline fails closed before ranking/context/citations |

@@ -12,11 +12,11 @@ import (
 // Accepted recall alone cannot hide forbidden parent Context. Merged Context
 // needs its own content hash because the transformation clears Chunk.ContentHash.
 func TestEvaluationContextEvidenceAndLeakGate(t *testing.T) {
-	allowed := domain.RetrievedDocumentChunk{Document: domain.Document{ID: "atlas", WorkspaceID: "1", SourceURI: "atlas.md", Metadata: map[string]any{"product": "Atlas"}},
+	allowed := domain.RetrievedDocumentChunk{Document: domain.Document{ID: "atlas", WorkspaceID: "1", SourceURI: "atlas.md", MetadataSchemaVersion: "knowledge-metadata-v1", Metadata: map[string]any{"product": "Atlas"}},
 		Chunk: domain.DocumentChunk{ID: "merged", Content: "merged release instructions", TokenCount: 5}, SourceChunkIDs: []string{"one", "two"}}
 	c := domain.RAGEvaluationCase{Query: "release", ExpectedSources: []domain.RAGGoldenSource{{SourceURI: "atlas.md"}}}
 	response := domain.DocumentSearchResponse{Items: []domain.RetrievedDocumentChunk{allowed}, ContextItems: []domain.RetrievedDocumentChunk{allowed}}
-	search := domain.DocumentSearch{WorkspaceID: "1", Metadata: map[string]string{"product": "Atlas"}}
+	search := domain.DocumentSearch{WorkspaceID: "1", MetadataFilter: &domain.MetadataFilter{SchemaVersion: "knowledge-metadata-v1", Where: domain.MetadataCondition{Field: "document.metadata.product", Op: "eq", Value: "Atlas"}}}
 	result := EvaluateSearchResult(c, search, response, time.Now())
 	if !result.Hit || result.Evidence.ContextSources[0].ChunkHash == "" {
 		t.Fatalf("merged Context lacks hash: %+v", result.Evidence)

@@ -1873,13 +1873,10 @@ type KnowledgeScopePolicyVersion string
 // KnowledgeScopeSource defines model for KnowledgeScope.Source.
 type KnowledgeScopeSource string
 
-// KnowledgeSearchRequest defines model for KnowledgeSearchRequest.
+// KnowledgeSearchRequest Optional metadata_filter is the only metadata query restriction. The retired metadata query field is rejected before embedding, even when empty or null.
 type KnowledgeSearchRequest struct {
 	KnowledgeContextMaxTokens *int `json:"knowledge_context_max_tokens,omitempty"`
 	Limit                     *int `json:"limit,omitempty"`
-
-	// Metadata Legacy exact-text equality; ANDed with metadata_filter.
-	Metadata *map[string]string `json:"metadata,omitempty"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
 	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`
@@ -2310,13 +2307,12 @@ type RAGCitation struct {
 	ToolEventId     *string   `json:"tool_event_id,omitempty"`
 }
 
-// RAGEvaluationCase defines model for RAGEvaluationCase.
+// RAGEvaluationCase Case metadata_filter intersects the request filter. The retired metadata query field is rejected.
 type RAGEvaluationCase struct {
 	Answerable       bool               `json:"answerable"`
 	ExpectedSources  *[]RAGGoldenSource `json:"expected_sources,omitempty"`
 	ForbiddenSources *[]RAGGoldenSource `json:"forbidden_sources,omitempty"`
 	Id               string             `json:"id"`
-	Metadata         *map[string]string `json:"metadata,omitempty"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
 	MetadataFilter    *MetadataFilter `json:"metadata_filter,omitempty"`
@@ -2347,12 +2343,14 @@ type RAGEvaluationEvidence struct {
 	} `json:"context_sources"`
 
 	// ContextTokens Local selected-Context token estimate
-	ContextTokens   int                `json:"context_tokens"`
-	ExpectedSources int                `json:"expected_sources"`
-	LatencyMs       int64              `json:"latency_ms"`
-	LifecyclePolicy string             `json:"lifecycle_policy"`
-	MatchedSources  int                `json:"matched_sources"`
-	Metadata        *map[string]string `json:"metadata,omitempty"`
+	ContextTokens   int    `json:"context_tokens"`
+	ExpectedSources int    `json:"expected_sources"`
+	LatencyMs       int64  `json:"latency_ms"`
+	LifecyclePolicy string `json:"lifecycle_policy"`
+	MatchedSources  int    `json:"matched_sources"`
+
+	// Metadata Read-only legacy evidence retained in historical reports; not accepted in new queries.
+	Metadata *map[string]string `json:"metadata,omitempty"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
 	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`
@@ -2362,11 +2360,10 @@ type RAGEvaluationEvidence struct {
 	WorkspaceId    string          `json:"workspace_id"`
 }
 
-// RAGEvaluationRunRequest A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
+// RAGEvaluationRunRequest A versioned Golden Dataset is required. Legacy cases, expectation fields and metadata query maps are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
 type RAGEvaluationRunRequest struct {
 	// Dataset Golden cases additionally require id, answerable and expected_sources for answerable cases. See the published Golden JSON Schema.
-	Dataset  RAGGoldenDataset   `json:"dataset"`
-	Metadata *map[string]string `json:"metadata,omitempty"`
+	Dataset RAGGoldenDataset `json:"dataset"`
 
 	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
 	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`

@@ -4,15 +4,11 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 	"agentflow-platform/apps/api/internal/store"
 )
 
-func DocumentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
-	if store.NormalizeWorkspaceID(document.WorkspaceID) != store.NormalizeWorkspaceID(search.WorkspaceID) {
-		return false
-	}
-	return metadatafilter.Matches(document.Metadata, chunk.Metadata, search.Metadata)
+func documentMatchesWorkspace(document domain.Document, workspaceID string) bool {
+	return store.NormalizeWorkspaceID(document.WorkspaceID) == store.NormalizeWorkspaceID(workspaceID)
 }
 
 func DocumentChunkLexicalScore(search domain.DocumentSearch, document domain.Document, chunk domain.DocumentChunk) float64 {

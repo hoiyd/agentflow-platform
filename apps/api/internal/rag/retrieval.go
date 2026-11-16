@@ -9,7 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/rag/eligibility"
-	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 )
 
 type SearchStore interface {
@@ -165,7 +164,7 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	// the read model even if one recall path forgets the eligibility contract.
 	for _, candidates := range [][]domain.RetrievedDocumentChunk{denseItems, lexicalItems} {
 		for _, item := range candidates {
-			if domain.NormalizeWorkspaceID(item.Document.WorkspaceID) != search.WorkspaceID || !metadatafilter.Matches(item.Document.Metadata, item.Chunk.Metadata, search.Metadata) || !predicate.Matches(item.Document, item.Chunk) {
+			if domain.NormalizeWorkspaceID(item.Document.WorkspaceID) != search.WorkspaceID || !predicate.Matches(item.Document, item.Chunk) {
 				return domain.DocumentSearchResponse{}, fmt.Errorf("%w: recall returned an ineligible candidate", eligibility.ErrInvariant)
 			}
 		}

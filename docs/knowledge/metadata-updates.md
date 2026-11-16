@@ -26,7 +26,7 @@ Preserve the returned timestamp string, including its microseconds; converting
 it through a JavaScript `Date` loses precision. Document reads serialize UTC.
 Retry/inheritance comparisons preserve JSON types and PostgreSQL numeric text
 semantics: exponent normalization does not create a false conflict, while decimal
-scale remains significant for the existing text-equality filter.
+scale remains significant for literal metadata identity, not typed numeric queries.
 
 Same-source/body ingestion may supply `expected_updated_at` to use the same
 metadata-only path. Without a token, changed labels return `409` instead of being
@@ -42,7 +42,8 @@ source rechecks. Label updates alone do not establish validity, Document ACLs
 or automatic enrichment.
 For opt-in field types, schema adoption and declaration ownership, see
 [Metadata schema](metadata-schema.md). Versioned updates validate effective
-Chunk overrides inside the same transaction; legacy equality semantics remain unchanged.
+Chunk overrides inside the same transaction. Query eligibility follows the
+[typed filter contract](typed-metadata-filters.md).
 The typed frontend client exposes `updateDocumentMetadata`. Knowledge detail
 edits lifecycle; custom metadata tables remain read-only.
 

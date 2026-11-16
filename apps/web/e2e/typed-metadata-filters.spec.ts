@@ -28,9 +28,10 @@ test("typed metadata eligibility survives browser requests, rejected input and r
     corpus.push({ input, created });
   }
   const input: components["schemas"]["KnowledgeSearchRequest"] = {
-    query: "ROLLBACK-742", limit: 5, metadata: { environment: "production" },
+    query: "ROLLBACK-742", limit: 5,
     metadata_filter: { schema_version: version, where: { all: [
       { field: "document.metadata.product", op: "eq", value: productScope },
+      { field: "document.metadata.environment", op: "eq", value: "production" },
       { field: "chunk.metadata.tags", op: "contains", value: "release" },
       { field: "document.metadata.published_at", op: "gte", value: "2026-10-18T12:00:00+08:00" }
     ] } }
@@ -43,9 +44,11 @@ test("typed metadata eligibility survives browser requests, rejected input and r
   const invalid = await call("POST", "/api/rag/search", { ...input, metadata_filter: { schema_version: version, where: { field: "document.metadata.workspace_id", op: "eq", value: "foreign" } } });
   expect(invalid.status).toBe(400);
   expect(invalid.body.code).toBe("invalid_metadata_filter");
+  const retired = await call("POST", "/api/rag/search", { ...input, metadata: {} });
+  expect(retired.status).toBe(400);
   const counterAfter = await (await request.get("http://127.0.0.1:18080/__fixture/contracts")).json();
   expect(counterAfter.embedding_requests).toBe(counterBefore.embedding_requests);
-  const empty = await call("POST", "/api/rag/search", { ...input, metadata: { environment: "development" } });
+  const empty = await call("POST", "/api/rag/search", { ...input, metadata_filter: { schema_version: version, where: { all: [input.metadata_filter!.where, { field: "document.metadata.environment", op: "eq", value: "development" }] } } });
   expect(empty.status).toBe(200);
   expect(empty.body.items).toEqual([]);
   expect(empty.body.no_match).toBe(true);
@@ -55,6 +58,6 @@ test("typed metadata eligibility survives browser requests, rejected input and r
   expect(after.status).toBe(200);
   expect(after.body.items.map((item: { document: { id: string } }) => item.document.id)).toEqual([corpus[0].created.body.id]);
   await testInfo.attach("typed-metadata-filter-evidence.json", { body: JSON.stringify({ schema: "typed-metadata-browser-v1", workspace, corpus, input,
-    before, invalid, empty, after, embedding_requests_before_invalid: counterBefore.embedding_requests, embedding_requests_after_invalid: counterAfter.embedding_requests,
+    before, invalid, retired, empty, after, embedding_requests_before_invalid: counterBefore.embedding_requests, embedding_requests_after_invalid: counterAfter.embedding_requests,
     limitations: ["browser -> production Go composition -> disposable Postgres, controlled embeddings", "API contract gate, not new filter UI", "no runtime filter propagation, ACL, expiry or live retrieval quality claim"] }, null, 2), contentType: "application/json" });
 });

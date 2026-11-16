@@ -51,7 +51,7 @@ These are implementation and operating contracts, not a required reading list.
 <details>
 <summary>Knowledge and metadata</summary>
 
-- [Equality filters](knowledge/metadata-filters.md), [typed filters](knowledge/typed-metadata-filters.md), [Runtime scope](knowledge/runtime-knowledge-filters.md)
+- [Typed filters](knowledge/typed-metadata-filters.md), [query migration](knowledge/metadata-filters.md), [Runtime scope](knowledge/runtime-knowledge-filters.md)
 - [Metadata schema](knowledge/metadata-schema.md), [metadata updates](knowledge/metadata-updates.md), [document lifecycle](knowledge/document-lifecycle.md)
 
 </details>

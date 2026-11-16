@@ -1960,6 +1960,7 @@ components:
     RAGEvaluationCase:
       type: object
       additionalProperties: false
+      description: Case metadata_filter intersects the request filter. The retired metadata query field is rejected.
       required: [id, query, answerable]
       properties:
         id: { type: string }
@@ -1970,7 +1971,6 @@ components:
         required_source_count: { type: integer }
         min_acceptable_rank: { type: integer }
         tags: { type: array, items: { type: string } }
-        metadata: { type: object, additionalProperties: { type: string } }
         metadata_filter: { $ref: '#/components/schemas/MetadataFilter' }
         require_filter: { type: boolean, description: Require a nonempty effective case or request restriction. Omission keeps legacy unfiltered behavior. }
     RAGGoldenDataset:
@@ -1989,11 +1989,10 @@ components:
       type: object
       additionalProperties: false
       required: [dataset]
-      description: A versioned Golden Dataset is required. Legacy cases and expectation fields are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
+      description: A versioned Golden Dataset is required. Legacy cases, expectation fields and metadata query maps are rejected. Request restrictions remain mandatory AND constraints; Workspace is resolved by authorization.
       properties:
         dataset: { $ref: '#/components/schemas/RAGGoldenDataset' }
         workspace_id: { type: string }
-        metadata: { type: object, additionalProperties: { type: string } }
         metadata_filter: { $ref: '#/components/schemas/MetadataFilter' }
         top_k: { type: integer }
         min_similarity: { type: number }
@@ -2001,7 +2000,7 @@ components:
       type: object
       required: [schema_version, scope_policy, lifecycle_policy, workspace_id, observed_at, expected_sources, matched_sources, context_matched_sources, context_leak_count, context_tokens, latency_ms, context_sources]
       properties:
-        metadata: { type: object, additionalProperties: { type: string } }
+        metadata: { type: object, additionalProperties: { type: string }, description: Read-only legacy evidence retained in historical reports; not accepted in new queries. }
         metadata_filter: { $ref: '#/components/schemas/MetadataFilter' }
         schema_version: { type: string }
         scope_policy: { type: string }
@@ -2031,11 +2030,11 @@ components:
     KnowledgeSearchRequest:
       type: object
       additionalProperties: false
+      description: Optional metadata_filter is the only metadata query restriction. The retired metadata query field is rejected before embedding, even when empty or null.
       required: [query]
       properties:
         query: { type: string }
         workspace_id: { type: string }
-        metadata: { type: object, additionalProperties: { type: string }, description: Legacy exact-text equality; ANDed with metadata_filter. }
         metadata_filter: { $ref: '#/components/schemas/MetadataFilter' }
         limit: { type: integer }
         min_similarity: { type: number }

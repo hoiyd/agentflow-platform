@@ -37,10 +37,6 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 		args = append(args, search.EmbeddingModel)
 		conditions = append(conditions, fmt.Sprintf("e.model = $%d", len(args)))
 	}
-	for key, value := range search.Metadata {
-		args = append(args, key, value)
-		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
-	}
 	conditions = append(conditions, predicate.SQL(&args))
 	if search.MinSimilarity > 0 {
 		args = append(args, search.MinSimilarity)
@@ -112,10 +108,6 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 	conditions := []string{lexicalMatch}
 	args = append(args, search.WorkspaceID)
 	conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
-	for key, value := range search.Metadata {
-		args = append(args, key, value)
-		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
-	}
 	conditions = append(conditions, predicate.SQL(&args))
 
 	lexicalScore := `LEAST(1.0, (

@@ -144,7 +144,7 @@ scope. Store recall and expansion retain Workspace and eligibility predicates;
 omission selects the owner's active default, never an unfiltered query.
 Internal legacy fixtures normalize empty scope to `default_workspace`, which is
 not a runtime alias. See [resource authorization](../operations/resource-authorization.md),
-[equality filters](metadata-filters.md) and [typed eligibility](typed-metadata-filters.md).
+[typed eligibility](typed-metadata-filters.md).
 
 OIDC Membership and owner checks do not implement per-document/chunk sharing ACLs.
 Namespace isolation alone is not authentication or arbitrary multi-tenant authorization.

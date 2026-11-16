@@ -214,6 +214,30 @@ func decodeTypedSearch(t *testing.T, where string) domain.DocumentSearch {
 	return search
 }
 
+type metadataParityStore interface {
+	rag.SearchStore
+	CreateDocument(domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding) (domain.Document, error)
+}
+
+func metadataParityVector() []float64 {
+	vector := make([]float64, 1536)
+	vector[0] = 1
+	return vector
+}
+
+func metadataChunkIDs(items []domain.RetrievedDocumentChunk) []string {
+	ids := []string{}
+	for _, item := range items {
+		if len(item.SourceChunkIDs) > 0 {
+			ids = append(ids, item.SourceChunkIDs...)
+		} else {
+			ids = append(ids, item.Chunk.ID)
+		}
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
 type unfilteredTypedStore struct {
 	metadataParityStore
 	lexical bool
