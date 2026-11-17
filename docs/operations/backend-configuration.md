@@ -58,16 +58,10 @@ empty shared root. Do not commit local `.env`, credentials, or operator packages
 
 ## Workspace Scope
 
-All resource operations resolve an existing owned Workspace entity. Missing scope
-selects the owner's active default; local mode uses a reserved persistent local
-User with its own space, never another OIDC owner's data. Header/query/payload
-selectors must agree; legacy string IDs are not runtime aliases.
-
-The frontend loads `/api/workspaces` after the session probe and validates its
-remembered selection before mounting consumers. Archived spaces are read-only;
-foreign/deleted spaces return 404.
-See [Workspace lifecycle and required old-data migration](workspace-lifecycle.md)
-and [API access](../reference/api-reference.md#access-and-workspace-scope).
+Missing scope selects the owner's active default Workspace, never another
+owner's data. [Workspace lifecycle](workspace-lifecycle.md) owns defaults,
+archive/deletion and upgrade requirements;
+[API access](../reference/api-reference.md#access-and-workspace-scope) owns selectors.
 
 Route/embedding credentials are resolved at composition and passed directly to
 clients, not stored in general Config or frozen records. Endpoints/model identity
@@ -81,11 +75,9 @@ credential environment-variable name, and live request timeout. Copy/review
 [the example](../../apps/api/config/model-routes.example.json); missing route
 credentials fail startup instead of selecting simulation.
 
-The first eligible route is selected by priority, then stable ID. Its affinity
-is reused across the Run, compaction, adaptive extraction, and title generation.
-All clients share model concurrency; per-key RPM/TPM stay separate. Failed calls
-are not retried on another route. Frozen generation parameters are not assumed
-to produce deterministic output. See [model routing](../runtime/model-routing.md).
+Routes use capability filtering, priority/ID ordering and Run affinity, not
+automatic failover. [Model routing](../runtime/model-routing.md) owns selection,
+generation profiles, frozen pricing and recovery compatibility.
 
 Embedding never participates in Chat routing. The default Ollama endpoint is
 `http://localhost:11434/api/embed`; set the actual model and dimension.
@@ -104,33 +96,17 @@ not partial search results. See [index lifecycle](../knowledge/knowledge-rag.md#
 
 ## Concurrency, Rate Limits, and Retry
 
-| Variables | Owner / distinction |
-| --- | --- |
-| `MAX_CONCURRENT_RUNS`, `RUN_QUEUE_SIZE`, `RUN_QUEUE_WAIT_TIMEOUT` | Active tasks plus bounded waiting; same-Conversation single writer; full/expired waits return 429/503 + Retry-After |
-| `MAX_CONCURRENT_MODEL_REQUESTS` | In-flight Chat/Embedding HTTP requests, not model count; streams hold a slot until body close |
-| `MAX_CONCURRENT_OWNER_MODEL_REQUESTS` | One authenticated owner across all Workspaces; admitted attempts include downstream key/global wait; positive and below global (global >= 2) |
-| `OWNER_MODEL_QUEUE_SIZE`, `OWNER_MODEL_QUEUE_WAIT_TIMEOUT` | Additional pending physical attempts per owner and owner-slot wait; 0 queue means reject immediately; route timeout can expire sooner |
-| `MODEL_REQUESTS_PER_MINUTE` / `MODEL_TOKENS_PER_MINUTE` | Per-key request/input-estimate buckets; zero disables that bucket |
-| `MODEL_RETRY_*` | Physical attempts/backoff inside one logical call; retries reacquire permits, backoff holds none |
-
-Chat timeout uses the live route `request_timeout_seconds`; Embedding uses
-`EMBEDDING_REQUEST_TIMEOUT`. Local wait phases and provider work are measured
-separately; admission expiry is not transient provider failure.
-[Execution controls](../runtime/execution-controls.md#3-provider-timeout-and-retry)
-owns retryable classes, stream cutoff, and capacity errors.
+Tune Run admission, owner/global physical-request capacity and per-key RPM/TPM
+as separate controls. Their variables, units, acquisition order, zero semantics
+and errors are in [Execution controls](../runtime/execution-controls.md).
+Chat timeout uses live route `request_timeout_seconds`; Embedding uses
+`EMBEDDING_REQUEST_TIMEOUT`. Both include admission waits through body completion.
 
 ## Run Budget
 
-`RUN_MAX_*` freezes cumulative logical calls, prompt/completion/total tokens,
-Tool calls, active runtime, and estimated cost for new Runs. Zero disables the
-named dimension. Queue/human waiting is not active runtime; physical provider
-retries share a logical reservation.
-
-Prices and maximum cost are USD converted to integer microdollars. Cost is
-unenforced at zero; configure input/output prices before enabling it. Autonomous
-runtime/Tool caps fold once into the stricter Run Budget; iterations and output
-characters remain mode-owned. See [Run Budget](../runtime/run-budget.md) for
-settlement, purpose, and overage semantics.
+`RUN_MAX_*` applies to new Runs; zero disables the named dimension. Configure
+frozen token prices before relying on a monetary cap. [Run Budget](../runtime/run-budget.md)
+owns accounting, cost units and Autonomous cap precedence.
 
 `AUTONOMOUS_MAX_RUNTIME` accepts an optional duration and takes precedence over
 `AUTONOMOUS_MAX_RUNTIME_SECONDS`. Its template value is empty so copying defaults
@@ -138,17 +114,11 @@ does not override an explicitly configured seconds limit.
 
 ## Model Request Capture
 
-| `MODEL_REQUEST_CAPTURE_MODE` | Retained content |
-| --- | --- |
-| `metadata_only` (default) | Secret-free Envelope, canonical transport hash/counts, effective parameters, Snapshot/Manifest references; no prompt body |
-| `redacted` | Bounded canonical JSON after deterministic redaction |
-| `full` | Exact bounded JSON for trusted local debugging; detected credentials downgrade that Capture to redacted |
-
-`MODEL_REQUEST_CAPTURE_MAX_BYTES` caps only retained body content; oversized
-captures keep metadata and are marked truncated. Retention expiry lazily purges
-content on Postgres reads, not Envelopes/redaction metadata. Capture policy is
-live observability, not frozen model-input semantics. See
-[request reconstruction](../context/model-request-reconstruction.md).
+`MODEL_REQUEST_CAPTURE_MODE` defaults to `metadata_only`. Enable `redacted` or
+`full` only with deliberate byte/retention limits. The
+[Capture contract](../context/model-request-reconstruction.md#capture-modes) owns
+stored content, credential downgrade, truncation and lazy expiry. Capture is
+live observability policy, not frozen execution configuration.
 
 ## OpenTelemetry Traces
 
@@ -165,41 +135,25 @@ There is no fail-mode setting. See [projections](../runtime/event-projections-ru
 
 ## Memory Provider
 
-`MEMORY_SYNC_QUEUE_SIZE` / `MEMORY_SYNC_JOB_TIMEOUT` bound asynchronous jobs.
-`MEMORY_PROVIDER_MAX_ATTEMPTS` includes the initial attempt; the retry delay
-covers transient embedding/persistence failures. Accepted jobs drain at shutdown;
-a full queue only rejects auxiliary work, never an already completed answer.
-Recall failure degrades to no Memory with typed diagnostics.
-
-Explicit durability rules are model-free. Adaptive extraction runs only when
-rules find no Candidate: `off` disables it, `shadow` (default) audits proposals
-without commit, `auto` commits only above `MEMORY_ADAPTIVE_MIN_CONFIDENCE`
-and after deterministic safety checks. It uses the originating Run's selected
-Chat model and shared request limits. See [Memory](../context/memory-management.md).
+`MEMORY_SYNC_*` bounds background jobs; `MEMORY_PROVIDER_*` bounds storage retries,
+not another layer of model retries. Adaptive extraction defaults to `shadow`;
+review proposals before switching to `auto`. [Memory](../context/memory-management.md)
+owns curation, model/storage retry separation, shutdown and failure semantics.
 
 ## Postgres + pgvector
 
-Postgres performs idempotent startup migrations for execution records, usage,
-request capture, Memory, Knowledge, and their supporting evidence. HNSW indexes
-support vectors; generated `tsvector`/GIN indexes support lexical search without
-another setting. Offline lexical fixtures do not reproduce Postgres query or
-transaction semantics.
-
-`TOOL_CONFIG_PATH` remains operator policy, not application persistence.
-See [storage boundary](../architecture/storage-boundary.md) for fixture separation
-and database-test safety.
+Postgres startup applies idempotent schema migrations. HNSW supports vectors;
+generated `tsvector`/GIN supports lexical search without another setting.
+[Storage boundary](../architecture/storage-boundary.md) owns adapter/test
+separation; startup migrations are not backup or rollback evidence.
 
 ## Tool Configuration
 
-`MCP_CONFIG_PATH` optionally installs locally reviewed read-only MCP Tools over
-Streamable HTTP. Empty disables only operator-file connections, not Workspace
-connections. Workspace owners use Tools → MCP connections; Bearer storage requires
-`MCP_CREDENTIAL_ENCRYPTION_KEY` (base64, 32 random bytes). User URLs are public HTTPS
-unless the operator approves exact `MCP_WORKSPACE_LOCAL_ORIGINS`. Servers in the
-operator file are optional by default; discovery
-runs asynchronously and reports readiness through the Tool catalog. Exact Tool
-policy, Workspace grants and Agent bindings still apply. See the
-[MCP configuration and limits](../tools/mcp-adapter.md).
+`MCP_CONFIG_PATH` enables operator-file connections; empty does not disable
+Workspace MCP connections. Owner-managed Bearer storage requires
+`MCP_CREDENTIAL_ENCRYPTION_KEY` (base64, 32 random bytes). The
+[MCP guide](../tools/mcp-adapter.md) owns URL exceptions, asynchronous/required
+discovery, connection configuration and read-only limits.
 
 Missing Tool config defaults to enabled `calculator`, `get_current_time`,
 `web_search`, and `web_fetch`. [Web fetch](../tools/web-fetch.md) reads only current-Run
@@ -207,11 +161,9 @@ search sources and needs no separate credential. Web search needs `TAVILY_API_KE
 and an exact egress/credential policy. New defaults include the rule; existing
 custom policies and saved Agent choices are never silently widened.
 
-Enablement is not readiness. Missing credentials expose `credential_unavailable`
-and withhold the Tool from new model/Snapshot definitions. Agent lists are
-allowlists, not requirements; only explicit `required_tools` makes a missing
-capability disqualify a Multi candidate. Losing a frozen prerequisite blocks
-Resume. See [Tool security](../tools/tool-security-policy.md).
+Enablement is not readiness: missing credentials withhold model/Snapshot
+definitions. [Tool security](../tools/tool-security-policy.md) owns authority;
+[Agent selection](../runtime/agent-selection.md) owns required-dependency eligibility.
 
 `TOOL_SCHEMA_MODE` and `TOOL_SCHEMA_TOKEN_THRESHOLD` configure frozen model
 visibility, not authorization or a token budget. Eager remains the default;
@@ -224,42 +176,20 @@ precedes Budget/Handler execution. See [Progress Guard](../tools/tool-progress-g
 
 ## Sandbox Commands
 
-For isolated scratch commands, `SANDBOX_ENABLED` is an operator opt-in; it does
-not enable a Tool or grant its capability. Startup checks compatible sbx safety
-flags and authentication, and reclaims recorded orphan sandboxes before accepting
-work. CPU/RAM are per VM; `SANDBOX_MAX_CONCURRENT` is a separate process-wide VM
-cap. Profile changes affect the frozen Tool revision. See
-[Sandbox execution](sandbox-execution.md) for the exact authorization rule,
-retained-output semantics, supported local deployment and remaining limits.
+`SANDBOX_ENABLED` opts into scratch execution; it does not enable or authorize
+the Tool. [Sandbox execution](sandbox-execution.md) owns compatible sbx setup,
+resource caps, startup recovery, the authorization rule and cleanup semantics.
 
 ## Trusted Skill Packages
 
-`TRUSTED_SKILL_DIRS` is a CSV of installation roots, not individual packages.
-The template uses `../../.agents/skills` from API cwd. Only immediate reviewed
-`SKILL.md` directories are discovered; no recursive scan or package symlinks.
-Empty disables new bindings; missing roots, duplicate names, invalid packages,
-and catalog overflow fail startup. Exact-package paths fail with a parent-root
-hint instead of silently finding zero packages.
-
-Agent profiles bind names from `GET /api/skills`. Roots grant no script, Tool,
-or credential permissions. Old Runs reuse bounded frozen content without
-rereading disk. See [installation](../tools/skill-installation.md) and
-[Loader contract](../tools/trusted-skills.md).
+`TRUSTED_SKILL_DIRS` names reviewed installation roots, not individual packages.
+See [installation](../tools/skill-installation.md#shared-directory-and-runtime-trust)
+for cwd/layout checks and the [Loader contract](../tools/trusted-skills.md) for
+discovery, package limits, Agent binding and frozen content.
 
 ## Verification
 
-Only `completion_contract` opts a new Run in; `VERIFICATION_*` settings bound
-execution, not activation. Host Command Verifier and its workspace/command
-environment settings are retired; historical output remains readable.
-HTTP requires an exact origin grant, including loopback, with dial-time
-DNS checks, no redirects/proxies, a 10s total ceiling and 1 MiB response limit.
-Artifact bytes are capped independently with observed-size/hash metadata.
-See [Verification](../runtime/verification.md) and
-[Execution boundaries](execution-boundaries.md).
-
-## Operational Checklist
-
-Check actual vector dimensions; reindex changed identities; set prices before
-cost limits; deliberately scope verifier HTTP hosts and CORS/access; and
-create a new Run after changing frozen settings. Do not reinterpret old Runs
-through current editable config.
+`completion_contract` opts a new Run in; `VERIFICATION_*` settings bound execution,
+not activation. Host Command Verifier is retired. [Verification](../runtime/verification.md)
+owns contract/Evidence behavior; [execution boundaries](execution-boundaries.md)
+owns HTTP origins, DNS checks, timeouts and response caps.

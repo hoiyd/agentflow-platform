@@ -2,8 +2,7 @@
 
 ## Request Contract
 
-`POST /api/rag/search` accepts optional `metadata_filter`; the
-[retired equality map](metadata-filters.md) is rejected. The authorized Workspace
+`POST /api/rag/search` accepts optional `metadata_filter`. The authorized Workspace
 and the required stored schema version wrap
 the complete expression; a user `any` cannot widen either constraint.
 
@@ -81,6 +80,23 @@ corpus before changing plans or adding bounded ANN/iterative scans.
 
 For Workbench controls, Run/Tool propagation and execution boundaries, see
 [Runtime Knowledge scope](runtime-knowledge-filters.md).
+
+## Migrating Legacy Queries
+
+Search and Golden evaluation reject the retired query field `metadata`, including
+`{}`, `null`, or a request also containing a valid typed filter. HTTP rejects it
+with `400` before embedding; offline Golden loading rejects it too.
+
+Declare a schema, choose Document or Chunk fields, and use their declared types.
+An intentional either-layer match needs `any` over both qualified fields;
+independent keys use `all`. Arbitrary extension keys and JSONB text coercion have
+no typed equivalent. Adopt a stored schema explicitly through
+[metadata updates](metadata-updates.md); no runtime translation or automatic
+adoption occurs.
+
+Stored Document/Chunk metadata, ingestion/update APIs and Memory filters are
+unchanged. Historical reports remain readable; legacy `evidence.metadata` cannot
+be resubmitted as a query constraint.
 
 ## Failure Inventory
 

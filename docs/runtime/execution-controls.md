@@ -147,11 +147,11 @@ script execution. Neither sandbox resource caps nor Tool timeouts replace Run Bu
 ## 8. Verification
 
 Only initial `completion_contract` enables checks. Attempts are not model retries;
-deployment HTTP/command allowlists remain live. `answer_relevance` consumes
+deployment HTTP allowlists remain live. `answer_relevance` consumes
 embedding requests under shared controls, not generation-token Ledger entries.
 [Verification](verification.md) owns checks, Evidence and exhaustion policy;
 [execution boundaries](../operations/execution-boundaries.md) owns destination/
-host-process limits.
+network limits. Host Command Verifier is retired; sandbox execution remains a Tool.
 
 ## 9. Recovery Stale Threshold
 

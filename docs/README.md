@@ -51,7 +51,7 @@ These are implementation and operating contracts, not a required reading list.
 <details>
 <summary>Knowledge and metadata</summary>
 
-- [Typed filters](knowledge/typed-metadata-filters.md), [query migration](knowledge/metadata-filters.md), [Runtime scope](knowledge/runtime-knowledge-filters.md)
+- [Typed filters and query migration](knowledge/typed-metadata-filters.md), [Runtime scope](knowledge/runtime-knowledge-filters.md)
 - [Metadata schema](knowledge/metadata-schema.md), [metadata updates](knowledge/metadata-updates.md), [document lifecycle](knowledge/document-lifecycle.md)
 
 </details>
@@ -97,18 +97,10 @@ in OpenAPI, and event names in the generated catalog. Preserve executable
 steps, failure semantics, evidence provenance, and limitations when editing.
 Do not turn implementation notes or private backlogs into the public reading path.
 
-Use [Mermaid](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams)
-for architecture, execution flow and state diagrams. Keep source in Markdown,
-use broadly supported flowchart/state syntax, and preserve decision/loop labels.
-Directory trees, formulas and executable examples stay text; generated diagram
-exports are review artifacts, not a second source to maintain.
-
-Diagrams follow the workbench palette: 18px system sans-serif, white nodes with
-thin neutral borders, blue for the key execution/policy boundary, and light gray
-for retained records. Labels and shapes carry meaning without color. Keep the
-canvas/edge labels reader-themed for light/dark compatibility; use no remote
-fonts, gradients, shadows or Mermaid `themeCSS`. Each fenced graph keeps its
-small config and role classes inline because GitHub does not load a shared
-repository stylesheet. Use [Chat and Completion](architecture/backend-architecture.md#chat-and-completion)
-as the style reference rather than adding a diagram build pipeline.
-Simple state-transition views use flowchart syntax to keep role styling portable.
+Keep architecture/flow diagrams as [Mermaid source](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams),
+not a separate export pipeline. Follow [Chat and Completion](architecture/backend-architecture.md#chat-and-completion):
+18px system sans-serif, thin neutral borders, blue policy/execution boundaries
+and light-gray records. Preserve decision/loop labels and color-independent meaning. Use portable
+flowcharts for transitions, reader-themed canvas/edge labels, inline config and
+role classes; no remote fonts, gradients, shadows or `themeCSS`. Trees, formulas
+and executable examples stay text; generated exports are review artifacts.
