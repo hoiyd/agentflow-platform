@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -33,30 +34,20 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	agent, ok, err := scoped.GetAgent(replay.Run.AgentID)
-	if err != nil {
-		writeFailure(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	if !ok && replay.RuntimeSnapshot != nil {
-		// Migration can assign an old global Agent to a different owner. Historical
-		// reports may use their own frozen configuration, never that owner's edits.
+	agent := domain.Agent{ID: replay.Run.AgentID, WorkspaceID: replay.Run.WorkspaceID}
+	if replay.RuntimeSnapshot != nil {
 		candidates := append([]domain.RuntimeAgentSnapshot{replay.RuntimeSnapshot.Agent}, replay.RuntimeSnapshot.CandidateAgents...)
 		for _, frozen := range candidates {
 			if frozen.ID == replay.Run.AgentID {
 				agent = domain.Agent{ID: frozen.ID, WorkspaceID: replay.Run.WorkspaceID, Name: frozen.Name, Description: frozen.Description, SystemPrompt: frozen.SystemPrompt,
 					RoutingHints: frozen.RoutingHints, Tools: frozen.Tools, Skills: frozen.Skills, SkillPolicies: frozen.SkillPolicies, MemoryEnabled: frozen.MemoryEnabled, RetrievalEnabled: frozen.RetrievalEnabled, Executor: frozen.Executor}
-				ok = true
 				break
 			}
 		}
 	}
-	if !ok {
-		writeError(w, http.StatusNotFound, "agent not found")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, buildEpisodeReport(replay, domain.NormalizeAgentConfig(agent)))
+	agent.RoutingHints = domain.NormalizeAgentRoutingHints(agent.RoutingHints)
+	agent.Tools = append([]string{}, agent.Tools...)
+	writeJSON(w, http.StatusOK, buildEpisodeReport(replay, agent))
 }
 
 func buildEpisodeReport(replay domain.RunReplay, agent domain.Agent) domain.EpisodeReport {
@@ -64,9 +55,7 @@ func buildEpisodeReport(replay domain.RunReplay, agent domain.Agent) domain.Epis
 		Run:          replay.Run,
 		Conversation: replay.Conversation,
 		Agent:        agent,
-		Task:         episodeTask(replay),
-		FinalOutput:  episodeFinalOutput(replay),
-		Messages:     replay.Messages,
+		Messages:     []domain.Message{},
 		Steps:        replay.Steps,
 		TraceSummary: replay.Summary,
 		Retrievals:   episodeRetrievals(replay.RunEvents),
@@ -75,42 +64,14 @@ func buildEpisodeReport(replay domain.RunReplay, agent domain.Agent) domain.Epis
 		Errors:       episodeErrors(replay),
 	}
 	report.Verification = episodeVerification(replay)
+	bound, err := runcompletion.ReadCandidate(replay.Run, replay.Messages, replay.RunEvents)
+	if err == nil {
+		report.Task, report.FinalOutput = bound.Question, bound.Message.Content
+		report.Messages = append(report.Messages, bound.Message)
+	} else {
+		report.Verification.Warnings = append(report.Verification.Warnings, "Run-bound candidate unavailable; no answer inferred from Conversation history or Stages")
+	}
 	return report
-}
-
-func episodeTask(replay domain.RunReplay) string {
-	for _, message := range replay.Messages {
-		if message.Role == "user" && strings.TrimSpace(message.Content) != "" {
-			return strings.TrimSpace(message.Content)
-		}
-	}
-	for _, step := range replay.Steps {
-		if strings.TrimSpace(step.Input) != "" {
-			return strings.TrimSpace(step.Input)
-		}
-	}
-	return ""
-}
-
-func episodeFinalOutput(replay domain.RunReplay) string {
-	for i := len(replay.Steps) - 1; i >= 0; i-- {
-		step := replay.Steps[i]
-		if strings.EqualFold(step.Role, "final") && strings.TrimSpace(step.Output) != "" {
-			return strings.TrimSpace(step.Output)
-		}
-	}
-	for i := len(replay.Messages) - 1; i >= 0; i-- {
-		message := replay.Messages[i]
-		if message.Role == "assistant" && strings.TrimSpace(message.Content) != "" {
-			return strings.TrimSpace(message.Content)
-		}
-	}
-	for i := len(replay.Steps) - 1; i >= 0; i-- {
-		if strings.TrimSpace(replay.Steps[i].Output) != "" {
-			return strings.TrimSpace(replay.Steps[i].Output)
-		}
-	}
-	return ""
 }
 
 func episodeRetrievals(events []domain.RunEvent) domain.EpisodeRetrievals {

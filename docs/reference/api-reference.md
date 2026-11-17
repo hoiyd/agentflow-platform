@@ -103,7 +103,7 @@ gate (`agent_route_no_suitable_candidate`). They do not start a Worker;
 | Usage | Immutable budget, effective totals, open reservations, and append-only entries. Settlement replaces the estimate for the same `operation_id`. See [Run Budget](../runtime/run-budget.md). |
 | Model requests | Physical-attempt Envelopes, Capture metadata, Manifest references, token-source diffs, and reconstruction invariants. Content requires `include_content=true` and valid retention. See [capture](../context/model-request-reconstruction.md). |
 | Artifacts | Lists/Replay expose metadata only. Bounded reads use `offset`/`limit`; search uses `q`/`max_matches`. Expired content returns 410. See [Tool Artifacts](../tools/tool-result-artifacts.md). |
-| Episode | Compact export derived from Replay, not another execution history or accounting source. |
+| Episode | Compact export derived from Replay; task/answer come from the Run-bound candidate receipt and Agent configuration from its frozen Snapshot. `messages` contains only that candidate. Missing/invalid bindings leave task/answer empty with a warning; old receipts may identify an answer without its question. No neighboring-message or Stage-output fallback, independent history or accounting source. |
 
 `GET /api/runs/{id}/events` observes an admitted Run independently of its
 starting request. `Last-Event-ID` takes precedence over `after` as the durable
