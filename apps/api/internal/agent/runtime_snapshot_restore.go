@@ -108,14 +108,7 @@ func toolDefinitionMatches(installed tool.Binding, frozen domain.RuntimeToolSnap
 	if frozen.SchemaVersion != tool.ToolSchemaVersion || strings.TrimSpace(frozen.DefinitionRevision) == "" {
 		return false
 	}
-	current := domain.RuntimeToolSnapshot{
-		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
-		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.JournalMode()),
-		SchemaVersion: installed.Descriptor.SchemaVersion, DefinitionRevision: installed.Descriptor.DefinitionRevision,
-		Security: installed.Descriptor.Security,
-		Source:   installed.Descriptor.Source,
-	}
-	currentJSON, err := json.Marshal(current)
+	currentJSON, err := json.Marshal(snapshotTool(installed.Descriptor))
 	if err != nil {
 		return false
 	}
