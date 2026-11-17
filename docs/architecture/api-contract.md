@@ -20,7 +20,8 @@ DTOs and frontend path/schema types.
 The contract covers health, conversations/messages/Task State, streaming Chat,
 Agents, the primary Run lifecycle, Replay/Usage/Projection, Episode reports,
 request debug/capture, collaboration steps, Tools/effect reconciliation, Memory,
-Document upload/list/delete, Task State revisions, and bounded Artifact reads/search.
+Document upload/list/detail/delete, RAG Search diagnostics, Task State revisions,
+and bounded Artifact reads/search.
 Replay nested DTOs come from the same schemas rather than hand-written frontend
 copies. Dynamic Snapshot/Manifest metadata and extension payloads remain open
 objects; this is not a schema for every internal persistence record.

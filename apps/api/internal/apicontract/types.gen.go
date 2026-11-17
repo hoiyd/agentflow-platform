@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	domain "agentflow-platform/apps/api/internal/domain"
 )
 
 // Defines values for ChatMode.
@@ -1545,6 +1547,12 @@ type CompletionContractInput struct {
 // CompletionContractInputSubjectType defines model for CompletionContractInput.SubjectType.
 type CompletionContractInputSubjectType string
 
+// ContextSelectionInfo defines model for ContextSelectionInfo.
+type ContextSelectionInfo = domain.ContextSelectionInfo
+
+// ContextTransformationInfo defines model for ContextTransformationInfo.
+type ContextTransformationInfo = domain.ContextTransformationInfo
+
 // ContinueRunRequest defines model for ContinueRunRequest.
 type ContinueRunRequest struct {
 	Plan                string                    `json:"plan"`
@@ -1674,6 +1682,9 @@ type DocumentMetadataUpdate struct {
 	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
 }
 
+// DocumentSearchResponse defines model for DocumentSearchResponse.
+type DocumentSearchResponse = domain.DocumentSearchResponse
+
 // DocumentUploadRequest defines model for DocumentUploadRequest.
 type DocumentUploadRequest struct {
 	File []byte `json:"file"`
@@ -1685,6 +1696,9 @@ type DocumentUploadRequest struct {
 	// Title Defaults to the filename without extension.
 	Title *string `json:"title,omitempty"`
 }
+
+// EmbeddingInfo defines model for EmbeddingInfo.
+type EmbeddingInfo = domain.EmbeddingInfo
 
 // EpisodeError defines model for EpisodeError.
 type EpisodeError struct {
@@ -1769,6 +1783,9 @@ type ErrorResponse struct {
 	Source    *string `json:"source,omitempty"`
 }
 
+// FusionInfo defines model for FusionInfo.
+type FusionInfo = domain.FusionInfo
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	// PlanningContractVersion Supported read-only planning protocol. Absence means the client must not submit planning or plan execution requests.
@@ -1815,8 +1832,8 @@ type KnowledgeDocument struct {
 	} `json:"index_identity"`
 
 	// Lifecycle Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999.
-	Lifecycle *DocumentLifecycle     `json:"lifecycle,omitempty"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	Lifecycle *DocumentLifecycle      `json:"lifecycle,omitempty"`
+	Metadata  *map[string]interface{} `json:"metadata"`
 
 	// MetadataSchemaVersion Absent for legacy data; migration never fabricates validation.
 	MetadataSchemaVersion *string   `json:"metadata_schema_version,omitempty"`
@@ -1832,20 +1849,20 @@ type KnowledgeDocument struct {
 
 // KnowledgeDocumentChunk defines model for KnowledgeDocumentChunk.
 type KnowledgeDocumentChunk struct {
-	ChunkIndex      int                    `json:"chunk_index"`
-	Content         string                 `json:"content"`
-	ContentHash     *string                `json:"content_hash,omitempty"`
-	CreatedAt       time.Time              `json:"created_at"`
-	Document        *KnowledgeDocument     `json:"document,omitempty"`
-	DocumentId      string                 `json:"document_id"`
-	DocumentVersion *string                `json:"document_version,omitempty"`
-	EndOffset       int                    `json:"end_offset"`
-	Id              string                 `json:"id"`
-	Metadata        map[string]interface{} `json:"metadata"`
-	ParentId        *string                `json:"parent_id,omitempty"`
-	SectionPath     []string               `json:"section_path"`
-	StartOffset     int                    `json:"start_offset"`
-	TokenCount      int                    `json:"token_count"`
+	ChunkIndex      int                     `json:"chunk_index"`
+	Content         string                  `json:"content"`
+	ContentHash     *string                 `json:"content_hash,omitempty"`
+	CreatedAt       time.Time               `json:"created_at"`
+	Document        *KnowledgeDocument      `json:"document,omitempty"`
+	DocumentId      string                  `json:"document_id"`
+	DocumentVersion *string                 `json:"document_version,omitempty"`
+	EndOffset       int                     `json:"end_offset"`
+	Id              string                  `json:"id"`
+	Metadata        *map[string]interface{} `json:"metadata"`
+	ParentId        *string                 `json:"parent_id,omitempty"`
+	SectionPath     *[]string               `json:"section_path"`
+	StartOffset     int                     `json:"start_offset"`
+	TokenCount      int                     `json:"token_count"`
 }
 
 // KnowledgeDocumentDetail defines model for KnowledgeDocumentDetail.
@@ -1881,6 +1898,12 @@ type KnowledgeSearchRequest struct {
 	Query          string          `json:"query"`
 	WorkspaceId    *string         `json:"workspace_id,omitempty"`
 }
+
+// KnowledgeSecurityDecision defines model for KnowledgeSecurityDecision.
+type KnowledgeSecurityDecision = domain.KnowledgeSecurityDecision
+
+// KnowledgeSecurityInfo defines model for KnowledgeSecurityInfo.
+type KnowledgeSecurityInfo = domain.KnowledgeSecurityInfo
 
 // MCPConnection defines model for MCPConnection.
 type MCPConnection struct {
@@ -2418,10 +2441,22 @@ type RecoverySummary struct {
 	Title        string              `json:"title"`
 }
 
+// RelevanceGateDecision defines model for RelevanceGateDecision.
+type RelevanceGateDecision = domain.RelevanceGateDecision
+
+// RelevanceGateInfo defines model for RelevanceGateInfo.
+type RelevanceGateInfo = domain.RelevanceGateInfo
+
+// RerankerInfo defines model for RerankerInfo.
+type RerankerInfo = domain.RerankerInfo
+
 // ResumeRunRequest defines model for ResumeRunRequest.
 type ResumeRunRequest struct {
 	UserInput string `json:"user_input"`
 }
+
+// RetrievedDocumentChunk defines model for RetrievedDocumentChunk.
+type RetrievedDocumentChunk = domain.RetrievedDocumentChunk
 
 // RetrievedMemory defines model for RetrievedMemory.
 type RetrievedMemory struct {

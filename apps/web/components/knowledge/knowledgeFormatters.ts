@@ -1,6 +1,6 @@
 import type { DocumentInfo } from "../../lib/knowledge-api";
 
-export function metadataString(metadata: Record<string, unknown> | undefined, key: string) {
+export function metadataString(metadata: Record<string, unknown> | null | undefined, key: string) {
   const value = metadata?.[key];
   return typeof value === "string" ? value : "";
 }

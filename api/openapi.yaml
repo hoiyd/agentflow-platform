@@ -95,7 +95,7 @@ paths:
     post:
       operationId: searchKnowledge
       tags: [Knowledge]
-      description: Search inside the authorized Workspace. Legacy metadata and typed metadata_filter are ANDed before semantic/keyword limits and context expansion. User OR never encloses Workspace or schema eligibility. Typed filtering does not implement ACL or expiry.
+      description: Search inside the authorized Workspace. Typed metadata_filter applies before recall limits and context expansion. Legacy metadata is rejected. User OR never encloses Workspace or schema eligibility; typed filtering does not implement ACL or expiry.
       requestBody:
         required: true
         content:
@@ -106,7 +106,7 @@ paths:
           description: Existing retrieval response with items, context_items, citation_sources and pipeline metadata. A valid filter with no eligible candidates returns an empty items array and no_match.
           content:
             application/json:
-              schema: { type: object, additionalProperties: true }
+              schema: { $ref: '#/components/schemas/DocumentSearchResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '409': { $ref: '#/components/responses/Conflict' }
         '500':
@@ -2145,6 +2145,164 @@ components:
         chunks:
           type: array
           items: { $ref: '#/components/schemas/KnowledgeDocumentChunk' }
+    DocumentSearchResponse:
+      x-go-type: domain.DocumentSearchResponse
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [items]
+      properties:
+        items: { type: [array, 'null'], items: { $ref: '#/components/schemas/RetrievedDocumentChunk' } }
+        context_items: { type: [array, 'null'], items: { $ref: '#/components/schemas/RetrievedDocumentChunk' } }
+        citation_sources: { type: [array, 'null'], items: { $ref: '#/components/schemas/RAGCitation' } }
+        context_selection: { $ref: '#/components/schemas/ContextSelectionInfo' }
+        embedding: { $ref: '#/components/schemas/EmbeddingInfo' }
+        fusion: { $ref: '#/components/schemas/FusionInfo' }
+        reranker: { $ref: '#/components/schemas/RerankerInfo' }
+        relevance_gate: { $ref: '#/components/schemas/RelevanceGateInfo' }
+        relevance_decisions: { type: [array, 'null'], items: { $ref: '#/components/schemas/RelevanceGateDecision' } }
+        security: { $ref: '#/components/schemas/KnowledgeSecurityInfo' }
+        no_match: { type: boolean }
+        reason: { type: string }
+    RetrievedDocumentChunk:
+      x-go-type: domain.RetrievedDocumentChunk
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [document, chunk, similarity, recency_boost, score]
+      properties:
+        document: { $ref: '#/components/schemas/KnowledgeDocument' }
+        chunk: { $ref: '#/components/schemas/KnowledgeDocumentChunk' }
+        similarity: { type: number }
+        recency_boost: { type: number }
+        score: { type: number }
+        vector_rank: { type: integer }
+        lexical_rank: { type: integer }
+        lexical_score: { type: number }
+        rrf_score: { type: number }
+        fusion_rank: { type: integer }
+        rerank_rank: { type: integer }
+        lexical_boost: { type: number }
+        metadata_boost: { type: number }
+        diversity_penalty: { type: number }
+        rerank_score: { type: number }
+        matched_terms: { type: array, items: { type: string } }
+        evidence_score: { type: number }
+        evidence_coverage: { type: number }
+        confidence: { type: string }
+        filter_reason: { type: string }
+        context_role: { type: string }
+        matched_chunk_id: { type: string }
+        source_chunk_ids: { type: array, items: { type: string } }
+        matched_chunk_ids: { type: array, items: { type: string } }
+        merged_chunk_count: { type: integer }
+        source_id: { type: string }
+    EmbeddingInfo:
+      x-go-type: domain.EmbeddingInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [provider, model, dimensions, estimated]
+      properties:
+        provider: { type: string }
+        model: { type: string }
+        dimensions: { type: integer }
+        estimated: { type: boolean }
+    FusionInfo:
+      x-go-type: domain.FusionInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [algorithm, version, rank_constant, dense_weight, lexical_weight]
+      properties:
+        algorithm: { type: string }
+        version: { type: string }
+        rank_constant: { type: integer }
+        dense_weight: { type: number }
+        lexical_weight: { type: number }
+    RerankerInfo:
+      x-go-type: domain.RerankerInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [algorithm, version, config_version]
+      properties:
+        algorithm: { type: string }
+        version: { type: string }
+        config_version: { type: string }
+        provider: { type: string }
+        model: { type: string }
+    RelevanceGateInfo:
+      x-go-type: domain.RelevanceGateInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [policy, version, config_version, minimum_evidence_coverage]
+      properties:
+        policy: { type: string }
+        version: { type: string }
+        config_version: { type: string }
+        minimum_evidence_coverage: { type: number }
+    RelevanceGateDecision:
+      x-go-type: domain.RelevanceGateDecision
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [document_id, chunk_id, lexical_rank, lexical_score, similarity, rerank_score, matched_terms, evidence_score, evidence_coverage, identifier_match, confidence, filter_reason, accepted]
+      properties:
+        document_id: { type: string }
+        chunk_id: { type: string }
+        lexical_rank: { type: integer }
+        lexical_score: { type: number }
+        similarity: { type: number }
+        rerank_score: { type: number }
+        matched_terms: { type: [array, 'null'], items: { type: string } }
+        evidence_score: { type: number }
+        evidence_coverage: { type: number }
+        identifier_match: { type: string }
+        confidence: { type: string }
+        filter_reason: { type: string }
+        accepted: { type: boolean }
+    KnowledgeSecurityDecision:
+      x-go-type: domain.KnowledgeSecurityDecision
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [document_id, chunk_id, action, reasons]
+      properties:
+        document_id: { type: string }
+        chunk_id: { type: string }
+        action: { type: string }
+        reasons: { type: [array, 'null'], items: { type: string } }
+    KnowledgeSecurityInfo:
+      x-go-type: domain.KnowledgeSecurityInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [policy_version, untrusted_context, checked_candidates, blocked_candidates]
+      properties:
+        policy_version: { type: string }
+        untrusted_context: { type: boolean }
+        checked_candidates: { type: integer }
+        blocked_candidates: { type: integer }
+        decisions: { type: array, items: { $ref: '#/components/schemas/KnowledgeSecurityDecision' } }
+    ContextSelectionInfo:
+      x-go-type: domain.ContextSelectionInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [version, max_tokens, tokens_used, matched_children, parent_chunks, adjacent_chunks, scope_filtered]
+      properties:
+        version: { type: string }
+        max_tokens: { type: integer }
+        tokens_used: { type: integer }
+        matched_children: { type: integer }
+        parent_chunks: { type: integer }
+        adjacent_chunks: { type: integer }
+        scope_filtered: { type: boolean }
+        transformation: { $ref: '#/components/schemas/ContextTransformationInfo' }
+    ContextTransformationInfo:
+      x-go-type: domain.ContextTransformationInfo
+      x-go-type-import: { path: agentflow-platform/apps/api/internal/domain, name: domain }
+      type: object
+      required: [version, input_chunks, output_chunks, duplicates_removed, adjacent_merges, document_groups]
+      properties:
+        version: { type: string }
+        input_chunks: { type: integer }
+        output_chunks: { type: integer }
+        duplicates_removed: { type: integer }
+        adjacent_merges: { type: integer }
+        document_groups: { type: integer }
     KnowledgeDocumentChunk:
       type: object
       required: [id, document_id, chunk_index, content, token_count, metadata, created_at, section_path, start_offset, end_offset]
@@ -2152,7 +2310,7 @@ components:
         id: { type: string }
         document_id: { type: string }
         parent_id: { type: string }
-        section_path: { type: array, items: { type: string } }
+        section_path: { type: [array, 'null'], items: { type: string } }
         start_offset: { type: integer }
         end_offset: { type: integer }
         document_version: { type: string }
@@ -2160,7 +2318,7 @@ components:
         chunk_index: { type: integer }
         content: { type: string }
         token_count: { type: integer }
-        metadata: { type: object, additionalProperties: true }
+        metadata: { type: [object, 'null'], additionalProperties: true }
         created_at: { type: string, format: date-time }
         document: { $ref: '#/components/schemas/KnowledgeDocument' }
     KnowledgeDocument:
@@ -2176,7 +2334,7 @@ components:
         source_type: { type: string }
         source_uri: { type: string }
         mime_type: { type: string }
-        metadata: { type: object, additionalProperties: true }
+        metadata: { type: [object, 'null'], additionalProperties: true }
         metadata_schema_version: { type: string, description: Absent for legacy data; migration never fabricates validation. }
         lifecycle: { $ref: '#/components/schemas/DocumentLifecycle' }
         chunk_count: { type: integer }

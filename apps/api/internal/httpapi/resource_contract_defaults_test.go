@@ -17,6 +17,9 @@ func TestSerializedResourceContractDefaults(t *testing.T) {
 		"RetrievedMemory":          domain.RetrievedMemory{},
 		"ToolArtifactRead":         domain.ToolArtifactRead{},
 		"ToolArtifactSearchResult": domain.ToolArtifactSearchResult{},
+		"KnowledgeDocumentChunk":   domain.DocumentChunk{},
+		"RetrievedDocumentChunk":   domain.RetrievedDocumentChunk{},
+		"DocumentSearchResponse":   domain.DocumentSearchResponse{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			encoded, err := json.Marshal(value)

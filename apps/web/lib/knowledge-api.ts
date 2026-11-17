@@ -3,159 +3,17 @@ import type { components } from "./api-contract.gen.ts";
 
 export type DocumentInfo = components["schemas"]["KnowledgeDocument"];
 
-export type RetrievedDocumentChunk = {
-  document: DocumentInfo;
-  chunk: {
-    id: string;
-    document_id: string;
-    parent_id?: string;
-    section_path?: string[];
-    start_offset?: number;
-    end_offset?: number;
-    document_version?: string;
-    content_hash?: string;
-    chunk_index: number;
-    content: string;
-    token_count: number;
-    metadata: Record<string, unknown>;
-    created_at: string;
-  };
-  similarity: number;
-  recency_boost: number;
-  score: number;
-  vector_rank?: number;
-  lexical_rank?: number;
-  lexical_score?: number;
-  rrf_score?: number;
-  fusion_rank?: number;
-  rerank_rank?: number;
-  lexical_boost?: number;
-  metadata_boost?: number;
-  diversity_penalty?: number;
-  rerank_score?: number;
-  matched_terms?: string[];
-  evidence_score?: number;
-  evidence_coverage?: number;
-  confidence?: "high" | "medium" | "low" | string;
-  filter_reason?: string;
-  context_role?: "matched_child" | "parent" | "adjacent" | string;
-  matched_chunk_id?: string;
-  source_chunk_ids?: string[];
-  matched_chunk_ids?: string[];
-  merged_chunk_count?: number;
-  source_id?: string;
-};
-
-export type RAGCitation = {
-  source_id: string;
-  document_id: string;
-  document_title: string;
-  document_version?: string;
-  chunk_id: string;
-  source_chunk_ids?: string[];
-  section_path?: string[];
-  start_offset?: number;
-  end_offset?: number;
-};
-
-export type EmbeddingInfo = {
-  provider: string;
-  model: string;
-  dimensions?: number;
-  estimated: boolean;
-};
-
-export type FusionInfo = {
-  algorithm: string;
-  version: string;
-  rank_constant: number;
-  dense_weight: number;
-  lexical_weight: number;
-};
-
-export type RerankerInfo = {
-  algorithm: string;
-  version: string;
-  config_version: string;
-  provider?: string;
-  model?: string;
-};
-
-export type RelevanceGateInfo = {
-  policy: string;
-  version: string;
-  config_version: string;
-  minimum_evidence_coverage: number;
-};
-
-export type RelevanceGateDecision = {
-  document_id: string;
-  chunk_id: string;
-  lexical_rank: number;
-  lexical_score: number;
-  similarity: number;
-  rerank_score: number;
-  matched_terms: string[];
-  evidence_score: number;
-  evidence_coverage: number;
-  identifier_match: string;
-  confidence: string;
-  filter_reason: string;
-  accepted: boolean;
-};
-
-export type KnowledgeSecurityDecision = {
-  document_id: string;
-  chunk_id: string;
-  action: "blocked" | string;
-  reasons: string[];
-};
-
-export type KnowledgeSecurityInfo = {
-  policy_version: string;
-  untrusted_context: boolean;
-  checked_candidates: number;
-  blocked_candidates: number;
-  decisions?: KnowledgeSecurityDecision[];
-};
-
-export type ContextSelectionInfo = {
-  version: string;
-  max_tokens: number;
-  tokens_used: number;
-  matched_children: number;
-  parent_chunks: number;
-  adjacent_chunks: number;
-  scope_filtered: boolean;
-  transformation?: ContextTransformationInfo;
-};
-
-/**
- * Versioned post-selection context shaping metadata. The intentionally broad
- * name leaves room for future compression, truncation, or reordering stages.
- */
-export type ContextTransformationInfo = {
-  version: string;
-  input_chunks: number;
-  output_chunks: number;
-  duplicates_removed: number;
-  adjacent_merges: number;
-  document_groups: number;
-};
-
-export type DocumentSearchResponse = {
+export type RetrievedDocumentChunk = components["schemas"]["RetrievedDocumentChunk"];
+export type RAGCitation = components["schemas"]["RAGCitation"];
+export type EmbeddingInfo = components["schemas"]["EmbeddingInfo"];
+export type FusionInfo = components["schemas"]["FusionInfo"];
+export type RerankerInfo = components["schemas"]["RerankerInfo"];
+export type RelevanceGateInfo = components["schemas"]["RelevanceGateInfo"];
+export type RelevanceGateDecision = components["schemas"]["RelevanceGateDecision"];
+export type KnowledgeSecurityInfo = components["schemas"]["KnowledgeSecurityInfo"];
+export type ContextSelectionInfo = components["schemas"]["ContextSelectionInfo"];
+export type DocumentSearchResponse = Omit<components["schemas"]["DocumentSearchResponse"], "items"> & {
   items: RetrievedDocumentChunk[];
-  context_items?: RetrievedDocumentChunk[];
-  citation_sources?: RAGCitation[];
-  context_selection?: ContextSelectionInfo;
-  embedding?: EmbeddingInfo;
-  fusion?: FusionInfo;
-  reranker?: RerankerInfo;
-  relevance_gate?: RelevanceGateInfo;
-  relevance_decisions?: RelevanceGateDecision[];
-  security?: KnowledgeSecurityInfo;
-  no_match?: boolean;
-  reason?: string;
 };
 
 export type RAGEvaluationCase = components["schemas"]["RAGEvaluationCase"];
@@ -318,18 +176,11 @@ export async function searchRAG(input: components["schemas"]["KnowledgeSearchReq
   }
   const payload = expectObject<Partial<DocumentSearchResponse>>(data, "knowledge search");
   return {
+    ...payload,
     items: Array.isArray(payload.items) ? payload.items : [],
     context_items: Array.isArray(payload.context_items) ? payload.context_items : [],
     citation_sources: Array.isArray(payload.citation_sources) ? payload.citation_sources : [],
-    context_selection: payload.context_selection,
-    embedding: payload.embedding,
-    fusion: payload.fusion,
-    reranker: payload.reranker,
-    relevance_gate: payload.relevance_gate,
     relevance_decisions: Array.isArray(payload.relevance_decisions) ? payload.relevance_decisions : [],
-    security: payload.security,
-    no_match: payload.no_match,
-    reason: payload.reason
   };
 }
 
