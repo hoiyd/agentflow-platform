@@ -49,7 +49,7 @@ export function RunReplay(props: Props) {
 
 function RunReplayView({ runId, initialEventId }: Props) {
   const router = useRouter();
-  const { replay, episodeReport, episodeReportError, loadError, refreshError,
+  const { replay, loadError, refreshError,
     refresh: refreshReplay, invalidateReads, updateRunStatus } = useReplayData(runId);
   const [selection, setSelection] = useState({ initialEventId, id: initialEventId ?? "" });
   const selectedEventId = selection.initialEventId === initialEventId ? selection.id : initialEventId ?? "";
@@ -129,9 +129,12 @@ function RunReplayView({ runId, initialEventId }: Props) {
 			case "continue_in_chat":
 				router.push(`/workspace?conversation=${encodeURIComponent(action.target_id ?? replay?.run.conversation_id ?? "")}`);
 				return;
-			case "review_verification":
-				document.getElementById("run-verification-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+			case "review_verification": {
+				const report = document.getElementById("run-verification-evidence");
+				if (report instanceof HTMLDetailsElement) report.open = true;
+				report?.scrollIntoView({ behavior: "smooth", block: "start" });
 				return;
+			}
 			case "review_task_state":
 				document.getElementById("run-task-state")?.scrollIntoView({ behavior: "smooth", block: "start" });
 				return;
@@ -231,14 +234,9 @@ function RunReplayView({ runId, initialEventId }: Props) {
         ledger={replay.usage_ledger}
       />
 
-      {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
+      <EpisodeReportPanel key={`${runId}:${replay.run.updated_at}:${replay.projection.as_of_sequence}`} runId={runId} />
       <StructuredResult result={replay.structured_result} />
       <PlanningPanel replay={replay} />
-      {episodeReportError ? (
-        <div className="replay-secondary-error" role="status">
-          Episode report unavailable: {episodeReportError}
-        </div>
-      ) : null}
 
       <TaskStateChanges revisions={replay.task_state_revisions} runId={replay.run.id} />
 
