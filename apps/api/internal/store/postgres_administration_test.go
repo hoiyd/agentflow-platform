@@ -53,8 +53,9 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 			TaskExamples: []string{"Exercise Postgres Agent persistence."},
 			Exclusions:   []string{"unrelated work"},
 		},
-		Tools:  []string{"calculator", " calculator ", "get_current_time"},
-		Skills: []string{"evidence-research", " evidence-research "},
+		Tools:         []string{"calculator", " calculator ", "get_current_time"},
+		Skills:        []string{"evidence-research", " evidence-research "},
+		MemoryEnabled: true, RetrievalEnabled: true,
 	})
 	if err != nil || len(agent.Tools) != 2 || len(agent.RoutingHints.Capabilities) != 1 || !agent.MemoryEnabled || !agent.RetrievalEnabled {
 		t.Fatalf("create agent: agent=%#v err=%v", agent, err)

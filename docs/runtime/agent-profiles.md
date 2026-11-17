@@ -28,6 +28,12 @@ behavior and limitations.
 
 ## Creation and Selection
 
+HTTP creation defaults omitted retrieval switches to `true`; updates preserve
+omitted values. Templates explicitly enable both. Internal typed Agent inputs
+and evaluation records keep their boolean values (`false` for zero/omitted
+values), independently of `executor`. Normalization never enables retrieval;
+existing stored switches and frozen Snapshot protocols are unchanged.
+
 Profiles belong to the selected Workspace. Its owner can create, edit and archive
 them. The runtime Agent picker contains only created Workspace-owned profiles.
 In **New agent**, the optional **Copy from** picker appears before Name; it defaults
