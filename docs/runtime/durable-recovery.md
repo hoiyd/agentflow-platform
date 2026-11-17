@@ -1,14 +1,9 @@
 # Durable Recovery and Stage Checkpoints
 
-AgentFlow treats process interruption as a protocol-recovery problem, not only
-as a Run status update. The implementation has three cooperating parts:
-
-1. cold-start lifecycle repair;
-2. durable Stage checkpoints;
-3. an idempotency journal for tools with external side effects.
-
-These records use the same Postgres persistence boundary and are visible
-through Run Replay. They contain hashes and execution metadata, never API keys.
+Recovery combines cold-start lifecycle repair, Stage checkpoints and Tool Effect
+receipts in Postgres. Replay exposes their hashes and execution metadata, never
+API keys. Browser disconnect is not a crash; [Run continuity](execution-modes.md#client-disconnects-and-run-continuity)
+keeps admitted work running.
 
 ## Run Lifecycle Writes
 
@@ -139,22 +134,17 @@ Replay disables Resume and exposes the committed effect as evidence, rather than
 mislabeling it as uncertain. Checkpoint refusals retain the recoverable Run state;
 the Resume error uses conflict (409), including the error payload after SSE starts.
 
-Resume compatibility is intentionally bounded to the current Runtime Snapshot
-schema and its immediately preceding version. Older Runs
-remain readable through Replay, but attempting to Resume them returns
-`runtime_snapshot_resume_unsupported`. This prevents old execution protocols
-from silently inheriting current model, Tool, context, or budget behavior.
+Only the current Runtime Snapshot schema is resumable. Older Runs remain
+Replay-only and return `runtime_snapshot_resume_unsupported` on Resume; they
+never inherit live model, Tool, Context or budget settings. See
+[Snapshot compatibility](../architecture/terms.md#runtime-snapshot).
 
 ## Tool Side-Effect Idempotency
 
-Tool security defaults to `SideEffect=none`, with no journal. A Binding declares
-one authoritative security class: `internal_write` derives an internal journal,
-while `external_write` and `destructive` derive an external journal. Internal
-writes and external writes require Run, a real Turn or Stage, and
-Tool Call identity plus a durable Tool Effect Journal.
-It derives a stable idempotency key when the caller does not provide one.
-
-The journal uses these states:
+`Descriptor.Security.SideEffect` determines journal use; writes require Run and
+Tool Call IDs plus a real Turn or Stage ID. A committed receipt replays without
+invoking the Handler. An abandoned `executing` effect becomes
+`needs_reconciliation` during stale-Run repair and blocks unsafe Resume.
 
 ```mermaid
 ---
@@ -167,46 +157,21 @@ flowchart TD
     Prepared["prepared"] --> Executing["executing"]
     Executing -->|Durable success| Committed["committed"]
     Executing -->|Uncertain outcome| Uncertain["needs_reconciliation"]
-    Uncertain --> Protocol["Operator reconciliation protocol"]
-    Protocol --> Resolved["committed / failed / compensated"]
+    Uncertain --> Reconcile["Operator reconciliation"]
+    Reconcile --> Resolved["committed / failed / compensated"]
     classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
     classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
     classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
-    class Protocol focus;
+    class Reconcile focus;
     class Committed,Resolved durable;
 ```
 
-Callback claims and exact legal transitions are in the
-[reconciliation state model](../tools/tool-side-effect-reconciliation.md#state-model).
-
-Confirmed pre-publication filesystem failures settle directly as `failed`;
-only that durable settlement permits model argument correction. Timeouts and
-uncertain publication remain fail-closed. [Managed report writes](../tools/scoped-filesystem-writes.md)
-retain hash/identity evidence in the existing result column before publication;
-claims and unsuccessful reconciliation preserve it until terminal settlement.
-
-- A new key enters `executing` before handler invocation.
-- A successful bounded result is stored as `committed`.
-- Repeating a committed request returns the stored result with `replayed=true`
-  and does not invoke the handler.
-- An existing `executing` or `needs_reconciliation` request fails closed; it is
-  never retried as if nothing happened.
-- Timeout, cancellation, panic, result-encoding failure, or loss of the journal
-  commit marks the effect `needs_reconciliation` because an external write may
-  already have occurred.
-- Stale-Run repair atomically moves abandoned `executing` effects to the same
-  state, making process-crash uncertainty visible to operators.
-- Operator reconciliation uses optimistic versions and idempotent command IDs.
-  Manual confirmation, Tool-specific retry, and Tool-specific compensation
-  atomically update the effect with a typed audit event. Retry and compensation
-  remain unavailable unless the frozen definition and current Binding both
-  declare the matching capability.
-
-Replay exposes Tool Effect status, request hash, and `has_result`, but not the
-stored result body. Tool result content remains governed by existing Tool trace
-and result-size policy.
-See [Tool side-effect reconciliation](../tools/tool-side-effect-reconciliation.md)
-for the operator API and complete transition rules.
+Confirmed pre-publication failures may settle as `failed`; cancellation, timeout
+or uncertain publication must not be treated as proof that no write occurred.
+The [reconciliation contract](../tools/tool-side-effect-reconciliation.md) owns
+states, idempotent operator commands, supported retry/compensation and result
+visibility. [Managed report writes](../tools/scoped-filesystem-writes.md) owns
+publication evidence and permitted argument correction.
 
 ## Recovery Summary and Actions
 

@@ -55,7 +55,7 @@ The Knowledge detail view shows the stored schema and separate expandable
 Document/Chunk metadata tables with declaration ownership. It is read-only;
 legacy records are labeled **Legacy / unvalidated**, even for familiar field names.
 For query semantics, see [typed filters](typed-metadata-filters.md) and the
-[query migration boundary](metadata-filters.md); for execution, see
+[query migration boundary](typed-metadata-filters.md#migrating-legacy-queries); for execution, see
 [Runtime Knowledge scope](runtime-knowledge-filters.md). The schema endpoint
 advertises `typed_filtering` and `runtime_filtering` capabilities.
 

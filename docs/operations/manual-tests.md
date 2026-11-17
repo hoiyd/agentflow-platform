@@ -94,7 +94,7 @@ Frozen hashes/versions, retry events and adversarial claim cases belong to [Veri
 1. In a test environment, set `RUN_MAX_MODEL_CALLS=1` and start Multi/Loop work requiring more calls. Inspect the typed error and `budget.exceeded` event.
 2. Inspect Usage: physical retries must not create extra logical-call reservations. Human waiting must not consume active runtime.
 
-Use the [budget invariants and Postgres commands](../runtime/run-budget.md#invariants-worth-testing) for atomic settlement and wait-time checks instead of a timed manual pause.
+Use [budget verification](../runtime/run-budget.md#verification) for atomic settlement and wait-time checks instead of a timed manual pause.
 
 ### Controlled Run Comparison
 

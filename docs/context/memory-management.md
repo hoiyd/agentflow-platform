@@ -1,9 +1,6 @@
 # Curated Semantic Memory
 
-The design goal is precision before recall: durable memory should contain facts
-the user intended to persist, not a second copy of the conversation.
-
-AgentFlow treats conversation history and durable memory as different data layers:
+Durable Memory holds curated facts, not a second copy of the conversation:
 
 ```text
 messages            authoritative raw conversation history
@@ -12,11 +9,10 @@ memories            accepted semantic knowledge used for recall
 memory_changes      metadata-only correction/deletion audit
 ```
 
-Completing a Run no longer copies every user and assistant message into `memories`. Assistant output and ordinary conversation remain available through Messages and Replay; source-aware session-history retrieval can reintroduce relevant original Messages and Events into later model context without turning them into Memory.
+Messages and Replay retain ordinary dialogue. [Session-history retrieval](context-management.md#session-history-retrieval)
+can recover original evidence without promoting it to Memory.
 
 ## Provider Lifecycle and Curation Flow
-
-Memory is exposed through one replaceable lifecycle boundary:
 
 ```mermaid
 ---
@@ -26,7 +22,7 @@ config:
   flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
 ---
 flowchart LR
-    Initialize --> Operations["Recall / Propose / Commit / SyncTurn"]
+    Initialize --> Operations["Recall / Propose<br/>Commit / SyncTurn"]
     Operations --> Close
     classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
     classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
@@ -65,16 +61,13 @@ flowchart TD
     class Candidate,Memory durable;
 ```
 
-The rule extractor remains the high-precision fast path. It recognizes explicit English and Chinese signals such as:
-
-- `Remember that ...` / `请记住...`
-- `I prefer ...` / `我的偏好是...`
-- `Correction: ...` / `更正：...`
-- `For this project, ...` / `项目约定：...`
-
-When no rule matches, adaptive extraction can ask the originating Run's selected Chat LLM for one structured `ADD` or `NOOP` decision. A cheap prefilter skips assistant messages, obvious questions, short or oversized messages, temporary/task-result content, and potential secrets before any auxiliary model call. Model output is constrained to durable facts, preferences, corrections, and project conventions.
-
-The composite extractor always runs rules first, so explicit requests do not spend an additional model request. The original Message remains authoritative evidence and every Candidate stores its `source_message_id`; model-generated text is never treated as evidence by itself.
+Rules recognize explicit English/Chinese signals such as `Remember that` / `请记住`,
+`I prefer` / `我的偏好是`, `Correction:` / `更正：`, and `For this project` / `项目约定：`.
+They run first without a model call. Only when no rule matches may the originating
+Run's selected Chat model propose `ADD` or `NOOP`. A prefilter excludes assistant
+messages, obvious questions, short/oversized input, temporary/task-result content
+and potential secrets. Every Candidate references its authoritative
+`source_message_id`; generated text alone is not evidence.
 
 Adaptive extraction has three modes:
 
@@ -97,16 +90,9 @@ The deterministic policy rejects low-confidence adaptive proposals, temporary in
 
 ## Events and Failure Behavior
 
-Candidate decisions and accepted writes use typed Run Events:
-
-```text
-memory.candidate.proposed
-memory.candidate.accepted | memory.candidate.rejected | memory.candidate.failed
-memory.sync.requested
-memory.sync.completed | memory.sync.failed
-memory.sync.rejected
-memory.recall.failed
-```
+Candidate decisions and sync outcomes use `memory.candidate.*` and `memory.sync.*`
+Run Events; recall failures use `memory.recall.failed`. The
+[event catalog](../runtime/event-catalog.md) owns the exact event list.
 
 The provider uses a bounded, ordered background queue and drains accepted work
 during shutdown. A stable Turn sync key and Candidate ID make duplicate
@@ -156,7 +142,7 @@ Current owner/Membership checks and linked-source validation are enforced; arbit
 User/Project metadata is not an authenticated principal or a sharing grant. See
 [resource authorization](../operations/resource-authorization.md).
 
-## Versioned Corrections and Deletions (H-17)
+## Versioned Corrections and Deletions
 
 A Memory keeps its stable `id`. New records start at `version=1`; each successful
 `replace` or `delete` advances the version exactly once. A correction replaces the
@@ -215,19 +201,17 @@ do not put sensitive original text in audit reasons.
   Other Workspaces receive `404`; request identity and current Membership are
   checked separately from the storage predicate.
 
-This source-level fence deliberately does not semantically blacklist future user
-messages or merge independent Memory records. Correcting one ID cannot find every
-semantically equivalent fact elsewhere. Existing context, completed Run captures,
-source Messages, external backups and already-running Recall requests are not
-retroactively rewritten or erased; their retention remains independently owned.
-New Recall sees only the current stored revision.
+The source fence does not blacklist future messages or merge equivalent facts
+under independent IDs. New Recall sees the current revision; existing Context,
+Capture, source Messages, backups and in-flight Recall are not retroactively
+rewritten or erased. Automatic consolidation, approvals and history rollback
+are not implemented.
 
 Postgres startup adds `version`, `deleted_at`, and `memory_changes` idempotently.
 Existing rows default to version 1.
-Candidates persist the source Conversation's Workspace. Legacy numeric Workspace
-conversion is a completed operator migration, not a runtime string-ID fallback.
-Source-based suppression is always Workspace-scoped.
-Postgres persists Memory vectors for restart-safe Recall. HTTP Memory responses do not contain vectors.
+Candidates and source suppression remain Workspace-scoped. Postgres vectors
+survive restart but are omitted from HTTP responses; legacy string IDs are not
+runtime aliases.
 The built-in Postgres adapter currently serializes Memory writes with one
 transaction advisory lock to coordinate late proposals and mutations. Embedding
 and Recall do not hold this lock; source-scoped locking is a future throughput
@@ -240,15 +224,6 @@ go test ./internal/store ./internal/memory ./internal/httpapi -run 'Memory|LateM
 # Set TEST_DATABASE_URL to an isolated pgvector database to include Postgres cases.
 ```
 
-## Trade-offs and Boundaries
-
-- Conservative policy can miss implicit preferences. Shadow mode exists to
-  measure those misses before widening persistence.
-- Automated extraction remains ADD/NOOP. Explicit replace/delete is supported;
-  automatic semantic merge, approvals, history rollback and consolidation are not.
-- Model confidence is one input, not authorization. Deterministic policy still
-  controls persistence.
-- Workspace namespace isolation is not proof of identity or permission to read
-  that namespace.
-- Memory synchronization is auxiliary platform work. Its failure is observable but
-  cannot retroactively fail an already completed Run.
+Conservative extraction can miss implicit preferences. Review representative
+shadow proposals before widening persistence; confidence never replaces policy
+or [Workspace authorization](../operations/resource-authorization.md).

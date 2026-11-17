@@ -5,29 +5,6 @@ Workspace onboarding. Passwords stay at the identity provider; this is not a
 complete account-management product. The companion [resource authorization](resource-authorization.md)
 guide covers object ownership and live-stream access checks.
 
-## Failure Inventory
-
-| Failure | Required outcome |
-| --- | --- |
-| Missing, forged, revoked or expired session | 401 before any business handler executes. |
-| Valid identity without owned/granted selected Workspace | 404 without disclosing another owner's space; never auto-enroll. |
-| Header/query/body select different Workspaces | Reject; body cannot bypass authenticated scope. |
-| Forged identity headers or an unverified email | Cannot establish identity or grant membership. |
-| Invalid state, missing transaction cookie, nonce or PKCE mismatch | Reject login; no session created. |
-| Invalid token signature, issuer, audience or expiry | Reject via the OIDC verifier; additional audiences or a foreign authorized party are not trusted. |
-| Reused callback | Consumed login transaction cannot be used again. |
-| Cross-origin mutation or logout | Reject before execution. |
-| OIDC discovery, exchange or persistence unavailable | Fail closed, without exposing tokens or credentials. |
-| Invalid authentication configuration | Refuse startup; never silently fall back to local mode. |
-| Restart or membership removal | Sessions remain verifiable; removed memberships stop granting access. |
-| Explicit sign out, followed by sign in | Old AgentFlow session is revoked; the next authorization request requires provider reauthentication. |
-| Close and reopen a browser tab without signing out | Existing session remains valid until its absolute expiry; no logout on tab close. |
-| Authentication disabled for trusted local use | Reserved persistent local User owns its own entities; no OIDC owner's data is implicitly accessible. |
-| Duplicate or concurrent first login | One personal Workspace and one Membership; existing grants remain unchanged. |
-| Personal Workspace grant fails | Marker and grant roll back together; no new Session; a fresh login retries. |
-| Membership revoked after onboarding | Relogin/restart does not restore it; empty Membership is not a new-account signal. |
-| Schema upgrade or API restart | Database Memberships remain unchanged; revoked grants are not restored. |
-
 ## Modes and Scope
 
 `AUTH_MODE=local` is the default for trusted development. A persistent server-owned
@@ -37,8 +14,8 @@ the authentication mode; `super` is only its reserved server-side User ID.
 Do not expose it to untrusted users. `AUTH_MODE=oidc` enables login, revocable
 sessions and server-side membership checks before every business request,
 including SSE, Replay, Artifact, Memory and knowledge endpoints. Only health,
-the five authentication endpoints and CORS preflight are exempt. Every verified
-OIDC login ensures that the user's personal Workspace has been provisioned once.
+the five authentication endpoints and CORS preflight are exempt. Invalid auth
+configuration refuses startup rather than falling back to local mode.
 
 Registration uses the IdP's native account creation through `prompt=create`.
 The endpoint is always available in OIDC mode, but the IdP alone controls whether
@@ -75,13 +52,11 @@ as Next.js or use an equivalent reverse-proxy arrangement. Set
 `NEXT_PUBLIC_API_BASE_URL` to the browser-facing API origin (empty means same-origin)
 when building the web application. Do not mix `localhost` and `127.0.0.1`.
 
-In OIDC mode, a verified first login (including an existing IdP account)
-grants **only that identity's own personal Workspace**, never a shared Workspace
-based on email, domain or browser input. These behaviors have no separate AgentFlow
-feature switches. Registration requires an IdP supporting `prompt=create`; the
-redirect does not enable registration in the IdP. Disable account creation in
-the IdP when sign-in should be limited to existing accounts; those verified
-accounts still receive a personal Workspace on first login.
+A verified first login, including an existing IdP account, grants **only that
+identity's personal Workspace**. Email, domain and browser input cannot grant
+shared access. Registration requires IdP support for `prompt=create`; disable
+account creation at the IdP to restrict sign-in to existing accounts. AgentFlow
+has no separate registration/onboarding switches.
 
 ### AgentFlow Authentication Theme
 
@@ -102,32 +77,23 @@ and the tested registration behavior are Keycloak-specific.
 4. Configure `AUTH_MODE=oidc` and restart the API once. Subsequent signups
    return directly to their personal Workspace, without manual Membership setup.
 
-The design/assets belong to AgentFlow, but the HTML forms are served by Keycloak
-and post **directly to Keycloak**, not Next.js or Go. The IdP hostname remains
-visible; same design does not mean same hosting. Protected Next.js pages redirect
-unauthenticated users directly to the themed IdP login page; account creation
-is offered there by the IdP, not through an intermediate AgentFlow screen.
-AgentFlow never supplies a password form or password-grant proxy. English
-messages are customized; other locales inherit Keycloak's native messages.
+Keycloak serves the forms and receives passwords directly; its hostname remains
+visible. Protected Next.js pages redirect to that themed login page without an
+intermediate AgentFlow screen. Other locales inherit Keycloak's native messages.
 
 ### Database Memberships
 
-Postgres stores both entities and grants. `workspaces.owner_user_id` is the single
-ownership authority; composite foreign keys ensure `auth_memberships` cannot grant
-one owner's Workspace to another user. Startup does not read member files or
-import shared grants. It requires the [current Workspace schema](workspace-lifecycle.md);
-ambiguous ownership is never guessed. Automatic onboarding grants only a new user's own personal space.
+`workspaces.owner_user_id` owns the entity; `auth_memberships` is an
+owner-constrained access grant, keyed by internal `auth_users.id`, not email or
+display name. Composite foreign keys prevent cross-owner grants. Startup uses
+the [current Workspace schema](workspace-lifecycle.md), not member files or
+guessed legacy ownership.
 
-Operators can revoke/restore an owner's access in `auth_memberships`, referencing
-the internal `auth_users.id`, not email or display name. The user's OIDC `sub`
-is scoped by issuer; an authenticated nonmember sees it on the access-required
-screen but cannot mount the workbench after its access has been revoked.
-
-Operator changes to `auth_memberships`
-are visible on subsequent requests and the next session probe/reload; **no API
-restart required**. There are no pushed UI updates or member-management screens.
-To restore revoked access, explicitly add that Membership in the DB; do not
-delete its onboarding marker to trigger re-enrollment.
+Operators revoke/restore Membership in Postgres. Changes apply on subsequent
+requests and session probe/reload, **without API restart**; there is no pushed
+update or member-management UI. An authenticated nonmember sees its issuer-scoped
+`sub` on the access-required screen. Restore the grant explicitly; deleting an
+onboarding marker is not an access-management operation.
 
 ## Login, Session and Membership Flow
 
@@ -145,9 +111,10 @@ delete its onboarding marker to trigger re-enrollment.
    (authorized party); cross-client token sharing is not supported.
 3. Verified `(issuer, subject)` maps to a stable internal `user_id`. Login updates
    the display name. A transaction creates a personal Workspace entity
-   record and grant only once. The record outlives grant revocation, preventing
-   future logins from restoring access. Access/refresh/ID tokens are not
-   retained or returned to the frontend.
+   record and grant once, including concurrent first logins. Provisioning failure
+   rolls back both and creates no Session; a fresh login can retry. The record
+   outlives revocation, so relogin/restart cannot restore removed grants.
+   Access/refresh/ID tokens are not retained or returned to the frontend.
 4. A random 256-bit opaque session cookie references a SHA-256 hash in Postgres.
    Session lifetime is the shorter of the configured absolute TTL (1m..24h) and
    ID-token expiry. HTTPS cookies use the `__Host-` prefix and Secure attribute.
@@ -160,29 +127,26 @@ delete its onboarding marker to trigger re-enrollment.
    reauthentication. This does not revoke the provider's SSO sessions in other
    applications or the user's AgentFlow sessions on other devices.
 
-Closing a tab does not call logout or delete the session. Reopening AgentFlow
-in the same browser restores the still-valid cookie session without an OIDC
-authorization redirect, up to the shorter of `AUTH_SESSION_TTL` and ID-token
-expiry. The identity provider controls fresh authentication; with existing SSO
-it may retain the username and ask only for the password. Full login and
-password-only reauthentication both inherit the theme.
+Discovery, exchange or validation failure creates no Session and never falls
+back to local mode.
+
+Tab close does not log out; the same browser reuses its cookie until absolute
+expiry. During explicit sign-in, the IdP may remember the username but still
+requires reauthentication. Both full and password-only forms inherit the theme.
 
 `GET /api/auth/session` returns mode, authentication state, safe user identity
-and current Workspace IDs, plus an optional authorized
-`personal_workspace` (the current authorized active default; retained field name
-for client compatibility). Anonymous probes return 200 with no user; persistence
-failures return 503, never a fallback to local mode. The frontend waits for this
-probe and the authoritative `/api/workspaces` list before mounting business consumers,
-redirects anonymous OIDC users directly
-to `/api/auth/login`, and offers Sign out and a compact
-Workspace menu displaying mutable entity names and archived status, and fully
-reloads scoped application state on a switch.
-Expired business requests return 401 and redirect to the same login page.
-Session-probe failures and authenticated users without membership retain a local
-error/access-required screen instead of redirecting repeatedly. The public home
-page and local mode do not trigger this redirect. Foreign, revoked or deleted
-Workspace requests return 404; invalid Origin or shared template mutations return 403.
-Selecting a Workspace is not itself a grant.
+and current Workspace IDs. The optional `personal_workspace` field denotes the
+authorized active default; its name is retained for client compatibility.
+Anonymous probes return 200 without a user; storage failures return 503, never
+local-mode fallback. The frontend waits for this probe and `/api/workspaces`
+before mounting business consumers, and fully reloads scoped state on a switch.
+
+- Anonymous OIDC users and expired business sessions redirect to login; business
+  requests return 401. Public home and local mode do not trigger that redirect.
+- Probe failure or authenticated nonmembership shows a local error/access screen,
+  not a redirect loop. Foreign/revoked/deleted Workspaces return 404.
+- Invalid Origin or shared-template mutation returns 403. Selecting a Workspace
+  is not a grant.
 
 Cookie-authenticated mutations, including logout, require the exact configured
 frontend `Origin`; missing or foreign Origin is rejected. Credentialed browser
@@ -204,10 +168,8 @@ Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`,
 The personal Workspace record preserves onboarding history and default selection,
 not passwords or roles. Its nullable reference preserves revocation history even
 when access to its personal Workspace is removed.
-Old file-import bookkeeping is no longer created, required or accessed; any
-existing unused table is left untouched rather than dropped during startup.
-Startup refuses ambiguous or unmigrated references; one-time legacy migration
-commands are not part of the current runtime.
+Startup refuses ambiguous/unmigrated Workspace references and does not restore
+old file-based grants or run one-time legacy migration commands.
 Sessions survive restart, logout removes them, and expired session/transaction
 rows are purged opportunistically on the next session/login creation. There is
 no idle refresh, background cleanup scheduler or provider-wide session revocation.
@@ -246,9 +208,9 @@ fixture enforcing actual discovery, JWKS, authorization and PKCE exchange.
 `identity-evidence.json` and `nonmember-evidence.json` are retained as Playwright
 attachments under the ignored test-results/report directories, without cookies
 or provider tokens. Backend tests log an `identity_evidence`/`identity_boundary_evidence`
-summary and exercise invalid tokens/configuration, state replay, storage failure,
-restart, revocation, and rejection before writes. This is protocol and boundary
-evidence, not a live-provider deployment test or proof of complete PROD-002 ACLs.
+summary and cover invalid tokens/configuration, state replay, storage failure,
+restart, revocation and pre-write rejection. This is protocol/boundary evidence,
+not a live-provider deployment test or a complete object-authorization audit.
 
 The real themed registration gate additionally requires Docker:
 
@@ -263,7 +225,8 @@ through real Next.js/Go/Postgres. The test container is removed on exit; operato
 accounts/realms are untouched. `onboarding-evidence.json` retains results and
 limitations, not cookies/passwords. A cached image can be selected through
 `KEYCLOAK_TEST_IMAGE`; the runner checks its version. This is not full MFA/reset
-coverage, a production-configuration audit or proof of complete object ACLs.
+coverage, a production-configuration audit or proof of complete object ACLs;
+see [resource authorization](resource-authorization.md) for that surface.
 
 ## Rollback and References
 

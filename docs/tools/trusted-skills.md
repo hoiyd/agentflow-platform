@@ -9,7 +9,7 @@ invocation semantics; Skill Checker is read-only and does not grant permissions.
 
 ## Contract
 
-SKILL-001 separates reusable task methods from executable Tool capabilities.
+Skills supply reusable task methods; Tools supply executable capabilities.
 Only immediate `SKILL.md` packages inside operator-configured installation
 roots are trusted inputs. Agents explicitly bind package names; a Skill never grants tools,
 credentials, Workspace access, or script execution.
@@ -23,12 +23,9 @@ This implementation deliberately does not adopt executable scripts or
 
 ## Setup and Invocation
 
-Prefer [native Vercel Skills CLI from the repository root](skill-installation.md)
-for remote packages. `./scripts/skill-install.sh --repo ... --path ...`
-runs the existing Go CLI as an
-[operator-only Go fallback](skill-installation.md#restricted-go-fallback) when Vercel cannot
-be used. Download, operator review, runtime trust and Agent binding remain
-separate steps; neither installer changes Loader permissions or configuration.
+Use the [installation guide](skill-installation.md) for the preferred Vercel CLI
+or restricted Go fallback. Installation, review, runtime trust and Agent binding
+are separate steps; installing does not grant execution permissions.
 
 Run the API from `apps/api`, set this operator-owned environment variable, then
 restart the API:
@@ -107,7 +104,8 @@ invalid frontmatter and multiple YAML documents are rejected.
 | One read | Default 2,048 bytes, maximum 4,096; UTF-8 boundary-aware offsets |
 | Skill tool execution | Existing Executor: serial, 5-second timeout, 12,000-byte result cap |
 
-All package file symlinks are rejected, including links within the package.
+Absolute, traversal and backslash paths are rejected, as are all package file
+symlinks, including links within the package.
 `os.Root` constrains file reads even if paths change while loading. Binary,
 non-regular, empty, NUL-containing and recognized credential-bearing text is
 rejected before persistence. Credential checks use the existing redaction
@@ -127,6 +125,9 @@ progressive:
    resource paths, not another copy of the body.
 3. `skill_read` returns a requested frozen resource page only after activation.
    `next_offset`, `total_bytes` and `truncated` allow continuation.
+
+Compaction may discard resource observations, not activation identity; the same
+frozen pages can be read again under existing limits.
 
 Activation is derived from existing successful Tool events, isolated by Agent
 identity inside the Run. Explicit activation is also retained in the durable
@@ -191,40 +192,12 @@ The optional fields do not change the current Snapshot protocol version. Older
 current-version Runs without Skills remain unchanged and do not gain live Skills
 on Resume.
 
-## Failure Inventory
-
-Invocation policy/readiness changes must reject malformed restrictive declarations,
-model attempts to load an explicit-only method, unbound explicit requests and missing
-effective Tool dependencies. Internal Planner/Worker text is not explicit user intent.
-Frozen policies and prior explicit activation must survive config changes and Resume;
-readiness diagnostics must not remove saved bindings or grant missing Tools.
-
-Activation evidence additionally distinguishes a frozen binding from instructions
-included in a recorded request, and a successful resource read from a failed or
-truncated observation. Missing Manifest/request records mean **not observed**;
-neither answer text nor a configured package proves activation. Repeated calls,
-Agent/Stage changes, cancellation, compaction and Resume must retain the frozen
-identity without duplicating instructions or bypassing the Context budget.
-
-| Failure | Required outcome |
-| --- | --- |
-| Missing package or invalid/duplicate frontmatter/name | Typed diagnostic; never partially trust a package. |
-| Conflicting package names | Reject configuration rather than picking a directory by ordering. |
-| Oversized, binary, credential-bearing, or non-regular content | Reject before freezing content or publishing it. |
-| Absolute path, parent traversal, backslash path, or symlink | Reject; no arbitrary filesystem reads. |
-| Unbound Skill, wrong Agent/Run/Conversation scope | Reject without granting package or Tool access. |
-| Required Tool unavailable or absent from frozen Agent allowlist | Explicit dependency failure; never enable a Tool implicitly. |
-| Skill or resource changes after Run creation | Use frozen content and hash on Resume; never reread current files. |
-| Repeated activation | One instructions entry per Skill, not duplicate Context bodies. |
-| Malicious instructions suggesting privilege escalation | System/user request precedence and frozen Tool policy still apply. |
-| Context overflow or Artifact spill | Existing limits remain enforced; missing content is not silently treated as loaded. |
-| Store/event failure | Fail closed rather than assuming a prior activation succeeded. |
-| Missing or malformed Manifest/request envelope or mismatched scope/hash | Report not observed; do not infer inclusion or activation from answers. |
-| Explicit activation without `skill_load`, then Resume/Stage change | Recover the same Agent's frozen method from Manifest; another Agent remains inactive. |
-| Resource observations trimmed by Context assembly/compaction | Method identity survives independently; re-read the same frozen page under the existing limits. |
-
-Deterministic checks prove loading, isolation, and recovery contracts, not
-live-model task quality. TOOL-025 remains responsible for measured task benefit.
+Unbound/wrong-scope calls and missing dependencies fail without granting access;
+Store/event failure cannot count as successful activation. Internal Planner or
+Worker text is not explicit user intent. The
+[invocation contract](skill-invocation.md) owns explicit-only restrictions and
+readiness diagnostics; [task evaluation](../evaluation/tool-task-evaluations.md)
+measures benefit separately from loading correctness.
 
 ## Repeatable Checks
 
@@ -239,13 +212,9 @@ go test ./internal/agent -run 'TestSkillSnapshot|TestSkillResume' -count=1 -v
 go test ./internal/store -run TestPostgresSkillsRoundTripAcrossRestart -count=1 -v
 ```
 
-The all-mode backend integration test logs `trusted_skill_evidence` JSON with
-Run identity, package hash, Tool counts, selected Manifest input and captured
-request count. It uses a deterministic local HTTP model, not a browser or live
-provider. The Postgres check requires `TEST_DATABASE_URL` naming a dedicated
-test server with CREATEDB privileges; it creates and removes a disposable
-database rather than migrating the configured source database. Without that
-variable, it is explicitly skipped, not counted as persistence evidence.
+Backend integration retains `trusted_skill_evidence` JSON for all modes using a
+local model fixture. The Postgres check requires a dedicated `TEST_DATABASE_URL`
+with CREATEDB privileges; absence means skipped, not persistence evidence.
 
 The focused browser gate traverses Next.js, the real Go runtime and disposable
 Postgres for Single, Multi and Loop, including persisted Skill evidence, event
@@ -255,8 +224,5 @@ navigation and page reload. With `TEST_DATABASE_URL` configured, run from the ro
 bash scripts/test-browser.sh --grep 'Skill \+ reasoning'
 ```
 
-Replay/request evidence is retained in Playwright `test-results` attachments.
-The metadata-only explicit/no-Tool backend scenario, frozen-directory-removal
-Resume, compaction/overflow, failed reads, cancellation and missing-observation
-checks have separate deterministic assertions; they do not establish live task
-quality or a script-execution sandbox.
+Playwright retains Replay/request evidence in `test-results`. These checks prove
+loading, scope, evidence and recovery contracts, not live-model quality or VM isolation.

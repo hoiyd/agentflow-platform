@@ -1,38 +1,15 @@
 # Run Budget and Usage Ledger
 
-For a system-wide comparison with concurrency, RPM/TPM, Retry, Context, Loop,
-Tool, and Verification controls, see
-[Execution Controls](execution-controls.md).
-
-Run Budget bounds cumulative work attributable to one Run. It complements the
-shared concurrency and provider controls rather than replacing them.
-
-The key design choice is to separate **logical work** from **physical provider
-attempts**. A retried HTTP request consumes provider rate-limit capacity, but it
-does not become another logical model call in the Run ledger.
-
-## Control Boundaries
-
-| Control | Scope | Counts |
-| --- | --- | --- |
-| Run admission | process and conversation | active Runs and queued Runs |
-| Model request limiter | API key and process | physical HTTP attempts, RPM, and approximate TPM |
-| Retry Policy | one logical model call | retryable physical attempts and backoff |
-| Run Budget | one persisted Run | logical model calls, tokens, tools, active runtime, and configured cost |
-| Context Assembly | one logical model call | context-window fit and output reserve, not cumulative usage |
-| Loop guards | one Loop (`autonomous`) Run | iterations and accumulated output characters |
-| Trace Summary / Episode Report | one persisted Run | observational projection only; never admission or enforcement |
-
-A retry acquires another model-request permit but does not reserve another Run
-model call. The reservation surrounds the entire Retry Policy operation.
+Run Budget bounds cumulative work attributable to one Run. The Ledger counts
+**logical work**: provider retries consume physical request capacity but share
+one logical reservation. [Execution controls](execution-controls.md) compares
+this boundary with concurrency, RPM/TPM, Context, Loop and Verification limits.
 
 ## Frozen Budget
 
-Run Budget was introduced in Runtime Snapshot v4 and its current single-owner
-protocol in v5. The current Snapshot version uses the frozen value even when
-environment configuration changes. Older Runs remain
-readable through Replay but are no longer resumable; they never inherit current
-limits implicitly.
+Limits freeze in the Run Snapshot; environment changes do not alter existing
+Runs. [Snapshot compatibility](../architecture/terms.md#runtime-snapshot) governs
+which versions can Resume.
 
 Configured dimensions are:
 
@@ -142,13 +119,10 @@ Unknown; mixed totals show the priced subtotal plus unknown, not a zero bill.
 New JSONB columns in `run_usage_entries` are added idempotently at Store startup;
 existing rows retain unknown details. No new dashboard or billing store exists.
 
-The CI usage gate runs `e2e/usage-breakdown.spec.ts` with
-`AGENTFLOW_USAGE_TEST=1` and a dedicated `TEST_DATABASE_URL`. It retains JSON
-evidence for all three modes, cache hit/zero/unknown/invalid details and reload.
-Adapter integration tests separately cover non-streaming, retry, usage-option
-fallback, incomplete streams and unknown failed-attempt billing. Resume tests
-change live prices and check settlement still uses the saved quote; Postgres
-round-trip tests check duplicate settlement and serialized explicit zero.
+The [usage browser gate](../operations/functional-regression-testing.md#gate-index)
+retains all-mode cache/unknown/invalid-usage and reload evidence. Adapter, Resume
+and Postgres tests separately check stream fallback, frozen pricing, duplicate
+settlement and explicit zero.
 
 ## Hard and Observed Enforcement
 
@@ -169,13 +143,10 @@ Run state persists `active_runtime_ms` and the current execution-segment start.
 Transitions out of `running` close the segment. Time spent queued,
 `waiting_for_user`, canceling, or stopped does not consume runtime budget.
 
-Since Snapshot v5, Autonomous iterations and output characters remain
-mode-owned loop guards. Runtime and Tool configuration is resolved against the
-general Run Budget once at Run creation, and the stricter values are stored only
-in `RuntimeRunBudget`. The ledger/controller is therefore the sole runtime and
-Tool enforcement owner; the Autonomous progress projection reads those frozen
-values but does not run a second counter. Only the current Snapshot version is
-resumable; earlier versions remain Replay-only.
+Autonomous iterations and output characters remain mode-owned. At Run creation,
+runtime/Tool caps resolve once to the stricter Run Budget values in
+`RuntimeRunBudget`. The Ledger/controller enforces them; the Loop projection
+reads those values without running another counter.
 
 ## Events and API
 
@@ -201,14 +172,7 @@ stable repeated outcome has been established, so blocked calls do not consume
 Budget or execute a Handler. See
 [Tool Progress Guard](../tools/tool-progress-guard.md).
 
-## Invariants Worth Testing
-
-- Reservation and settlement for one operation are idempotent.
-- Settlement replaces the reservation estimate in effective totals.
-- An interrupted call leaves an observable conservative reservation.
-- Postgres admission is atomic under concurrent writers.
-- Waiting and queue time do not consume active runtime.
-- Snapshot compatibility does not silently apply new limits to legacy Runs.
+## Verification
 
 From `apps/api`, with `TEST_DATABASE_URL` pointing to a disposable pgvector test server:
 

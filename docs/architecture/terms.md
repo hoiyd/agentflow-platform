@@ -29,18 +29,12 @@ An Iteration groups Loop Stages; it is not another independently persisted entit
 
 ## Workspace
 
-Persisted resource boundary with one owner User, a database-generated numeric ID,
-mutable human-readable name, description and active/archived lifecycle. Soft deletion
-uses `deleted_at`; neither renaming nor archiving changes the ID. A User can own
-multiple Workspaces and selects one owned active default. Missing HTTP scope uses
-that default, never a shared global namespace. Archived spaces are read-only;
-deleted or foreign spaces are inaccessible. Membership is an owner-constrained
-revocation gate, not independent ownership. See [lifecycle](../operations/workspace-lifecycle.md).
-
-HTTP receives a mandatory scoped Store view; trusted Runtime/Recovery ID-based
-capabilities are not the HTTP persistence interface. Legacy `default_workspace`
-normalization remains only in internal legacy fixtures/data-upgrade helpers, not
-production HTTP admission. Full object authorization is still a separate audit.
+Owned resource boundary with a numeric primary ID and mutable name/description.
+A User can own several Workspaces and selects an active default. Membership can
+revoke access but cannot transfer ownership or grant another owner's space.
+[Lifecycle](../operations/workspace-lifecycle.md) defines archive, soft deletion
+and defaults; [resource authorization](../operations/resource-authorization.md)
+defines request/Store scope and access checks.
 
 ## Conversation
 
@@ -58,12 +52,10 @@ separate from `verification_status`. Browser connection state is not Run state.
 
 ## Structured Task State
 
-Conversation-scoped versioned goal, tasks, decisions, constraints, blockers, and
-Artifact references. Typed optimistic patches create immutable Revisions; they
-do not replace the whole state or change ownership/version metadata. Assembly
-loads non-empty current facts and records their version in the Manifest. Replay
-exposes the revision timeline. This is durable task context, not another summary
-or a Run's mutable lifecycle. See [Task State](../runtime/task-state.md).
+Conversation-scoped goal, tasks, decisions, constraints, blockers and Artifact
+references, updated by version-checked patches. Immutable Revisions supply task
+facts to Context and Replay; they are neither prose summaries nor Run status.
+See [Task State](../runtime/task-state.md).
 
 ## Runtime Snapshot
 
@@ -79,8 +71,8 @@ retry/timeouts, Tool Handlers, and deployment allowlists stay live. See
 [model routing](../runtime/model-routing.md) for removed targets and credential
 reference checks, and [control ownership](../runtime/execution-controls.md#frozen-protocol-vs-live-policy).
 
-Only `domain.CurrentRuntimeSnapshotVersion` is resumable (currently v18;
-[code](../../apps/api/internal/domain/runtime_snapshot.go) is authoritative).
+Only `domain.CurrentRuntimeSnapshotVersion` is resumable;
+[code](../../apps/api/internal/domain/runtime_snapshot.go) owns the version number.
 Historical versions or missing Snapshots remain Replay-only; unsupported Resume
 returns `runtime_snapshot_resume_unsupported` rather than using live config.
 Feature pages should link here instead of copying the current version number.
@@ -127,10 +119,9 @@ that active call. Do not equate attempts with logical Run usage.
 
 ## Usage Ledger
 
-Append-only Run accounting. Reservations/settlements share an operation ID;
-provider settlement replaces the estimate in effective totals. Unsettled work
-retains conservative reservations; Tool calls use their call ID. Budget/cost
-uses this authority, not Trace totals. See [Run Budget](../runtime/run-budget.md).
+Append-only Run accounting, authoritative for Budget/cost rather than Trace
+totals. Settlement replaces the same operation's reservation; unfinished work
+keeps a conservative estimate. See [Run Budget](../runtime/run-budget.md).
 
 ## Tool Call
 
@@ -146,23 +137,10 @@ lookup is Retrieval activity, not a Tool Call. Explicit `knowledge_search` or
 
 ## Mode
 
-Mode determines orchestration, not the definitions of Run/Stage/Turn.
-[Execution modes](../runtime/execution-modes.md) owns lifecycle and selection guidance.
-
-### Single Mode (`single`)
-
-One Agent Turn, no orchestration Stage; native model/Tool rounds may repeat.
-
-### Multi Mode (`multi_agent`)
-
-Ordered Planner -> plan approval -> Router -> isolated Worker -> Reviewer ->
-Finalizer Stages inside one Run. LLM-backed Stages use Turns; a rule-based Router
-need not call a model.
-
-### Loop Mode (`autonomous`)
-
-Repeated bounded Observe/Plan/Act/Review/Decide Stages. Human input resumes the
-same Run; iterations/output and effective Run Budget prevent unbounded work.
+Orchestration choice: Single (`single`) runs a direct Turn, Multi (`multi_agent`)
+coordinates fixed Stages, and Loop (`autonomous`) repeats bounded Iterations.
+It does not redefine Run, Stage or Turn. [Execution modes](../runtime/execution-modes.md)
+owns topology, human checkpoints and selection guidance.
 
 ## Event Namespace
 
