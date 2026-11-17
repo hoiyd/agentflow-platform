@@ -60,3 +60,44 @@ func TestConsumedReadContracts(t *testing.T) {
 		})
 	}
 }
+
+// Failure inventory: match/no-match bodies retain pipeline diagnostics, and a
+// malformed candidate list cannot satisfy the generated Search response contract.
+func TestRAGSearchResponseContract(t *testing.T) {
+	contract := loadResourceContract(t)
+	fixture := newPipelineRegressionFixture(t)
+	fixture.seedDocument(t)
+	for _, query := range []string{"alpha-4242 recovery protocol", "zebra astronomy portfolio"} {
+		response := fixture.request(t, http.MethodPost, "/api/rag/search", `{"query":`+quotedJSON(t, query)+`}`)
+		if response.Code != http.StatusOK {
+			t.Fatalf("search: %d %s", response.Code, response.Body.String())
+		}
+		contract.response(t, http.MethodPost, "/api/rag/search", response)
+		var body struct {
+			Items []struct {
+				Document domain.Document `json:"document"`
+				Chunk    map[string]any  `json:"chunk"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range body.Items {
+			if _, duplicated := item.Chunk["document"]; duplicated {
+				t.Fatal("search chunk contains a duplicate Document")
+			}
+			if item.Chunk["document_id"] != item.Document.ID {
+				t.Fatal("search lost Document identity")
+			}
+		}
+	}
+	schema, err := contract.compiler.Compile("https://agentflow.test/openapi#/paths/~1api~1rag~1search/post/responses/200/content/application~1json/schema")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []map[string]any{{"items": "not a list"}, {"items": []any{map[string]any{"chunk": "invalid"}}}} {
+		if schema.Validate(invalid) == nil {
+			t.Fatalf("invalid Search response accepted: %+v", invalid)
+		}
+	}
+}

@@ -29,12 +29,6 @@
   line-height: 1.55;
 }
 
-.compact-send {
-  min-height: 42px;
-  min-width: 128px;
-  padding: 0 14px;
-}
-
 .evaluation-result,
 .evaluation-cases {
   display: grid;

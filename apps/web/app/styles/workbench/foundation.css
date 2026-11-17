@@ -113,6 +113,36 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
+.send {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  background: var(--ink);
+  box-shadow: none;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.send:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.send:hover:not(:disabled) {
+  border-color: #292e35;
+  background: #292e35;
+}
+
+.compact-send {
+  min-width: 128px;
+}
+
 .secondary-action {
   min-height: 34px;
   border: 1px solid var(--border);

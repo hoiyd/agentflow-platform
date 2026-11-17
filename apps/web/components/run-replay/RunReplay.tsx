@@ -31,6 +31,7 @@ import { ClarificationPanel } from "../chat/ClarificationPanel";
 import { useClarifications } from "../chat/useClarifications";
 import { useToolApprovals } from "../chat/useToolApprovals";
 import { ToolApprovalPanel } from "../chat/ToolApprovalPanel";
+import { selectRunInterrupt } from "../../lib/run-interrupts";
 import { StructuredResult } from "./StructuredResult";
 import { PlanningPanel } from "./PlanningPanel";
 import { FrozenKnowledgeScope } from "../knowledge/KnowledgeScope";
@@ -56,9 +57,8 @@ function RunReplayView({ runId, initialEventId }: Props) {
   const [operationError, setOperationError] = useState("");
   const clarification=useClarifications(runId,replay?.run.status??"");
   const toolApprovals=useToolApprovals(runId,replay?.run.status??"");
-  const approvalIsLatest = !clarification.items.length || Boolean(toolApprovals.items.length &&
-    new Date(toolApprovals.items.at(-1)!.created_at).getTime() >= new Date(clarification.items.at(-1)!.created_at).getTime());
-  const approvalBlocksRecovery = approvalIsLatest && toolApprovals.blocking;
+  const { kind: interrupt, approvalIsLatest } = selectRunInterrupt(clarification.items, toolApprovals.items, replay?.run.status ?? "");
+  const approvalBlocksRecovery = interrupt === "tool_approval";
   const [isResuming, setIsResuming] = useState(false);
   const resumeInFlight = useRef(false);
   const [commands] = useState(createLatestRequestController);

@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
 
 type benchmarkSuiteManifest struct {
@@ -104,4 +107,42 @@ func sourceCaseIDs(t *testing.T, path string) map[string]bool {
 		result[item.ID] = true
 	}
 	return result
+}
+
+// A manifest is not an execution plan: only the two CASE-001 groups are
+// supported, and ambiguous declarations must fail before live requests.
+func TestBenchmarkSuiteRejectsAmbiguousTasks(t *testing.T) {
+	for _, taskSets := range []string{
+		`[{"id":"unrelated","cases":[{"id":"one"}]}]`,
+		`[{"id":"policy_retrieval","cases":[{"id":"one"},{"id":"one"}]},{"id":"long_record_evidence","cases":[{"id":"two"}]}]`,
+		`[{"id":"policy_retrieval","cases":[{"id":""}]},{"id":"long_record_evidence","cases":[{"id":"two"}]}]`,
+	} {
+		path := filepath.Join(t.TempDir(), "suite.json")
+		if err := os.WriteFile(path, []byte(`{"schema_version":"agentflow-benchmark-suite-v1","id":"fixture","version":"1","task_sets":`+taskSets+`}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := loadBenchmarkSuite(path); err == nil {
+			t.Fatalf("ambiguous suite accepted: %s", taskSets)
+		}
+	}
+}
+
+func TestBenchmarkSamplesMatchDeclaredTasks(t *testing.T) {
+	var suite benchmarkSuiteIdentity
+	if err := json.Unmarshal([]byte(`{"task_sets":[{"id":"policy_retrieval","cases":[{"id":"policy"}]},{"id":"long_record_evidence","cases":[{"id":"record"}]}]}`), &suite); err != nil {
+		t.Fatal(err)
+	}
+	ragSamples := []rageval.Sample{{CaseID: "policy"}}
+	toolSamples := []tooleval.Sample{{TaskID: "record", Status: "not_evaluated"}, {TaskID: "record", Arm: "with_tools", Trial: 2}}
+	if count, err := benchmarkTaskCoverage(suite, ragSamples, toolSamples); err != nil || count != 2 {
+		t.Fatalf("declared failure samples lost: count=%d error=%v", count, err)
+	}
+	for _, invalid := range [][]tooleval.Sample{nil, append(append([]tooleval.Sample{}, toolSamples...), tooleval.Sample{TaskID: "extra"}), {{TaskID: "unrelated"}}} {
+		if _, err := benchmarkTaskCoverage(suite, ragSamples, invalid); err == nil {
+			t.Fatal("missing or unrelated tasks accepted")
+		}
+	}
+	if _, err := benchmarkTaskCoverage(suite, []rageval.Sample{{CaseID: "unrelated"}}, toolSamples); err == nil {
+		t.Fatal("unrelated retrieval report accepted")
+	}
 }

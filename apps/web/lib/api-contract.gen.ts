@@ -64,7 +64,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Search inside the authorized Workspace. Legacy metadata and typed metadata_filter are ANDed before semantic/keyword limits and context expansion. User OR never encloses Workspace or schema eligibility. Typed filtering does not implement ACL or expiry. */
+        /** @description Search inside the authorized Workspace. Typed metadata_filter applies before recall limits and context expansion. Legacy metadata is rejected. User OR never encloses Workspace or schema eligibility; typed filtering does not implement ACL or expiry. */
         post: operations["searchKnowledge"];
         delete?: never;
         options?: never;
@@ -1605,11 +1605,125 @@ export interface components {
             metadata_schema: components["schemas"]["DocumentMetadataSchema"];
             chunks: components["schemas"]["KnowledgeDocumentChunk"][];
         };
+        DocumentSearchResponse: {
+            items: components["schemas"]["RetrievedDocumentChunk"][] | null;
+            context_items?: components["schemas"]["RetrievedDocumentChunk"][] | null;
+            citation_sources?: components["schemas"]["RAGCitation"][] | null;
+            context_selection?: components["schemas"]["ContextSelectionInfo"];
+            embedding?: components["schemas"]["EmbeddingInfo"];
+            fusion?: components["schemas"]["FusionInfo"];
+            reranker?: components["schemas"]["RerankerInfo"];
+            relevance_gate?: components["schemas"]["RelevanceGateInfo"];
+            relevance_decisions?: components["schemas"]["RelevanceGateDecision"][] | null;
+            security?: components["schemas"]["KnowledgeSecurityInfo"];
+            no_match?: boolean;
+            reason?: string;
+        };
+        RetrievedDocumentChunk: {
+            document: components["schemas"]["KnowledgeDocument"];
+            chunk: components["schemas"]["KnowledgeDocumentChunk"];
+            similarity: number;
+            recency_boost: number;
+            score: number;
+            vector_rank?: number;
+            lexical_rank?: number;
+            lexical_score?: number;
+            rrf_score?: number;
+            fusion_rank?: number;
+            rerank_rank?: number;
+            lexical_boost?: number;
+            metadata_boost?: number;
+            diversity_penalty?: number;
+            rerank_score?: number;
+            matched_terms?: string[];
+            evidence_score?: number;
+            evidence_coverage?: number;
+            confidence?: string;
+            filter_reason?: string;
+            context_role?: string;
+            matched_chunk_id?: string;
+            source_chunk_ids?: string[];
+            matched_chunk_ids?: string[];
+            merged_chunk_count?: number;
+            source_id?: string;
+        };
+        EmbeddingInfo: {
+            provider: string;
+            model: string;
+            dimensions: number;
+            estimated: boolean;
+        };
+        FusionInfo: {
+            algorithm: string;
+            version: string;
+            rank_constant: number;
+            dense_weight: number;
+            lexical_weight: number;
+        };
+        RerankerInfo: {
+            algorithm: string;
+            version: string;
+            config_version: string;
+            provider?: string;
+            model?: string;
+        };
+        RelevanceGateInfo: {
+            policy: string;
+            version: string;
+            config_version: string;
+            minimum_evidence_coverage: number;
+        };
+        RelevanceGateDecision: {
+            document_id: string;
+            chunk_id: string;
+            lexical_rank: number;
+            lexical_score: number;
+            similarity: number;
+            rerank_score: number;
+            matched_terms: string[] | null;
+            evidence_score: number;
+            evidence_coverage: number;
+            identifier_match: string;
+            confidence: string;
+            filter_reason: string;
+            accepted: boolean;
+        };
+        KnowledgeSecurityDecision: {
+            document_id: string;
+            chunk_id: string;
+            action: string;
+            reasons: string[] | null;
+        };
+        KnowledgeSecurityInfo: {
+            policy_version: string;
+            untrusted_context: boolean;
+            checked_candidates: number;
+            blocked_candidates: number;
+            decisions?: components["schemas"]["KnowledgeSecurityDecision"][];
+        };
+        ContextSelectionInfo: {
+            version: string;
+            max_tokens: number;
+            tokens_used: number;
+            matched_children: number;
+            parent_chunks: number;
+            adjacent_chunks: number;
+            scope_filtered: boolean;
+            transformation?: components["schemas"]["ContextTransformationInfo"];
+        };
+        ContextTransformationInfo: {
+            version: string;
+            input_chunks: number;
+            output_chunks: number;
+            duplicates_removed: number;
+            adjacent_merges: number;
+            document_groups: number;
+        };
         KnowledgeDocumentChunk: {
             id: string;
             document_id: string;
             parent_id?: string;
-            section_path: string[];
+            section_path: string[] | null;
             start_offset: number;
             end_offset: number;
             document_version?: string;
@@ -1619,10 +1733,9 @@ export interface components {
             token_count: number;
             metadata: {
                 [key: string]: unknown;
-            };
+            } | null;
             /** Format: date-time */
             created_at: string;
-            document?: components["schemas"]["KnowledgeDocument"];
         };
         KnowledgeDocument: {
             id: string;
@@ -1636,7 +1749,7 @@ export interface components {
             mime_type?: string;
             metadata: {
                 [key: string]: unknown;
-            };
+            } | null;
             /** @description Absent for legacy data; migration never fabricates validation. */
             metadata_schema_version?: string;
             lifecycle?: components["schemas"]["DocumentLifecycle"];
@@ -3163,9 +3276,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DocumentSearchResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

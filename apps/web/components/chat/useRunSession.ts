@@ -7,6 +7,7 @@ import { createLatestRequestController } from "../../lib/latest-request";
 import { answerClarification, resumeClarification, type ClarificationAnswerRequest } from "../../lib/clarification-api";
 import { useClarifications } from "./useClarifications";
 import { useToolApprovals } from "./useToolApprovals";
+import { selectRunInterrupt } from "../../lib/run-interrupts";
 import { decideToolApproval, resumeToolApproval, type ToolApprovalDecision } from "../../lib/tool-approval-api";
 import { removePendingMessages } from "../../lib/pending-messages";
 import type { CompletionContractInput } from "../../lib/verification";
@@ -202,7 +203,8 @@ export function useRunSession(options: SessionOptions) {
       latest.current.options.workspace.setError(approvals.error || "Loading Tool approval state before recovery...");
       return;
     }
-    if (command.kind !== "submitting" && !(command.kind === "resuming" && (command.approvalId || command.questionId)) && approvals.blocking) {
+    const interrupt = selectRunInterrupt(recovery.items, approvals.items, previousRun?.status ?? "");
+    if (command.kind !== "submitting" && !(command.kind === "resuming" && (command.approvalId || command.questionId)) && interrupt.kind === "tool_approval") {
       latest.current.options.workspace.setError("Resolve the exact Tool approval before continuing this Run.");
       return;
     }

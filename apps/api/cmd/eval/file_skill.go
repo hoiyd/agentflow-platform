@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/evaluation/runtimehost"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
@@ -42,7 +43,7 @@ func runFileSkill(ctx context.Context, out, stderr io.Writer, f fileSkillCLI, li
 		Options: runtimehost.Options{DatabaseURL: *f.database, BaseURL: base, Model: model,
 			CredentialEnvironment: *f.credential, MaxRequests: calls, SampleCalls: *f.sampleCalls,
 			SampleTokens: *f.sampleTokens, TimeoutMS: timeout.Milliseconds()},
-		DatasetPath: *f.dataset, SkillDirectory: *f.skills, Revision: gitRevision(ctx),
+		DatasetPath: *f.dataset, SkillDirectory: *f.skills, Revision: evalreport.GitRevision(ctx),
 		EvidenceMode: *f.evidence, Trials: trials, MaxTokens: tokens,
 		SuiteTimeoutMS: f.suiteTimeout.Milliseconds(), MaxTokenRatio: *f.tokenRatio, MaxExtraRequests: *f.extraRequests,
 	})

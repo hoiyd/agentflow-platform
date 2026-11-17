@@ -20,6 +20,7 @@ import { ToolApprovalPanel } from "./ToolApprovalPanel";
 import type { ToolApproval, ToolApprovalDecision } from "../../lib/tool-approval-api";
 import type { Clarification } from "../../lib/clarification-api";
 import type { PartialOutput, ToolProgress } from "../../lib/api-types";
+import { selectRunInterrupt } from "../../lib/run-interrupts";
 
 type ChatWorkspaceProps = {
   toolApprovals?: ToolApproval[];
@@ -110,10 +111,9 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     taskStateLoading,
     useExpandedConversationWidth
   } = props;
-  const hasClarification=props.clarifications?.some(q=>["pending","answered","expired"].includes(q.status))??false;
-  const approvalIsLatest = !props.clarifications?.length || Boolean(props.toolApprovals?.length &&
-    new Date(props.toolApprovals.at(-1)!.created_at).getTime() >= new Date(props.clarifications.at(-1)!.created_at).getTime());
-  const hasApproval=approvalIsLatest && (props.toolApprovals?.some(item=>["pending","approved","expired","claimed"].includes(item.status)||runStatus==="failed_recoverable"&&item.status==="consumed")??false);
+  const { kind: interrupt, approvalIsLatest } = selectRunInterrupt(props.clarifications ?? [], props.toolApprovals ?? [], runStatus);
+  const hasClarification = interrupt === "clarification";
+  const hasApproval = interrupt === "tool_approval";
   const clarificationUnavailable = Boolean(props.clarificationLoading || props.clarificationError || props.approvalLoading || props.approvalError);
   const awaitingPlanApproval = chatMode === "multi_agent" && runStatus === "waiting_for_user" && !hasClarification && !hasApproval && !clarificationUnavailable;
 

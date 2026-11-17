@@ -86,3 +86,13 @@ it("checks the current Run ref before a retained ready handler can resume anothe
   expect(api.resumeRun).not.toHaveBeenCalled();
   expect(result.current.runState?.id).toBe("run-2");
 });
+
+it("does not let a historical consumed approval block a newer applied clarification", async () => {
+  questions.listClarifications.mockResolvedValue([{ id: "question-new", status: "applied", created_at: "2026-11-17T01:00:00Z" }]);
+  approvals.listToolApprovals.mockResolvedValue([{ id: "approval-old", status: "consumed", created_at: "2026-11-17T00:00:00Z" }]);
+  api.resumeRun.mockResolvedValue(undefined);
+  const { result } = mountSession();
+  await waitFor(() => expect(result.current.clarification.ready && result.current.toolApprovals.ready).toBe(true));
+  await act(async () => { await result.current.resume("resume"); });
+  expect(api.resumeRun).toHaveBeenCalledTimes(1);
+});

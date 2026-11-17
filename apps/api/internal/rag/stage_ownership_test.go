@@ -29,7 +29,6 @@ func (g mutatingGate) Evaluate(ctx context.Context, request RelevanceGateRequest
 	request.Candidates[0].Similarity = 1
 	request.Candidates[0].RerankScore = 99
 	request.Candidates[0].Chunk.SectionPath[0] = "changed"
-	request.Candidates[0].Chunk.Document.Metadata["value"] = "changed"
 	return g.HeuristicRelevanceGate.Evaluate(ctx, request)
 }
 
@@ -40,7 +39,6 @@ func TestRetrievalStagesCannotRewriteCandidateAuthority(t *testing.T) {
 		}},
 		Chunk: domain.DocumentChunk{ID: "chunk-1", Content: "AUTH-7F31 original runbook",
 			ChunkSource: domain.ChunkSource{SectionPath: []string{"original"}},
-			Document:    domain.Document{Metadata: map[string]any{"value": "original"}},
 			Metadata:    map[string]any{"bytes": []byte("original"), "strings": []string{"original"}},
 		}, Similarity: 0.9,
 	}}}
@@ -56,7 +54,7 @@ func TestRetrievalStagesCannotRewriteCandidateAuthority(t *testing.T) {
 	if item.Document.WorkspaceID != "workspace-1" || item.Chunk.Content != "AUTH-7F31 original runbook" || item.Document.Metadata["nested"].(map[string]any)["value"] != "original" {
 		t.Fatalf("stage rewrote authoritative candidate: %#v", item)
 	}
-	if item.Chunk.SectionPath[0] != "original" || item.Chunk.Document.Metadata["value"] != "original" ||
+	if item.Chunk.SectionPath[0] != "original" ||
 		string(item.Chunk.Metadata["bytes"].([]byte)) != "original" || item.Chunk.Metadata["strings"].([]string)[0] != "original" ||
 		item.Document.Metadata["list"].([]any)[0].(map[string]any)["value"] != "original" {
 		t.Fatalf("stage mutated candidate resources: %#v", item)

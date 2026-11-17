@@ -112,6 +112,10 @@ Stage start writes `prepared`, persists `stage.started`, then advances to
 `committed`. A crash between these writes therefore leaves a conservative,
 detectable state; Resume never assumes an uncertain Stage committed.
 
+Normal and resumed execution share Stage settlement. Persistence failures are
+returned alongside the execution error; cancellation still records a terminal
+checkpoint, while clarification and Tool-approval waits leave the Stage open.
+
 Missing, changed or unavailable frozen Tool definitions reject Continue/Resume
 with `runtime_snapshot_unavailable` as a conflict, including SSE error payloads.
 The pre-execution rejection preserves the waiting/recovery point. MCP definition

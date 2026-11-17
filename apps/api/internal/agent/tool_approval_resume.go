@@ -172,7 +172,7 @@ func (r *Runtime) resumeToolApproval(ctx context.Context, owner, workspace, runI
 		}
 	}
 	if !completed {
-		step, err = r.completeResumedStage(executionCtx, record.StageID, result.Output, events)
+		step, err = r.completeStage(executionCtx, record.StageID, result.Output, events)
 		if err != nil {
 			return err
 		}

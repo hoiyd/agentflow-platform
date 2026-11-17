@@ -1,8 +1,21 @@
 package evalreport
 
-import "time"
+import (
+	"context"
+	"os/exec"
+	"strings"
+	"time"
+)
 
 const Format = "agentflow-evaluation-report-v1"
+
+func GitRevision(ctx context.Context) string {
+	value, err := exec.CommandContext(ctx, "git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(value))
+}
 
 // Identity is the shared provenance envelope for every offline evaluation.
 // Domain-specific report schemas remain independent, while their inputs and

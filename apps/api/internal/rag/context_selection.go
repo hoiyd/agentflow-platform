@@ -154,7 +154,6 @@ func addContextItem(items *[]domain.RetrievedDocumentChunk, selectedIDs map[stri
 		return false
 	}
 	item.Chunk.TokenCount = tokens
-	item.Chunk.Document = item.Document
 	selectedIDs[item.Chunk.ID] = struct{}{}
 	selection.TokensUsed += tokens
 	*items = append(*items, item)

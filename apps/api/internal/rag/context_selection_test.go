@@ -121,11 +121,11 @@ func TestContextSelectorHonorsBudgetAndBlocksUnsafeExpansion(t *testing.T) {
 
 func contextTestItem(documentID string, workspaceID string, chunkID string, parentID string, chunkIndex int, content string, tokens int) domain.RetrievedDocumentChunk {
 	document := domain.Document{
-		ID:          documentID,
-		WorkspaceID: workspaceID,
-		Title:       "Context test",
+		ID:                    documentID,
+		WorkspaceID:           workspaceID,
+		Title:                 "Context test",
 		MetadataSchemaVersion: "knowledge-metadata-v1",
-		Metadata:    map[string]any{"product": "agentflow"},
+		Metadata:              map[string]any{"product": "agentflow"},
 	}
 	chunk := domain.DocumentChunk{
 		ID:         chunkID,
@@ -137,7 +137,6 @@ func contextTestItem(documentID string, workspaceID string, chunkID string, pare
 		Content:    content,
 		TokenCount: tokens,
 		Metadata:   map[string]any{"product": "agentflow"},
-		Document:   document,
 	}
 	return domain.RetrievedDocumentChunk{Document: document, Chunk: chunk, Similarity: 0.8, Score: 0.8}
 }

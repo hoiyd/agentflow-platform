@@ -646,6 +646,13 @@ test("RAG search normalizes malformed item collections", async (t) => {
   assert.equal(response.context_selection?.max_tokens, 100);
 });
 
+test("RAG search does not drop additive server diagnostics during normalization", async (t) => {
+  mockFetch(t, { items: null, diagnostic_extension: { version: "fixture-v1" } });
+  const response = await searchRAG({ query: "diagnostics" });
+  assert.deepEqual(response.items, []);
+  assert.deepEqual(response.diagnostic_extension, { version: "fixture-v1" });
+});
+
 test("RAG search exposes an unsuccessful HTTP status", async (t) => {
   mockFetch(t, {
     error: "Service Unavailable",

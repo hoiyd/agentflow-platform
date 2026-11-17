@@ -85,7 +85,10 @@ type benchmarkSuiteIdentity struct {
 }
 
 type benchmarkTaskSet struct {
-	Cases []json.RawMessage `json:"cases"`
+	ID    string `json:"id"`
+	Cases []struct {
+		ID string `json:"id"`
+	} `json:"cases"`
 }
 
 func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int {
@@ -110,10 +113,6 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 	minSimilarity := flags.Float64("min-similarity", 0.15, "calibrated dense similarity threshold")
 	minEvidenceCoverage := flags.Float64("min-evidence-coverage", 0.25, "calibrated evidence coverage threshold")
 	outputDir := flags.String("output-dir", "../../.cache/live-benchmark", "evidence pack directory")
-	suitePath := flags.String("suite", "../../examples/benchmark-suite.v1.json", "CASE-001 benchmark manifest")
-	ragDataset := flags.String("rag-dataset", "../../examples/knowledge/golden-dataset.v1.json", "RAG benchmark dataset")
-	corpusManifest := flags.String("corpus-manifest", "../../examples/knowledge/golden-v1/corpus-manifest.v1.json", "RAG corpus manifest")
-	routeDataset := flags.String("route-dataset", "../../examples/routing/golden-dataset.v1.json", "Router benchmark dataset")
 	enforce := flags.Bool("enforce", false, "exit 1 unless the evidence completeness gate passes")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
@@ -126,7 +125,7 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 
 	startedAt := time.Now().UTC()
-	suiteBytes, suite, taskCount, err := loadBenchmarkSuite(*suitePath)
+	suiteBytes, suite, taskCount, err := loadBenchmarkSuite("../../examples/benchmark-suite.v1.json")
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -164,7 +163,7 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 		return captured{artifact: liveBenchmarkArtifact{Name: name, File: file, EvaluationKind: kind, Live: live, SHA256: benchmarkDigest(content)}, content: content}, nil
 	}
 
-	ragArgs := []string{"--dataset", *ragDataset, "--corpus-manifest", *corpusManifest, "--retrieval-mode", "hybrid",
+	ragArgs := []string{"--dataset", "../../examples/knowledge/golden-dataset.v1.json", "--corpus-manifest", "../../examples/knowledge/golden-v1/corpus-manifest.v1.json", "--retrieval-mode", "hybrid",
 		"--embedding-profile", *embeddingProfile, "--live-embeddings", "--embedding-base-url", *embeddingBaseURL,
 		"--embedding-model", *embeddingModel, "--embedding-dimensions", fmt.Sprint(*embeddingDimensions),
 		"--max-embedding-calls", fmt.Sprint(*embeddingCalls), "--max-embedding-input-tokens", fmt.Sprint(*embeddingTokens),
@@ -172,8 +171,8 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 		"--min-similarity", fmt.Sprint(*minSimilarity), "--min-evidence-coverage", fmt.Sprint(*minEvidenceCoverage)}
 	toolArgs := []string{"--live", "--model", *model, "--base-url", *baseURL, "--trials", fmt.Sprint(*trials),
 		"--max-model-calls", fmt.Sprint(*toolCalls), "--max-total-tokens", fmt.Sprint(*toolTokens), "--timeout", timeout.String()}
-	routeQueryArgs := []string{"--dataset", *routeDataset}
-	routeLiveArgs := []string{"--dataset", *routeDataset, "--live", "--model", *model, "--base-url", *baseURL,
+	routeQueryArgs := []string{"--dataset", "../../examples/routing/golden-dataset.v1.json"}
+	routeLiveArgs := []string{"--dataset", "../../examples/routing/golden-dataset.v1.json", "--live", "--model", *model, "--base-url", *baseURL,
 		"--trials", fmt.Sprint(*trials), "--max-model-calls", fmt.Sprint(*routeCalls),
 		"--max-total-tokens", fmt.Sprint(*routeTokens), "--timeout", timeout.String()}
 
@@ -210,7 +209,13 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 	failedOrSkipped := countBenchmarkFailures(ragReport.Samples, toolReport.Samples, llmReport.Samples)
 	noGain := toolComparison.Unchanged+toolComparison.Regressed+routerComparison.Unchanged+routerComparison.Regressed > 0
 	gate := evalreport.Gate{Passed: len(capturedReports) == 4 && len(suite.FailureScenarios) > 0 && noGain,
-		BlockingSamples: 2, Reasons: []string{}}
+		BlockingSamples: 3, Reasons: []string{}}
+	verifiedTasks, coverageErr := benchmarkTaskCoverage(suite, ragReport.Samples, toolReport.Samples)
+	if coverageErr != nil {
+		gate.Passed = false
+		gate.BlockingFailures++
+		gate.Reasons = append(gate.Reasons, coverageErr.Error())
+	}
 	if len(suite.FailureScenarios) == 0 {
 		gate.BlockingFailures++
 		gate.Reasons = append(gate.Reasons, "no declared failure path is traceable from the benchmark manifest")
@@ -221,14 +226,14 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 	manifest := liveBenchmarkManifest{
 		Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "live_model_benchmark", DatasetID: suite.ID,
-			DatasetVersion: suite.Version, DatasetHash: benchmarkDigest(suiteBytes), GitRevision: gitRevision(ctx), StartedAt: startedAt, CompletedAt: time.Now().UTC()},
+			DatasetVersion: suite.Version, DatasetHash: benchmarkDigest(suiteBytes), GitRevision: evalreport.GitRevision(ctx), StartedAt: startedAt, CompletedAt: time.Now().UTC()},
 		SchemaVersion: liveBenchmarkSchemaVersion,
 		Config: liveBenchmarkConfig{ChatModel: *model, EmbeddingProfile: *embeddingProfile, EmbeddingModel: *embeddingModel,
 			EmbeddingDimensions: *embeddingDimensions, Trials: *trials, ToolMaxModelCalls: *toolCalls, ToolMaxTotalTokens: *toolTokens,
 			RouteMaxModelCalls: *routeCalls, RouteMaxTotalTokens: *routeTokens, MaxEmbeddingCalls: *embeddingCalls,
 			MaxEmbeddingInputTokens: *embeddingTokens, SampleTimeout: *timeout, EmbeddingTimeout: *embeddingTimeout},
 		Artifacts: make([]liveBenchmarkArtifact, 0, len(capturedReports)),
-		Evidence: liveBenchmarkEvidence{BenchmarkTasks: taskCount, DeclaredFailureScenarios: len(suite.FailureScenarios),
+		Evidence: liveBenchmarkEvidence{BenchmarkTasks: verifiedTasks, DeclaredFailureScenarios: len(suite.FailureScenarios),
 			ObservedFailedOrSkipped: failedOrSkipped, ToolContextComparison: toolComparison, RouterModeComparison: routerComparison,
 			NoGainOrRegressionObserved: noGain},
 		CostSource: "per-report usage only; monetary cost remains unavailable when the provider has no price table", Gate: gate,
@@ -249,7 +254,7 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 		return 2
 	}
 	fmt.Fprintf(stderr, "CASE-001A: tasks=%d reports=%d failures_or_skipped=%d no_gain_or_regression=%t output=%s\n",
-		taskCount, len(capturedReports), failedOrSkipped, noGain, *outputDir)
+		verifiedTasks, len(capturedReports), failedOrSkipped, noGain, *outputDir)
 	if *enforce && !gate.Passed {
 		return 1
 	}
@@ -266,10 +271,52 @@ func loadBenchmarkSuite(path string) ([]byte, benchmarkSuiteIdentity, int, error
 		return nil, benchmarkSuiteIdentity{}, 0, errors.New("invalid agentflow-benchmark-suite-v1 manifest")
 	}
 	tasks := 0
+	groups := map[string]bool{}
 	for _, set := range suite.TaskSets {
+		if (set.ID != "policy_retrieval" && set.ID != "long_record_evidence") || groups[set.ID] || len(set.Cases) == 0 {
+			return nil, benchmarkSuiteIdentity{}, 0, errors.New("CASE-001 requires its two distinct, nonempty task groups")
+		}
+		groups[set.ID] = true
+		ids := map[string]bool{}
+		for _, task := range set.Cases {
+			if strings.TrimSpace(task.ID) == "" || ids[task.ID] {
+				return nil, benchmarkSuiteIdentity{}, 0, errors.New("CASE-001 task identities must be nonempty and unique")
+			}
+			ids[task.ID] = true
+		}
 		tasks += len(set.Cases)
 	}
+	if len(groups) != 2 {
+		return nil, benchmarkSuiteIdentity{}, 0, errors.New("CASE-001 requires retrieval and Tool tasks")
+	}
 	return content, suite, tasks, nil
+}
+
+func benchmarkTaskCoverage(suite benchmarkSuiteIdentity, retrieval []rageval.Sample, tools []tooleval.Sample) (int, error) {
+	type key struct {
+		group, id string
+	}
+	expected, actual := map[key]bool{}, map[key]bool{}
+	for _, group := range suite.TaskSets {
+		for _, task := range group.Cases {
+			expected[key{group.ID, task.ID}] = true
+		}
+	}
+	for _, sample := range retrieval {
+		actual[key{"policy_retrieval", sample.CaseID}] = true
+	}
+	for _, sample := range tools {
+		actual[key{"long_record_evidence", sample.TaskID}] = true
+	}
+	if len(actual) != len(expected) {
+		return 0, errors.New("benchmark reports do not cover exactly the declared tasks")
+	}
+	for sample := range expected {
+		if !actual[sample] {
+			return 0, fmt.Errorf("benchmark task missing: group=%s task=%s", sample.group, sample.id)
+		}
+	}
+	return len(actual), nil
 }
 
 func compareToolArms(samples []tooleval.Sample) binaryComparison {

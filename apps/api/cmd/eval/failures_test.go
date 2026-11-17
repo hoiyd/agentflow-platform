@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 )
 
 // Failure inventory: raw source content leaks; unsupported schema/owner; missing
@@ -55,7 +57,7 @@ func TestFailurePromotionIsReviewedIdempotentAndContentAddressed(t *testing.T) {
 		t.Fatal("same ID silently replaced a reviewed case")
 	}
 	results := failureFile(t, "go-tests.json", failureEvents("pass", true))
-	revision := gitRevision(context.Background())
+	revision := evalreport.GitRevision(context.Background())
 	check := func(path string) map[string]any {
 		t.Helper()
 		out, code := failureCLI(t, "check", "--corpus", path, "--results", results, "--results-revision", revision, "--enforce")
@@ -128,7 +130,7 @@ func TestFailureGateRetainsAllNonPassingCases(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			results := failureFile(t, "results.json", scenario.events)
-			out, code := failureCLI(t, "check", "--corpus", corpus, "--results", results, "--results-revision", gitRevision(context.Background()), "--enforce")
+			out, code := failureCLI(t, "check", "--corpus", corpus, "--results", results, "--results-revision", evalreport.GitRevision(context.Background()), "--enforce")
 			var report struct {
 				Samples []struct{ Status string }
 				Gate    struct {
@@ -143,7 +145,7 @@ func TestFailureGateRetainsAllNonPassingCases(t *testing.T) {
 		})
 	}
 	for _, invalid := range []string{`{"Action":`, `not json`} {
-		if _, code := failureCLI(t, "check", "--corpus", corpus, "--results", failureFile(t, "bad.json", invalid), "--results-revision", gitRevision(context.Background())); code != 2 {
+		if _, code := failureCLI(t, "check", "--corpus", corpus, "--results", failureFile(t, "bad.json", invalid), "--results-revision", evalreport.GitRevision(context.Background())); code != 2 {
 			t.Fatal("malformed results accepted")
 		}
 	}

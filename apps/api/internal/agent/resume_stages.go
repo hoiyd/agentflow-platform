@@ -15,31 +15,9 @@ func (r *Runtime) failResumedStage(ctx context.Context, runID, stageID string, c
 		if step.ID != stageID || step.Status != domain.CollaborationStepRunning {
 			continue
 		}
-		failed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, step.Output, cause.Error())
-		if err != nil {
-			return err
-		}
-		kind := domain.EventStageFailed
-		if run, found, err := r.store.GetRun(runID); err == nil && found && (run.Status == domain.RunCanceled || run.Status == domain.RunCanceling) {
-			kind = domain.EventStageCanceled
-		}
-		if err = r.publishStage(context.WithoutCancel(ctx), failed, kind); err != nil {
-			return err
-		}
+		return r.persistFailedStage(ctx, step, cause, nil)
 	}
 	return nil
-}
-
-func (r *Runtime) completeResumedStage(ctx context.Context, stageID, output string, events chan<- domain.RunEvent) (domain.CollaborationStep, error) {
-	step, err := r.store.UpdateCollaborationStep(stageID, domain.CollaborationStepCompleted, output, "")
-	if err != nil {
-		return domain.CollaborationStep{}, err
-	}
-	if err = r.publishStage(ctx, step, domain.EventStageCompleted); err != nil {
-		return domain.CollaborationStep{}, err
-	}
-	events <- liveStageEvent(step)
-	return step, nil
 }
 
 func (r *Runtime) resumeAutonomousAfterTurn(ctx context.Context, run domain.Run, step domain.CollaborationStep, restored restoredRuntime, release func(), events chan<- domain.RunEvent) error {

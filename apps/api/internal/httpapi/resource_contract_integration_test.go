@@ -120,6 +120,26 @@ func resourceHTTPContracts(t *testing.T, backend store.Store, workspace, foreign
 	badUpload, badType := multipartUploadBody(t, "unsupported.exe", "binary")
 	call("POST", "/api/documents/upload", "/api/documents/upload", workspace, badUpload.Bytes(), badType, 400)
 	documentURL := "/api/documents/" + document.ID
+	detailBody := jsonCall("GET", documentURL, "/api/documents/{id}", workspace, "", 200)
+	var detail struct {
+		Document domain.Document  `json:"document"`
+		Chunks   []map[string]any `json:"chunks"`
+	}
+	if err := json.Unmarshal(detailBody, &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.Document.ID != document.ID || len(detail.Chunks) == 0 {
+		t.Fatalf("document detail lost identity: %s", detailBody)
+	}
+	for _, chunk := range detail.Chunks {
+		if _, duplicated := chunk["document"]; duplicated {
+			t.Fatal("chunk contains a duplicate Document")
+		}
+		if chunk["document_id"] != document.ID {
+			t.Fatal("chunk lost document_id")
+		}
+	}
+	jsonCall("GET", documentURL, "/api/documents/{id}", foreign, "", 404)
 	jsonCall("DELETE", documentURL, "/api/documents/{id}", foreign, "", 404)
 	if _, _, exists, err := backend.ForWorkspace(domain.NewWorkspaceScope(workspace)).GetDocument(document.ID); err != nil || !exists {
 		t.Fatalf("foreign delete changed owner Document: %v", err)

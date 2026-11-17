@@ -48,12 +48,8 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 	if err != nil {
 		return "", r.failCollaborationStage(ctx, events, step, err)
 	}
-	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, result.Output, "")
+	completed, err := r.completeStage(ctx, step.ID, result.Output, events)
 	if err != nil {
-		return "", err
-	}
-	emitCollaborationEvent(events, liveStageEvent(completed))
-	if err := r.publishStage(ctx, completed, domain.EventStageCompleted); err != nil {
 		return "", err
 	}
 	return boundedWorkerHandoff(completed), nil
@@ -87,18 +83,6 @@ func boundedWorkerHandoff(step domain.CollaborationStep) string {
 		limit = 0
 	}
 	return string(append(runes[:limit], suffix...))
-}
-
-func (r *Runtime) failCollaborationStage(ctx context.Context, events chan<- domain.RunEvent, step domain.CollaborationStep, cause error) error {
-	if turnpkg.IsWaiting(cause) {
-		return cause
-	}
-	failed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", cause.Error())
-	if err == nil {
-		emitCollaborationEvent(events, liveStageEvent(failed))
-		_ = r.publishStage(context.WithoutCancel(ctx), failed, domain.EventStageFailed)
-	}
-	return cause
 }
 
 func emitCollaborationEvent(events chan<- domain.RunEvent, event domain.RunEvent) {

@@ -42,7 +42,7 @@ export function DocumentLifecycleEditor({ document, onSaved, onReload }: {
     setError("");
     try {
       const updated = await updateDocumentMetadata(document.id, {
-        expected_updated_at: document.updated_at, metadata: document.metadata, lifecycle: draft
+        expected_updated_at: document.updated_at, metadata: document.metadata ?? {}, lifecycle: draft
       }, controller.signal);
       if (!controller.signal.aborted) onSaved(updated, document.updated_at);
     } catch (failure) {

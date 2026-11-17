@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/evaluation/failurecorpus"
 )
 
@@ -68,7 +69,7 @@ func TestHistoricalFailurePromotionPipeline(t *testing.T) {
 		t.Fatalf("owned regressions failed (retain go test output): %v\n%s", err, results)
 	}
 	out, code := failureCLI(t, "check", "--corpus", failureFile(t, "promoted.json", corpus),
-		"--results", failureFile(t, "owned-tests.json", string(results)), "--results-revision", gitRevision(context.Background()), "--enforce")
+		"--results", failureFile(t, "owned-tests.json", string(results)), "--results-revision", evalreport.GitRevision(context.Background()), "--enforce")
 	var report failurecorpus.Report
 	if err := json.Unmarshal([]byte(out), &report); err != nil || code != 0 || !report.Gate.Passed || report.Gate.BlockingSamples != 3 {
 		t.Fatalf("promotion workflow failed code=%d err=%v report=%s", code, err, out)

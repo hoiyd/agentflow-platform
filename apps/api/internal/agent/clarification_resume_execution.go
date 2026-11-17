@@ -15,11 +15,8 @@ func (r *Runtime) resumeClarificationHumanInput(ctx, executionCtx context.Contex
 	if err != nil {
 		return err
 	}
-	step, err := r.store.UpdateCollaborationStep(record.StageID, domain.CollaborationStepCompleted, clarificationAnswerText(record), "")
+	step, err := r.completeStage(executionCtx, record.StageID, clarificationAnswerText(record), nil)
 	if err != nil {
-		return err
-	}
-	if err = r.publishStage(executionCtx, step, domain.EventStageCompleted); err != nil {
 		return err
 	}
 	prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
@@ -49,7 +46,7 @@ func (r *Runtime) resumeClarificationTool(ctx, executionCtx context.Context, run
 	if plan.completedStage != nil {
 		step = *plan.completedStage
 	} else {
-		step, err = r.completeResumedStage(executionCtx, record.StageID, result.Output, events)
+		step, err = r.completeStage(executionCtx, record.StageID, result.Output, events)
 		if err != nil {
 			return err
 		}

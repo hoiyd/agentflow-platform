@@ -577,15 +577,11 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", errRunCanceled
 	}
 	output := result.Output
-	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
+	_, err = r.completeStage(ctx, step.ID, output, events)
 	if err != nil {
 		return "", err
 	}
 	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
-		return "", err
-	}
-	events <- liveStageEvent(completed)
-	if err := r.publishStage(ctx, completed, domain.EventStageCompleted); err != nil {
 		return "", err
 	}
 	return output, nil

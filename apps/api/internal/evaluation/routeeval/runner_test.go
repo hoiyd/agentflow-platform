@@ -11,11 +11,12 @@ import (
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T) {
-	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), Revision: "test"})
+	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), Revision: evalreport.GitRevision(t.Context())})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +66,18 @@ func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T)
 			overall.UnsafeFalseRoute.Numerator != baseline.UnsafeFalseRoute.Numerator || overall.UnsafeFalseRoute.Denominator != baseline.UnsafeFalseRoute.Denominator ||
 			overall.NoRouteRecall.Numerator != baseline.NoRouteRecall.Numerator || overall.NoRouteRecall.Denominator != baseline.NoRouteRecall.Denominator || report.Gate.Passed != baseline.GatePassed {
 			t.Fatalf("current routing result drifted from the accepted archived baseline: report=%+v baseline=%+v", overall, baseline)
+		}
+		if dir := os.Getenv("EVALUATION_REPORT_DIR"); dir != "" {
+			content, err := json.MarshalIndent(report, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "agent-routing.json"), content, 0600); err != nil {
+				t.Fatal(err)
+			}
 		}
 		return
 	}
@@ -132,27 +145,6 @@ func TestRejectsInvalidConfigurationAndDataset(t *testing.T) {
 		Cases: []EvaluationCase{{ID: "case", Split: SplitCalibration, Task: "task", ExpectedOutcome: agent.AgentSelectionOutcomeNoSuitable}}}
 	if err := validateDataset(&data); err == nil {
 		t.Fatal("dataset without coverage and holdout accepted")
-	}
-}
-
-func TestCanonicalRoutingReportArtifacts(t *testing.T) {
-	dir := os.Getenv("EVALUATION_REPORT_DIR")
-	if dir == "" {
-		return
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), Revision: "ci"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	content, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "agent-routing.json"), content, 0600); err != nil {
-		t.Fatal(err)
 	}
 }
 
