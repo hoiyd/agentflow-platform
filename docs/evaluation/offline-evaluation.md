@@ -129,7 +129,9 @@ Ledger usage. Missing usage stays estimated; unsettled usage stops further sampl
 
 Default CI makes no public model calls. Existing deterministic Context/RAG/routing
 and Tool protocol checks write JSON to `EVALUATION_REPORT_DIR`, uploaded as
-`offline-evaluation-reports`. Reports omit credentials/endpoints/private Context;
+`offline-evaluation-reports`. Reports are exported by the asserting test run,
+with the actual checkout revision; recovery JSONL and Replays share one execution.
+Reports omit credentials/endpoints/private Context;
 errors pass redaction. Retired routing reports remain read-only, not executed policies.
 
 ## CASE-001 Evidence-backed Benchmark Suite

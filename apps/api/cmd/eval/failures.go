@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/evaluation/failurecorpus"
 )
 
@@ -76,7 +77,7 @@ func runFailures(ctx context.Context, args []string, out, stderr io.Writer) int 
 					value, err = failurecorpus.Promote(corpus, item)
 				}
 			} else {
-				value, err = failurecorpus.Check(corpus, evidence, resultsRevision, gitRevision(ctx))
+				value, err = failurecorpus.Check(corpus, evidence, resultsRevision, evalreport.GitRevision(ctx))
 			}
 		}
 	}

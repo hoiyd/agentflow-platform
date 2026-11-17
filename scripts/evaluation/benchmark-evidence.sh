@@ -13,15 +13,13 @@ cp "${ROOT_DIR}/examples/benchmark-suite.v1.json" "${REPORT_DIR}/benchmark-suite
 
 cd "${ROOT_DIR}/apps/api"
 EVALUATION_REPORT_DIR="${REPORT_DIR}" go test ./internal/evaluation/rageval \
-  -run '^TestCanonicalOfflineReportArtifact$' -count=1
+  -run '^TestCanonicalOfflineGateAndReport$' -count=1
 EVALUATION_REPORT_DIR="${REPORT_DIR}" go test ./internal/evaluation/tooleval \
   -run '^TestTaskEvaluationProductionPathAndReport$' -count=1
-EVALUATION_REPORT_DIR="${REPORT_DIR}" go test ./internal/httpapi \
-  -run '^TestResumeRecoverableRunThroughAPIStreamsAndCompletes$' -count=1
 go test -json ./internal/evaluation/tooleval \
   -run '^TestTaskEvaluationFailuresStayInDenominator$' -count=1 \
   > "${REPORT_DIR}/tool-failure-paths.jsonl"
-go test -json ./internal/httpapi \
+EVALUATION_REPORT_DIR="${REPORT_DIR}" go test -json ./internal/httpapi \
   -run '^(TestResumeRecoverableRunThroughAPIStreamsAndCompletes|TestResumeRunRejectsStaleAndUnreconciledActions)$' -count=1 \
   > "${REPORT_DIR}/recovery-paths.jsonl"
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/evaluation/inferencecompat"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
@@ -81,7 +81,7 @@ func runTokenization(ctx context.Context, args []string, out, stderr io.Writer) 
 	report, err := tokenization.Run(ctx, tokenization.Options{
 		BaseURL: *baseURL, Model: *model, ModelArtifact: *artifact, GGUFSHA256: *ggufSHA,
 		ContextWindowTokens: *window, OutputReserveTokens: *reserve, SafetyMarginTokens: *margin,
-		APIKey: credential.FromEnvironment("LLAMA_CPP_API_KEY").Reveal(), RequestTimeout: *timeout, Revision: gitRevision(ctx),
+		APIKey: credential.FromEnvironment("LLAMA_CPP_API_KEY").Reveal(), RequestTimeout: *timeout, Revision: evalreport.GitRevision(ctx),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -127,7 +127,7 @@ func runInference(ctx context.Context, args []string, out, stderr io.Writer) int
 			Capabilities: routing.Capabilities{ToolCalling: *toolCalling, StructuredOutput: *structuredOutput, Streaming: true}},
 		APIKey: credential.FromEnvironment("LLAMA_CPP_API_KEY").Reveal(), RouteID: *routeID, CredentialEnv: "LLAMA_CPP_API_KEY",
 		RequestTimeout: *requestTimeout, AgentFlowBaseURL: *agentFlowBaseURL,
-		WorkspaceID: *workspaceID, AgentID: *agentID, Revision: gitRevision(ctx),
+		WorkspaceID: *workspaceID, AgentID: *agentID, Revision: evalreport.GitRevision(ctx),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -160,7 +160,7 @@ func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	opts := routeeval.Options{DatasetPath: *dataset, RouterMode: agent.RouterModeQuery,
-		Trials: 1, Revision: gitRevision(ctx)}
+		Trials: 1, Revision: evalreport.GitRevision(ctx)}
 	var client *openai.Client
 	if *live {
 		providerCredential := credential.FromEnvironment("OPENAI_API_KEY")
@@ -215,7 +215,7 @@ func runContext(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--ablation requires --baseline")
 		return 2
 	}
-	report, err := contexteval.Run(ctx, contexteval.Options{DatasetPath: *dataset, Strategy: *strategy, Revision: gitRevision(ctx)})
+	report, err := contexteval.Run(ctx, contexteval.Options{DatasetPath: *dataset, Strategy: *strategy, Revision: evalreport.GitRevision(ctx)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -288,7 +288,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: credential.FromEnvironment("OPENAI_API_KEY").Reveal(),
 			BaseURL: *embeddingBaseURL, Model: *embeddingModel, Dimensions: *embeddingDimensions, MaxCalls: *maxEmbeddingCalls,
 			MaxInputTokens: *maxEmbeddingInputTokens, RetryMaxAttempts: *embeddingRetryAttempts, Timeout: *embeddingTimeout},
-		Revision: gitRevision(ctx)})
+		Revision: evalreport.GitRevision(ctx)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -359,7 +359,7 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	client := openai.NewClientWithTimeout(providerCredential.Reveal(), *base, *model, *timeout)
 	report, err := tooleval.Run(ctx, client, tooleval.Options{Trials: *trials, MaxModelCalls: *calls,
-		MaxTotalTokens: *tokens, Timeout: *timeout, Revision: gitRevision(ctx)})
+		MaxTotalTokens: *tokens, Timeout: *timeout, Revision: evalreport.GitRevision(ctx)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -387,12 +387,4 @@ func writeJSON(out, stderr io.Writer, value any) bool {
 		return false
 	}
 	return true
-}
-
-func gitRevision(ctx context.Context) string {
-	value, err := exec.CommandContext(ctx, "git", "rev-parse", "HEAD").Output()
-	if err != nil {
-		return "unknown"
-	}
-	return strings.TrimSpace(string(value))
 }

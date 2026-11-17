@@ -15,7 +15,7 @@ import (
 
 func TestCanonicalContextQualityGateAndAblation(t *testing.T) {
 	path := canonicalDatasetPath()
-	compacted, err := Run(context.Background(), Options{DatasetPath: path, Strategy: StrategyCompacted, Revision: "fixture"})
+	compacted, err := Run(context.Background(), Options{DatasetPath: path, Strategy: StrategyCompacted, Revision: evalreport.GitRevision(t.Context())})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestCanonicalContextQualityGateAndAblation(t *testing.T) {
 		t.Fatalf("report leaked fixture content or lost model-input evidence: %s", encoded)
 	}
 
-	full, err := Run(context.Background(), Options{DatasetPath: path, Strategy: StrategyFullHistory, Revision: "fixture"})
+	full, err := Run(context.Background(), Options{DatasetPath: path, Strategy: StrategyFullHistory, Revision: compacted.GitRevision})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +55,18 @@ func TestCanonicalContextQualityGateAndAblation(t *testing.T) {
 	}
 	if compacted.Summary.MeanInputTokens >= full.Summary.MeanInputTokens || compacted.Summary.ForbiddenLeaks >= full.Summary.ForbiddenLeaks {
 		t.Fatalf("fixture did not expose the expected controlled improvement: compacted=%#v full=%#v", compacted.Summary, full.Summary)
+	}
+	if dir := os.Getenv("EVALUATION_REPORT_DIR"); dir != "" {
+		content, err := json.MarshalIndent(compacted, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "context-quality-offline.json"), content, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -177,27 +189,6 @@ func TestContextDatasetValidationBoundaries(t *testing.T) {
 	}
 	if _, _, err := loadDataset(path); err == nil {
 		t.Fatal("oversized dataset accepted")
-	}
-}
-
-func TestCanonicalContextQualityReportArtifact(t *testing.T) {
-	dir := os.Getenv("EVALUATION_REPORT_DIR")
-	if dir == "" {
-		return
-	}
-	report, err := Run(context.Background(), Options{DatasetPath: canonicalDatasetPath(), Strategy: StrategyCompacted, Revision: "ci"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	content, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "context-quality-offline.json"), content, 0600); err != nil {
-		t.Fatal(err)
 	}
 }
 

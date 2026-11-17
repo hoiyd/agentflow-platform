@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool/artifact"
@@ -179,7 +180,9 @@ func options() Options {
 
 func TestTaskEvaluationProductionPathAndReport(t *testing.T) {
 	server := fixtureProvider(t, "success")
-	report, err := Run(context.Background(), openai.NewClient("fixture-key", server.URL, "fixture-model"), options())
+	opts := options()
+	opts.Revision = evalreport.GitRevision(t.Context())
+	report, err := Run(context.Background(), openai.NewClient("fixture-key", server.URL, "fixture-model"), opts)
 	if err != nil {
 		t.Fatal(err)
 	}

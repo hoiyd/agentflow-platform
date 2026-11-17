@@ -321,16 +321,19 @@ func liveProfile(baseURL string, maxCalls, maxTokens, attempts int, timeout time
 		Model: "semantic-v1", Dimensions: 2, MaxCalls: maxCalls, MaxInputTokens: maxTokens, RetryMaxAttempts: attempts, Timeout: timeout}
 }
 
-func TestCanonicalOfflineReportArtifact(t *testing.T) {
+func TestCanonicalOfflineGateAndReport(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..")
+	report, err := Run(context.Background(), Options{DatasetPath: filepath.Join(root, "examples", "knowledge", "golden-dataset.v1.json"),
+		CorpusManifestPath: filepath.Join(root, "examples", "knowledge", "golden-v1", "corpus-manifest.v1.json"), TopK: 5, MinSimilarity: 0.15, Revision: evalreport.GitRevision(t.Context())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.GitRevision == "ci" || !report.Gate.Passed {
+		t.Fatalf("canonical gate or checkout identity missing: revision=%s gate=%+v", report.GitRevision, report.Gate)
+	}
 	dir := os.Getenv("EVALUATION_REPORT_DIR")
 	if dir == "" {
 		return
-	}
-	root := filepath.Join("..", "..", "..", "..", "..")
-	report, err := Run(context.Background(), Options{DatasetPath: filepath.Join(root, "examples", "knowledge", "golden-dataset.v1.json"),
-		CorpusManifestPath: filepath.Join(root, "examples", "knowledge", "golden-v1", "corpus-manifest.v1.json"), TopK: 5, MinSimilarity: 0.15, Revision: "ci"})
-	if err != nil {
-		t.Fatal(err)
 	}
 	content, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {

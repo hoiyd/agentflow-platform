@@ -226,7 +226,7 @@ func runBenchmark(ctx context.Context, args []string, out, stderr io.Writer) int
 	}
 	manifest := liveBenchmarkManifest{
 		Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "live_model_benchmark", DatasetID: suite.ID,
-			DatasetVersion: suite.Version, DatasetHash: benchmarkDigest(suiteBytes), GitRevision: gitRevision(ctx), StartedAt: startedAt, CompletedAt: time.Now().UTC()},
+			DatasetVersion: suite.Version, DatasetHash: benchmarkDigest(suiteBytes), GitRevision: evalreport.GitRevision(ctx), StartedAt: startedAt, CompletedAt: time.Now().UTC()},
 		SchemaVersion: liveBenchmarkSchemaVersion,
 		Config: liveBenchmarkConfig{ChatModel: *model, EmbeddingProfile: *embeddingProfile, EmbeddingModel: *embeddingModel,
 			EmbeddingDimensions: *embeddingDimensions, Trials: *trials, ToolMaxModelCalls: *toolCalls, ToolMaxTotalTokens: *toolTokens,

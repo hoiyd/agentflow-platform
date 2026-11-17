@@ -10,6 +10,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/inference/openai"
 )
 
@@ -38,7 +39,7 @@ func runLiveContext(ctx context.Context, args []string, out, stderr io.Writer) i
 	}
 	client := openai.NewClientWithTimeout(key.Reveal(), *base, *model, *timeout)
 	report, err := contexteval.RunLive(ctx, client, contexteval.LiveOptions{DatasetPath: *dataset, Trials: *trials, MaxModelCalls: *calls, MaxTotalTokens: *tokens,
-		Timeout: *timeout, ContextWindowTokens: *window, OutputReserveTokens: *reserve, SummaryMaxTokens: *summary, Revision: gitRevision(ctx), EvidenceMode: "live_model"})
+		Timeout: *timeout, ContextWindowTokens: *window, OutputReserveTokens: *reserve, SummaryMaxTokens: *summary, Revision: evalreport.GitRevision(ctx), EvidenceMode: "live_model"})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

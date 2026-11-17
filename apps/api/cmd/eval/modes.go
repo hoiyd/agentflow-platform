@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/evaluation/modeeval"
 )
 
@@ -36,7 +37,7 @@ func runModes(ctx context.Context, args []string, out, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "eval modes requires --live and explicit target, database and shared/per-Run budgets")
 		return 2
 	}
-	report, err := modeeval.Run(ctx, modeeval.Options{DatasetPath: *dataset, DatabaseURL: *database, BaseURL: *base, Model: *model, CredentialEnvironment: *credential, EvidenceMode: *evidence, Trials: *trials, MaxRequests: *requests, MaxTokens: *tokens, SampleCalls: *calls, SampleTokens: *sampleTokens, TimeoutMS: timeout.Milliseconds(), SuiteTimeoutMS: suiteTimeout.Milliseconds(), ApprovalPolicy: *approval, Revision: gitRevision(ctx)})
+	report, err := modeeval.Run(ctx, modeeval.Options{DatasetPath: *dataset, DatabaseURL: *database, BaseURL: *base, Model: *model, CredentialEnvironment: *credential, EvidenceMode: *evidence, Trials: *trials, MaxRequests: *requests, MaxTokens: *tokens, SampleCalls: *calls, SampleTokens: *sampleTokens, TimeoutMS: timeout.Milliseconds(), SuiteTimeoutMS: suiteTimeout.Milliseconds(), ApprovalPolicy: *approval, Revision: evalreport.GitRevision(ctx)})
 	if err != nil {
 		if report.SchemaVersion != "" {
 			_ = writeJSON(out, stderr, report)
