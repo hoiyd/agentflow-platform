@@ -152,6 +152,10 @@ tasks, same-model `full_context`/`with_tools` for three Tool tasks, and determin
 versus LLM ranking on the Router Dataset. It produces separate reports, not one
 intelligence score. With credentials exported, explicitly authorize the spend:
 
+Run from `apps/api`. This command uses the checked-in CASE-001 suite and datasets;
+custom `--suite`, `--rag-dataset`, `--corpus-manifest` and `--route-dataset` options
+are not supported. Use the individual runners for other datasets.
+
 ```bash
 go run ./cmd/eval benchmark --live \
   --model CHAT_MODEL --base-url https://api.openai.com/v1 \
@@ -171,8 +175,10 @@ includes `manifest.json`, `rag-semantic.json`, `tool-context-vs-tools.json`,
 `route-query-match.json` and `route-llm-ranking.json`, with hashes, configuration,
 trials, failures/skips and improved/unchanged/regressed comparisons.
 
-The evidence-completeness gate requires a traceable failure path and an evaluated
-no-gain/regression pair; it does not mean every quality gate passed. Failures,
+The evidence-completeness gate matches declared retrieval/Tool task IDs to the
+actual reports; each runner owns its arm/trial accounting. It also requires a traceable failure path and an evaluated
+no-gain/regression pair. `benchmark_tasks` counts tasks only after that binding
+passes; it is zero on a mismatch. This does not mean every quality gate passed. Failures,
 timeouts, invalid responses and unrun trials stay in their denominators. Unknown
 cost and estimated usage remain explicit. Only controlled, retained live reports
 support quality/cost claims; never quote fixture percentages as live reliability.

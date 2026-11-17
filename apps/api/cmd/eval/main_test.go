@@ -98,17 +98,17 @@ func TestLiveBenchmarkProducesTraceableEvidencePack(t *testing.T) {
 	}))
 	defer server.Close()
 
-	root := filepath.Join("..", "..", "..", "..")
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(filepath.Join(root, "apps", "api"))
 	outputDir := filepath.Join(t.TempDir(), "live-benchmark")
 	args := []string{"benchmark", "--live", "--model", "fixture-chat", "--base-url", server.URL,
 		"--embedding-model", "fixture-embedding", "--embedding-base-url", server.URL, "--embedding-dimensions", "2",
 		"--trials", "3", "--tool-max-model-calls", "30", "--tool-max-total-tokens", "100000",
 		"--route-max-model-calls", "1", "--route-max-total-tokens", "100000",
 		"--max-embedding-calls", "100", "--max-embedding-input-tokens", "1000000",
-		"--suite", filepath.Join(root, "examples", "benchmark-suite.v1.json"),
-		"--rag-dataset", filepath.Join(root, "examples", "knowledge", "golden-dataset.v1.json"),
-		"--corpus-manifest", filepath.Join(root, "examples", "knowledge", "golden-v1", "corpus-manifest.v1.json"),
-		"--route-dataset", filepath.Join(root, "examples", "routing", "golden-dataset.v1.json"),
 		"--output-dir", outputDir, "--enforce"}
 	var out, stderr bytes.Buffer
 	if code := run(context.Background(), args, &out, &stderr); code != 0 {
