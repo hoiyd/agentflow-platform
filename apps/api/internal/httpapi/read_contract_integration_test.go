@@ -73,6 +73,23 @@ func TestRAGSearchResponseContract(t *testing.T) {
 			t.Fatalf("search: %d %s", response.Code, response.Body.String())
 		}
 		contract.response(t, http.MethodPost, "/api/rag/search", response)
+		var body struct {
+			Items []struct {
+				Document domain.Document `json:"document"`
+				Chunk    map[string]any  `json:"chunk"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range body.Items {
+			if _, duplicated := item.Chunk["document"]; duplicated {
+				t.Fatal("search chunk contains a duplicate Document")
+			}
+			if item.Chunk["document_id"] != item.Document.ID {
+				t.Fatal("search lost Document identity")
+			}
+		}
 	}
 	schema, err := contract.compiler.Compile("https://agentflow.test/openapi#/paths/~1api~1rag~1search/post/responses/200/content/application~1json/schema")
 	if err != nil {

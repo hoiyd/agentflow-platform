@@ -170,7 +170,6 @@ func (s *Store) GetDocument(id string) (domain.Document, []domain.DocumentChunk,
 	chunks := []domain.DocumentChunk{}
 	for _, chunk := range s.data.DocumentChunks {
 		if chunk.DocumentID == document.ID {
-			chunk.Document = document
 			chunks = append(chunks, chunk)
 		}
 	}
@@ -405,7 +404,6 @@ func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) (
 		if !sameParent && !adjacent {
 			continue
 		}
-		chunk.Document = document
 		items = append(items, domain.RetrievedDocumentChunk{Document: document, Chunk: chunk})
 	}
 	sort.SliceStable(items, func(i, j int) bool {

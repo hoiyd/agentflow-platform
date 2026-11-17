@@ -17,7 +17,6 @@ func stageCandidates(input []domain.RetrievedDocumentChunk) []domain.RetrievedDo
 		item := &items[index]
 		item.Document.Metadata = cloneStageMetadata(item.Document.Metadata)
 		item.Chunk.Metadata = cloneStageMetadata(item.Chunk.Metadata)
-		item.Chunk.Document.Metadata = cloneStageMetadata(item.Chunk.Document.Metadata)
 		item.Chunk.SectionPath = slices.Clone(item.Chunk.SectionPath)
 		item.MatchedTerms = slices.Clone(item.MatchedTerms)
 		item.SourceChunkIDs = slices.Clone(item.SourceChunkIDs)

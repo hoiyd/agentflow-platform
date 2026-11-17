@@ -54,7 +54,6 @@ func mergeContextChunkPair(current domain.RetrievedDocumentChunk, lastSource dom
 	if len(matchedIDs) > 0 {
 		current.MatchedChunkID = matchedIDs[0]
 	}
-	current.Chunk.Document = current.Document
 	return current
 }
 

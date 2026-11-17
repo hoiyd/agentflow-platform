@@ -1736,7 +1736,6 @@ export interface components {
             } | null;
             /** Format: date-time */
             created_at: string;
-            document?: components["schemas"]["KnowledgeDocument"];
         };
         KnowledgeDocument: {
             id: string;

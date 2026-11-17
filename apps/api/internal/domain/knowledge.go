@@ -62,7 +62,6 @@ type DocumentChunk struct {
 	TokenCount int            `json:"token_count"`
 	Metadata   map[string]any `json:"metadata"`
 	CreatedAt  time.Time      `json:"created_at"`
-	Document   Document       `json:"document,omitempty"`
 }
 
 type DocumentChunkEmbedding struct {

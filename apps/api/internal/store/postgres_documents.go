@@ -217,7 +217,6 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 		if err != nil {
 			return domain.Document{}, nil, false, err
 		}
-		chunk.Document = document
 		chunks = append(chunks, chunk)
 	}
 	return document, chunks, true, rows.Err()
@@ -259,7 +258,6 @@ func (s *PostgresStore) GetDocumentInWorkspace(workspaceID string, id string) (d
 		if scanErr != nil {
 			return domain.Document{}, nil, false, scanErr
 		}
-		chunk.Document = document
 		chunks = append(chunks, chunk)
 	}
 	return document, chunks, true, rows.Err()

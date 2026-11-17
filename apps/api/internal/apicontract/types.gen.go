@@ -1853,7 +1853,6 @@ type KnowledgeDocumentChunk struct {
 	Content         string                  `json:"content"`
 	ContentHash     *string                 `json:"content_hash,omitempty"`
 	CreatedAt       time.Time               `json:"created_at"`
-	Document        *KnowledgeDocument      `json:"document,omitempty"`
 	DocumentId      string                  `json:"document_id"`
 	DocumentVersion *string                 `json:"document_version,omitempty"`
 	EndOffset       int                     `json:"end_offset"`

@@ -2320,7 +2320,6 @@ components:
         token_count: { type: integer }
         metadata: { type: [object, 'null'], additionalProperties: true }
         created_at: { type: string, format: date-time }
-        document: { $ref: '#/components/schemas/KnowledgeDocument' }
     KnowledgeDocument:
       type: object
       required: [id, title, source_type, metadata, index_identity, created_at, updated_at]

@@ -75,6 +75,11 @@ for later resolution, but HTTP Document responses omit full source content.
 Legacy chunks do not receive invented hashes/offsets. Document detail, search,
 Agent events and model traces expose the same source fields.
 
+Chunks carry `document_id`, not an embedded Document. Detail responses expose
+one top-level Document; each retrieval result pairs its Document and Chunk.
+The former `chunk.document` copy is no longer returned; stored documents and
+historical evidence are unchanged.
+
 ## Retrieval Pipeline
 
 | Stage | Contract |

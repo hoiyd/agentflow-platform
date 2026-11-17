@@ -185,7 +185,6 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	}
 	item.Document.CreatedAt, item.Document.UpdatedAt = item.Document.CreatedAt.UTC(), item.Document.UpdatedAt.UTC()
 	item.Chunk.CreatedAt = item.Chunk.CreatedAt.UTC()
-	item.Chunk.Document = item.Document
 	return item, nil
 }
 
