@@ -14,6 +14,21 @@ can recover original evidence without promoting it to Memory.
 
 ## Provider Lifecycle and Curation Flow
 
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart LR
+    Initialize --> Operations["Recall / Propose<br/>Commit / SyncTurn"]
+    Operations --> Close
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Operations focus;
+```
+
 Agent Runtime depends only on `Recall`; explicit Memory APIs depend on
 `Recall`, `Commit`, and the separate `Administration` capability
 (`GetMemory` / `MutateMemory`); the post-response path submits `SyncTurn`. Provider

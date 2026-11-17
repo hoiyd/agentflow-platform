@@ -233,6 +233,9 @@ are complete. Mandatory namespace filtering alone is not authorization.
   in its owning document; link rather than repeat across pages or sections.
   Cut filler, repeated summaries and tables that merely restate prose. Remove
   stale text and development diaries; update references when consolidating.
+- Preserve diagrams that help readers understand the documentation. Prefer
+  simplifying their presentation, labels or layout; do not lightly delete them
+  or remove them merely to reduce document length or line counts.
 - PR descriptions serve review and may be detailed: explain intent, changes,
   scope/non-goals, compatibility, migration/rollback and validation evidence.
   Do not apply project-document brevity as a blanket PR length limit; avoid

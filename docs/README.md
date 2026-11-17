@@ -97,6 +97,9 @@ in OpenAPI, and event names in the generated catalog. Preserve executable
 steps, failure semantics, evidence provenance, and limitations when editing.
 Do not turn implementation notes or private backlogs into the public reading path.
 
+When shortening documentation, simplify diagram labels and presentation first;
+do not delete explanatory diagrams solely to reduce line counts.
+
 Keep architecture/flow diagrams as [Mermaid source](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams),
 not a separate export pipeline. Follow [Chat and Completion](architecture/backend-architecture.md#chat-and-completion):
 18px system sans-serif, thin neutral borders, blue policy/execution boundaries

@@ -146,6 +146,26 @@ Tool Call IDs plus a real Turn or Stage ID. A committed receipt replays without
 invoking the Handler. An abandoned `executing` effect becomes
 `needs_reconciliation` during stale-Run repair and blocks unsafe Resume.
 
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Prepared["prepared"] --> Executing["executing"]
+    Executing -->|Durable success| Committed["committed"]
+    Executing -->|Uncertain outcome| Uncertain["needs_reconciliation"]
+    Uncertain --> Reconcile["Operator reconciliation"]
+    Reconcile --> Resolved["committed / failed / compensated"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Reconcile focus;
+    class Committed,Resolved durable;
+```
+
 Confirmed pre-publication failures may settle as `failed`; cancellation, timeout
 or uncertain publication must not be treated as proof that no write occurred.
 The [reconciliation contract](../tools/tool-side-effect-reconciliation.md) owns
