@@ -12,7 +12,7 @@ import (
 // The provider deliberately forges hidden write calls after loading a Skill.
 // Only real Executor denials and filesystem observations satisfy continuation.
 func (f *browserProvider) planningResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "planning-gate") {
+	if !strings.Contains(input.currentTask(), "planning-gate") {
 		return false
 	}
 	system := ""

@@ -14,7 +14,7 @@ import (
 // The fixture checks the actual outgoing prompt and Tool observations. It does
 // not implement filters: real retrieval/Bindings must keep the decoy out.
 func (f *browserProvider) knowledgeFilterResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "rag-filter-gate") {
+	if !strings.Contains(input.currentTask(), "rag-filter-gate") {
 		return false
 	}
 	for _, message := range input.Messages {

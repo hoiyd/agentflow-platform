@@ -11,8 +11,8 @@ import (
 
 // A nonexistent source exercises the real production resolver without making
 // CI contact the public web. Successful HTTPS reads have their own backend gate.
-func (f *browserProvider) webFetchResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "web-fetch-boundary") {
+func (f *browserProvider) webFetchResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "web-fetch-boundary") {
 		return false
 	}
 	available, observations := false, 0

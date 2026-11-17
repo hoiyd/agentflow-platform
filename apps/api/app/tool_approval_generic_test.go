@@ -112,7 +112,7 @@ func (f configuredApprovalRun) verify(t *testing.T) {
 }
 
 func (f *browserProvider) configuredApprovalResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "configured-approval-gate:") {
+	if !strings.Contains(input.currentTask(), "configured-approval-gate:") {
 		return false
 	}
 	name, args, want := "", "", ""
@@ -124,7 +124,7 @@ func (f *browserProvider) configuredApprovalResponse(w http.ResponseWriter, inpu
 		{"request_user_input", `{"questions":[{"id":"audience","question":"Who is the audience?"}]}`, "engineers"},
 		{"mcp_docs__read", `{"id":"guide"}`, "MCP public documentation evidence"},
 	} {
-		if strings.Contains(task, "configured-approval-gate:"+item.name) {
+		if strings.Contains(input.currentTask(), "configured-approval-gate:"+item.name) {
 			name, args, want = item.name, item.args, item.want
 		}
 	}

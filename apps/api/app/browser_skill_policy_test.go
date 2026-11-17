@@ -30,8 +30,8 @@ func browserSkillPolicyPackages(t *testing.T, root string) {
 	}
 }
 
-func (f *browserProvider) skillPolicyResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "skill-policy-gate") {
+func (f *browserProvider) skillPolicyResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "skill-policy-gate") {
 		return false
 	}
 	content, reason := "Review includes verified facts and open questions.", "stop"
@@ -41,9 +41,9 @@ func (f *browserProvider) skillPolicyResponse(w http.ResponseWriter, input brows
 		hasLoad = hasLoad || definition.Function.Name == "skill_load"
 	}
 	if hasLoad {
-		implicit := strings.Contains(task, "skill-policy-gate-implicit")
-		boundOnly := strings.Contains(task, "skill-policy-gate-binding")
-		automatic := strings.Contains(task, "skill-policy-gate-auto")
+		implicit := strings.Contains(input.currentTask(), "skill-policy-gate-implicit")
+		boundOnly := strings.Contains(input.currentTask(), "skill-policy-gate-binding")
+		automatic := strings.Contains(input.currentTask(), "skill-policy-gate-auto")
 		name := "manual-review"
 		if automatic || boundOnly {
 			name = "auto-review"
