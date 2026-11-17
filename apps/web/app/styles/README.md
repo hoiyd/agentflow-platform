@@ -8,7 +8,7 @@ legacy stylesheet underneath a second override file.
 
 | Module | Responsibility |
 | --- | --- |
-| `workbench/foundation.css` | Tokens, typography, focus, shared form and dialog primitives |
+| `workbench/foundation.css` | Tokens, typography, focus, shared forms/dialogs and primary actions (`.send`, `.compact-send`) |
 | `workbench/selection-menu.css`, `disabled-control-note.css` | Shared pickers and disabled-control notes |
 | `workbench/home*.css` | Product home, recordings and capability inventory |
 | `workbench/navigation.css`, `shell.css` | Sidebar navigation, top bar and task status |

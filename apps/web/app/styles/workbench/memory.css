@@ -104,11 +104,6 @@
 }
 
 .memory-primary-action {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   border-radius: 5px;
   padding: 0 15px;
 }
