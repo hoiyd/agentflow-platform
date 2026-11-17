@@ -113,7 +113,7 @@ func (r *Runtime) selectModelRoute(ctx context.Context, request turnpkg.Request,
 	}
 	selectedRouteID := snapshot.ModelRouting.PinnedRouteID
 	if selectedRouteID == "" {
-		if selected, ok, selectedErr := r.selectedModelRoute(request.RunID, snapshot); selectedErr != nil {
+		if selected, ok, selectedErr := r.selectedModelRoute(request.RunID, snapshot, catalog); selectedErr != nil {
 			return routing.Decision{}, selectedErr
 		} else if ok {
 			selectedRouteID = selected.Route.ID
@@ -139,7 +139,11 @@ func (r *Runtime) ModelClientForRun(runID string) (provider.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	decision, ok, err := r.selectedModelRoute(runID, snapshot)
+	catalog, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
+	if err != nil {
+		return nil, err
+	}
+	decision, ok, err := r.selectedModelRoute(runID, snapshot, catalog)
 	if err != nil {
 		return nil, err
 	}
@@ -149,11 +153,7 @@ func (r *Runtime) ModelClientForRun(runID string) (provider.Client, error) {
 	return decision.Client, nil
 }
 
-func (r *Runtime) selectedModelRoute(runID string, snapshot *domain.RuntimeSnapshot) (routing.Decision, bool, error) {
-	catalog, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
-	if err != nil {
-		return routing.Decision{}, false, err
-	}
+func (r *Runtime) selectedModelRoute(runID string, snapshot *domain.RuntimeSnapshot, catalog *routing.Catalog) (routing.Decision, bool, error) {
 	routeID := strings.TrimSpace(snapshot.ModelRouting.PinnedRouteID)
 	if routeID == "" {
 		if r.store == nil {

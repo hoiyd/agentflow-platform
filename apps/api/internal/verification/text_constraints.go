@@ -2,7 +2,6 @@ package verification
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -114,7 +113,7 @@ func (textConstraintsVerifier) Verify(ctx context.Context, spec domain.VerifierS
 		status = domain.VerificationFailed
 		summary = fmt.Sprintf("text constraints failed with %d violation(s)", len(violations))
 	}
-	return Result{Status: status, Summary: summary, Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+	return Result{Status: status, Summary: summary, Details: details}
 }
 
 func markdownHeadings(value string) []string {
@@ -167,9 +166,4 @@ func containsString(values []string, expected string) bool {
 		}
 	}
 	return false
-}
-
-func diagnosticArtifact(details map[string]any) Artifact {
-	content, _ := json.MarshalIndent(details, "", "  ")
-	return Artifact{Kind: "diagnostic", MediaType: "application/json", Content: string(content), ByteSize: len(content)}
 }

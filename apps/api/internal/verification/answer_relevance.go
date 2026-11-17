@@ -84,7 +84,7 @@ func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.Verifie
 		return Result{
 			Status:  domain.VerificationFailed,
 			Summary: fmt.Sprintf("answer relevance failed: substantive answer has %d characters (minimum %d)", scoringAnswerCharacters, config.MinimumAnswerCharacters),
-			Details: details, Artifacts: []Artifact{diagnosticArtifact(details)},
+			Details: details,
 		}
 	}
 	if v.embed == nil {
@@ -131,7 +131,7 @@ func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.Verifie
 		status = domain.VerificationFailed
 		summary = fmt.Sprintf("answer relevance failed with cosine similarity %.3f (minimum %.3f)", score, config.MinimumScore)
 	}
-	return Result{Status: status, Summary: summary, Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+	return Result{Status: status, Summary: summary, Details: details}
 }
 
 func answerRelevanceDetails(config AnswerRelevanceConfig, answerCharacters, scoringAnswerCharacters int, repetitionRemoved bool) map[string]any {

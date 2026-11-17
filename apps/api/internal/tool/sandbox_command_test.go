@@ -71,6 +71,7 @@ func TestSandboxBindingPublishesConfiguredExecutables(t *testing.T) {
 
 // Real CLI fault injection checks phase and public error metadata. A cleanup
 // failure must dominate cancellation/deadline so operators see an uncertain VM.
+// Keep fixtures serial so writing one CLI cannot race another subprocess fork.
 func TestSandboxBindingFaultClassification(t *testing.T) {
 	for _, scenario := range []struct {
 		name string
@@ -84,7 +85,6 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 		{"timeout-cleanup-failed", ErrorEffectReconciliation},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			t.Parallel()
 			root := t.TempDir()
 			cli, namePath := filepath.Join(root, "sbx-fixture"), filepath.Join(root, "name")
 			startedPath, provisioningPath := filepath.Join(root, "started"), filepath.Join(root, "provisioning")
@@ -151,6 +151,13 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 					marker = provisioningPath
 				}
 				if waitErr := processfixture.WaitForFile(guard, marker); waitErr != nil {
+					select {
+						case <-finished:
+						var processErr *os.PathError
+						errors.As(err, &processErr)
+						t.Fatalf("%v; CLI returned %v (process error: %v)", waitErr, err, processErr)
+					default:
+					}
 					t.Fatal(waitErr)
 				}
 				trigger()

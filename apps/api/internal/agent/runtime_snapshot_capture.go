@@ -218,18 +218,18 @@ func snapshotTools(catalog *tool.Catalog, names []string) []domain.RuntimeToolSn
 		if !ok {
 			continue
 		}
-		items = append(items, domain.RuntimeToolSnapshot{
-			Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
-			Parameters:         binding.Descriptor.Parameters,
-			SchemaVersion:      binding.Descriptor.SchemaVersion,
-			DefinitionRevision: binding.Descriptor.DefinitionRevision,
-			SideEffect:         string(binding.Descriptor.JournalMode()),
-			Security:           binding.Descriptor.Security,
-			Source:             binding.Descriptor.Source,
-		})
+		items = append(items, snapshotTool(binding.Descriptor))
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 	return items
+}
+
+func snapshotTool(descriptor tool.Descriptor) domain.RuntimeToolSnapshot {
+	return domain.RuntimeToolSnapshot{
+		Name: descriptor.Name, Description: descriptor.Description, Parameters: descriptor.Parameters,
+		SchemaVersion: descriptor.SchemaVersion, DefinitionRevision: descriptor.DefinitionRevision,
+		SideEffect: string(descriptor.JournalMode()), Security: descriptor.Security, Source: descriptor.Source,
+	}
 }
 
 func cloneRunBudget(value domain.RuntimeRunBudget) *domain.RuntimeRunBudget {

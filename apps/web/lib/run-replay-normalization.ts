@@ -74,7 +74,7 @@ function normalizeRecoverySummary(value: unknown): RecoverySummary | undefined {
   };
 }
 
-export function normalizeRunProjection(value: unknown, run: RunInfo, summaryValue: unknown, ledgerValue: unknown): RunProjectionSnapshot {
+export function normalizeRunProjection(value: unknown, run: Pick<RunInfo, "id" | "conversation_id" | "status" | "verification_status">, summaryValue: unknown, ledgerValue: unknown): RunProjectionSnapshot {
   const projection = isObject(value) ? value : {};
   const runProjection = isObject(projection.run) ? projection.run : {};
   const usage = isObject(projection.usage) ? projection.usage : {};

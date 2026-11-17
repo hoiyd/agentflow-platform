@@ -347,15 +347,10 @@ export async function getRunProjection(runId: string, signal?: AbortSignal): Pro
   const runProjection = expectObject<Record<string, unknown>>(projection.run, "run projection state");
   const run = {
     id: stringValue(runProjection.run_id) ?? runId,
-    workspace_id: "",
-    agent_id: "",
     conversation_id: stringValue(runProjection.conversation_id) ?? "",
     status: runStatusValue(runProjection.status) ?? "running",
-    verification_status: "not_required",
-    active_runtime_ms: 0,
-    created_at: "",
-    updated_at: ""
-  } satisfies RunInfo;
+    verification_status: "not_required"
+  } satisfies Pick<RunInfo, "id" | "conversation_id" | "status" | "verification_status">;
   return normalizeRunProjection(projection, run, runProjection.summary, isObject(projection.usage) ? projection.usage.ledger : undefined);
 }
 

@@ -69,6 +69,9 @@ Evidence is append-only and binds contract/verifier versions, Snapshot hash,
 candidate Subject Hash, attempt, status, duration, diagnostics and Artifacts.
 Question-aware checks also hash the question; grounding binds source content.
 Changed candidates append stale markers rather than rewriting earlier Evidence.
+Small diagnostics live only in Evidence `details`. Oversized details retain a
+bounded diagnostic Artifact; subject and independent response Artifacts remain
+separate. Historical Artifacts stay readable.
 
 Reverify resolves the Run-local candidate through its last durable
 `citation.resolved.message_id`, never the latest Conversation answer or question.
