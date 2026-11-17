@@ -62,11 +62,7 @@ func (s *Service) Catalog(workspace string, base *tool.Catalog) (*tool.Catalog, 
 			rules = append(rules, policy.Rule{ID: "workspace-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name, Action: policy.ActionAllowAndLog, Capability: binding.Descriptor.Security})
 		}
 	}
-	catalog, err := base.CloneWith(bindings...)
-	if err != nil {
-		return nil, err
-	}
-	return catalog.WithRules(rules)
+	return base.WithRules(rules, bindings...)
 }
 
 func (s *Service) bindings(c domain.MCPConnection) ([]tool.Binding, error) {

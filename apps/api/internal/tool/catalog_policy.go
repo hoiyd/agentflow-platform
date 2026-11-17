@@ -20,8 +20,8 @@ func (c *Catalog) WorkspaceMCPCredentialScopes() []string {
 
 // WithRules adds locally authorized Workspace rules without overriding an
 // explicit operator rule (including deny) for the same tool.
-func (c *Catalog) WithRules(rules []policy.Rule) (*Catalog, error) {
-	clone, err := c.CloneWith()
+func (c *Catalog) WithRules(rules []policy.Rule, bindings ...Binding) (*Catalog, error) {
+	clone, err := c.CloneWith(bindings...)
 	if err != nil {
 		return nil, err
 	}
