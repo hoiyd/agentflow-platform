@@ -11,7 +11,7 @@ type runProjectionRead struct {
 	Events   []domain.RunEvent
 }
 
-// Keep this dependency list aligned with runtimeinvariant.DefaultRegistry and
+// Keep this dependency list aligned with runtimeinvariant.Check and
 // Skill evidence. Recovery does not need messages, artifacts or checkpoints.
 func (h *Handler) loadRunProjection(scoped store.WorkspaceStore, id string) (runProjectionRead, bool, error) {
 	// ListRunEvents already authorizes the Run. Read its mutable status after

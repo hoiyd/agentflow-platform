@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/invariant"
 	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/projection"
 	"agentflow-platform/apps/api/internal/runtimeinvariant"
@@ -33,9 +32,7 @@ func (h *Handler) enrichRunProjection(scoped store.WorkspaceStore, replay *domai
 		return err
 	}
 	replay.Projection.SkillEvidence = projection.BuildSkillEvidence(*replay, records)
-	failures := runtimeinvariant.DefaultRegistry().Evaluate(invariant.Input{
-		Replay: *replay, ModelRequests: records,
-	})
+	failures := runtimeinvariant.Check(*replay, records)
 	replay.Projection.InvariantFailures = failures
 	for _, failure := range failures {
 		log.Printf("runtime_invariant_failure code=%s owner=%s run_id=%s event_id=%s sequence=%d", failure.Code, failure.Owner, failure.RunID, failure.EventID, failure.Sequence)
