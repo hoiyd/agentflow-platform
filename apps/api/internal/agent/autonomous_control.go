@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"time"
@@ -49,8 +50,12 @@ func (r *Runtime) stopAutonomousStageIfCanceled(ctx context.Context, events chan
 	if run.Status != domain.RunCanceling && run.Status != domain.RunCanceled {
 		return false, nil
 	}
-	_ = r.failCollaborationStage(ctx, events, step, errRunCanceled)
-	return r.stopIfCanceled(events, step.RunID)
+	stageErr := r.persistFailedStage(ctx, step, errRunCanceled, events)
+	stopped, stopErr := r.stopIfCanceled(events, step.RunID)
+	if stageErr == nil {
+		return stopped, stopErr
+	}
+	return stopped, errors.Join(stopErr, stageErr)
 }
 
 func limitStopReason(limits AutonomousLimits, outputChars int) string {

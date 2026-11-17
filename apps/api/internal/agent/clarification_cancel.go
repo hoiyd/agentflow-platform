@@ -3,6 +3,7 @@ package agent
 import (
 	"agentflow-platform/apps/api/internal/domain"
 	"context"
+	"errors"
 )
 
 // Pausing closed the Turn atomically but deliberately left its Stage open.
@@ -35,11 +36,7 @@ func (r *Runtime) closeCanceledClarification(run domain.Run) error {
 		if !waiting[step.ID] || step.Status != domain.CollaborationStepRunning {
 			continue
 		}
-		closed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, step.Output, "waiting execution canceled by user")
-		if err != nil {
-			return err
-		}
-		if err = r.publishStage(context.Background(), closed, domain.EventStageCanceled); err != nil {
+		if err = r.persistFailedStage(context.Background(), step, errors.New("waiting execution canceled by user"), nil); err != nil {
 			return err
 		}
 	}

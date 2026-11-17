@@ -122,28 +122,11 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 	}
 	result, err := r.turnEngine.Execute(ctx, request, nil)
 	if err != nil {
-		if turnpkg.IsWaiting(err) {
-			return "", err
-		}
-		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
-		if updateErr == nil {
-			events <- liveStageEvent(failed)
-			if checkpointErr := r.publishStage(ctx, failed, domain.EventStageFailed); checkpointErr != nil {
-				return "", fmt.Errorf("stage failed: %w; persist checkpoint: %v", err, checkpointErr)
-			}
-		}
-		return "", err
+		return "", r.failCollaborationStage(ctx, events, step, err)
 	}
 	output := result.Output
-	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
-	if err != nil {
-		return "", err
-	}
-	events <- liveStageEvent(completed)
-	if err := r.publishStage(ctx, completed, domain.EventStageCompleted); err != nil {
-		return "", err
-	}
-	return output, nil
+	_, err = r.completeStage(ctx, step.ID, output, events)
+	return output, err
 }
 
 func plannerPrompt() string {

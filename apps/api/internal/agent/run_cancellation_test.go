@@ -245,16 +245,16 @@ func TestAutonomousCancelClosesActiveStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	var startedStage string
-	var failedStage bool
+	var canceledStage bool
 	for _, event := range runEvents {
 		switch event.Type {
 		case domain.EventStageStarted:
 			startedStage = event.StageID
-		case domain.EventStageFailed:
-			failedStage = event.StageID == startedStage
+		case domain.EventStageCanceled:
+			canceledStage = event.StageID == startedStage
 		}
 	}
-	if startedStage == "" || !failedStage {
+	if startedStage == "" || !canceledStage {
 		t.Fatalf("canceled autonomous stage has no terminal event: %#v", runEvents)
 	}
 }
