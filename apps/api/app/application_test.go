@@ -3,11 +3,30 @@ package app
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
 )
+
+func TestNewRejectsInvalidCostsBeforeCreatingDependencies(t *testing.T) {
+	for _, test := range []struct {
+		key string
+		cfg config.Config
+	}{
+		{"RUN_MAX_ESTIMATED_COST_USD", config.Config{RunMaxEstimatedCostMicros: -1}},
+		{"MODEL_INPUT_COST_PER_MILLION_TOKENS_USD", config.Config{ModelInputCostPerMillionMicros: -1}},
+		{"MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD", config.Config{ModelOutputCostPerMillionMicros: -1}},
+	} {
+		t.Run(test.key, func(t *testing.T) {
+			application, err := New(test.cfg)
+			if application != nil || err == nil || !strings.Contains(err.Error(), test.key) {
+				t.Fatalf("must reject costs before database/provider setup: %v %v", application, err)
+			}
+		})
+	}
+}
 
 func TestNormalizeServerErrorAndStartupLogging(t *testing.T) {
 	if err := normalizeServerError(nil); err != nil {

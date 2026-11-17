@@ -88,6 +88,11 @@ The source and rates are frozen into the route revision and saved with each
 ledger entry. Changing current route/global prices does not reprice old Runs
 or their resumed calls.
 
+USD environment amounts are rounded to the nearest microdollar. Invalid,
+negative, non-finite or overflowing values fail startup before dependency I/O;
+they never silently disable a cap. Empty/zero keeps the documented defaults:
+no monetary cap and no global price quote, respectively.
+
 Reservation and output admission use the full-input rate, with **no anticipated
 cache hit**. Settlement applies the cached-input quote only for valid,
 provider-reported cache usage and a known cached-input price:
