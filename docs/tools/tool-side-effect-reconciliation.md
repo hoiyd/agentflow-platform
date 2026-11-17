@@ -138,10 +138,13 @@ The same rules apply to manually supplied results and callback errors/panics.
 The Binding's smaller result limit also applies to callback replay envelopes.
 Command IDs containing recognized credential patterns are rejected, not persisted.
 
-The API has no built-in identity system. As with the rest of the current API,
-deployments must protect this operator surface behind a trusted authentication
-and authorization boundary. The `actor` field is audit attribution, not proof
-of identity.
+OIDC requests require the existing [identity/Membership](../operations/identity-membership.md)
+and [resource authorization](../operations/resource-authorization.md) checks:
+the effect must belong to the requested Run in an accessible Workspace.
+Trusted-local mode does not authenticate users. Compensation and its verification
+use the server-resolved owner as `actor`; other caller-supplied actor labels are
+audit attribution, not identity or permission grants. Recovery callbacks still
+require current Workspace and operator Tool authority.
 
 ## State Model
 
