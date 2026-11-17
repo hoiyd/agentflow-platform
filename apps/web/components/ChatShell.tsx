@@ -22,6 +22,7 @@ import { useConversationWorkspace } from "./chat/useConversationWorkspace";
 import { useConversationHistory } from "./chat/useConversationHistory";
 import { useToolCatalog } from "./chat/useToolCatalog";
 import { useRunSession } from "./chat/useRunSession";
+import { selectRunInterrupt } from "../lib/run-interrupts";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
 import { KnowledgeScopeControl } from "./knowledge/KnowledgeScope";
@@ -118,8 +119,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const isTaskStatePanelOpen = sidePanel === "task_state";
   const useExpandedConversationWidth =
     !isTaskStatePanelOpen && (chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen));
-  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user" && clarification.ready && !clarification.blocking;
-  const isAwaitingClarification = runState?.status === "waiting_for_user" && (clarification.blocking || clarification.loading || Boolean(clarification.error));
+  const interrupt = selectRunInterrupt(clarification.items, session.toolApprovals.items, runState?.status ?? "");
+  const interruptUnavailable = !clarification.ready || !session.toolApprovals.ready;
+  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user" && !interruptUnavailable && !interrupt.kind;
+  const isAwaitingToolApproval = runState?.status === "waiting_for_user" && interrupt.kind === "tool_approval";
+  const isAwaitingClarification = runState?.status === "waiting_for_user" && (interrupt.kind === "clarification" || interruptUnavailable);
   const isAwaitingHumanInput =
     chatMode === "autonomous" &&
     runState?.status === "waiting_for_user" &&
@@ -285,7 +289,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || conversationCreationPending.current || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
+    if (!content || conversationCreationPending.current || isStreaming || isAwaitingToolApproval || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
@@ -411,8 +415,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         {view === "chat" ? (
           <ChatComposer
             projectGuidance={<ProjectGuidanceControl value={project.value} onChange={project.change}
-              disabled={isRunStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification || Boolean(runState && ["queued", "failed_recoverable"].includes(runState.status))} />}
-            knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
+              disabled={isRunStreaming || isAwaitingToolApproval || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification || Boolean(runState && ["queued", "failed_recoverable"].includes(runState.status))} />}
+            knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingToolApproval || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
 			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
             inbox={activeId && runState && !isCreatingConversation ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
               planOnly={planOnly} executionConstraint={runState.executionConstraint}
@@ -432,6 +436,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             input={input}
             isAgentDescriptionExpanded={isAgentDescriptionExpanded}
             isAwaitingClarification={isAwaitingClarification}
+            isAwaitingToolApproval={isAwaitingToolApproval}
             isAwaitingHumanInput={isAwaitingHumanInput}
             isAwaitingPlanApproval={isAwaitingPlanApproval}
             isCreatingAgent={isCreatingAgent}
