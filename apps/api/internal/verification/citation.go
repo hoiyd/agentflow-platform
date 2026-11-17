@@ -122,7 +122,7 @@ func (citationVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, su
 		status = domain.VerificationFailed
 		summary = fmt.Sprintf("citation policy failed with %d violation(s)", len(violations))
 	}
-	return Result{Status: status, Summary: summary, Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+	return Result{Status: status, Summary: summary, Details: details}
 }
 
 func markdownCitations(value string) []string {

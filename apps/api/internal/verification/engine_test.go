@@ -4,6 +4,8 @@ import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -164,7 +166,7 @@ func TestEvidencePayloadsAreBounded(t *testing.T) {
 	if unicodeArtifact[0].Content != "éé" || !unicodeArtifact[0].Truncated {
 		t.Fatalf("artifact truncation split UTF-8 content: %#v", unicodeArtifact[0])
 	}
-	details := cloneDetails(map[string]any{"payload": strings.Repeat("x", 100)}, 16)
+	details, _ := cloneDetails(map[string]any{"payload": strings.Repeat("x", 100)}, 16)
 	if details["truncated"] != true || details["byte_size"] == nil {
 		t.Fatalf("details were not bounded: %#v", details)
 	}
@@ -172,9 +174,43 @@ func TestEvidencePayloadsAreBounded(t *testing.T) {
 	if strings.Contains(secretArtifact[0].Content, "private-token") || !secretArtifact[0].Truncated {
 		t.Fatalf("artifact credential leaked: %#v", secretArtifact[0])
 	}
-	secretDetails := cloneDetails(map[string]any{"authorization": "Bearer private-token"}, 128)
+	secretDetails, _ := cloneDetails(map[string]any{"authorization": "Bearer private-token"}, 128)
 	if secretDetails["authorization"] != "[REDACTED]" || strings.Contains(redactText("api_key=sk-abcdefgh"), "abcdefgh") {
 		t.Fatalf("evidence credential leaked: details=%#v", secretDetails)
+	}
+}
+
+func TestEngineStoresDiagnosticsWithoutSmallMirrors(t *testing.T) {
+	for _, limit := range []int{defaultArtifactBytes, 128} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			store, run, engine := newVerificationTestRun(t, domain.VerificationPolicy{}, []domain.VerifierSpec{{
+				ID: "text", Type: domain.VerifierTextConstraints, Required: true,
+				Config: map[string]any{"required_phrases": []string{strings.Repeat("missing ", 80)}},
+			}})
+			engine.registry.maxArtifactBytes = limit
+			decision, err := engine.Verify(context.Background(), run.ID, SubjectForRunOutput("# Bearer private-token"))
+			if err != nil || decision.Status != domain.VerificationFailed {
+				t.Fatalf("verification: %#v %v", decision, err)
+			}
+			evidence, _ := store.ListVerificationEvidence(run.ID)
+			artifacts, _ := store.ListVerificationArtifacts(run.ID)
+			if len(evidence) != 1 {
+				t.Fatalf("missing evidence: %#v", evidence)
+			}
+			if limit == defaultArtifactBytes {
+				if evidence[0].Details["violations"] == nil || len(artifacts) != 0 || len(evidence[0].ArtifactIDs) != 0 {
+					t.Fatalf("small diagnostic was lost or mirrored: %#v %#v", evidence, artifacts)
+				}
+			} else if evidence[0].Details["truncated"] != true || len(artifacts) != 1 ||
+				artifacts[0].Kind != "diagnostic" || !artifacts[0].Truncated || len(artifacts[0].Content) > limit ||
+				artifacts[0].EvidenceID != evidence[0].ID || len(evidence[0].ArtifactIDs) != 1 || evidence[0].ArtifactIDs[0] != artifacts[0].ID {
+				t.Fatalf("oversized diagnostic fallback was lost: %#v %#v", evidence, artifacts)
+			}
+			encoded, _ := json.Marshal(domain.VerificationRecord{Evidence: evidence[0], Artifacts: artifacts})
+			if strings.Contains(string(encoded), "private-token") {
+				t.Fatal("diagnostic credential leaked")
+			}
+		})
 	}
 }
 

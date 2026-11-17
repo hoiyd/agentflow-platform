@@ -88,7 +88,7 @@ func TestTextConstraintsVerifierChecksStructureAndContent(t *testing.T) {
 		t.Fatalf("normalize text constraints: %v", err)
 	}
 	passed := verifier.Verify(context.Background(), spec, SubjectForRunOutput("# Findings\n\nThis is the verified result."))
-	if passed.Status != domain.VerificationPassed || passed.Details["word_count"] == nil || len(passed.Artifacts) != 1 {
+	if passed.Status != domain.VerificationPassed || passed.Details["word_count"] == nil || len(passed.Artifacts) != 0 {
 		t.Fatalf("expected text constraints to pass: %#v", passed)
 	}
 	failed := verifier.Verify(context.Background(), spec, SubjectForRunOutput("No result. private"))

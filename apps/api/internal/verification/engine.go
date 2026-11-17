@@ -188,9 +188,10 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 	}
 
 	evidenceID := newID("evidence")
-	artifacts := buildArtifacts(run.ID, evidenceID, result.Artifacts, completed, e.registry.maxArtifactBytes)
-	details := cloneDetails(result.Details, e.registry.maxArtifactBytes)
-	if omitted := len(result.Artifacts) - len(artifacts); omitted > 0 {
+	details, overflow := cloneDetails(result.Details, e.registry.maxArtifactBytes)
+	outputs := append(result.Artifacts, overflow...)
+	artifacts := buildArtifacts(run.ID, evidenceID, outputs, completed, e.registry.maxArtifactBytes)
+	if omitted := len(outputs) - len(artifacts); omitted > 0 {
 		details["artifacts_omitted"] = omitted
 	}
 	artifactIDs := make([]string, 0, len(artifacts))
@@ -343,23 +344,25 @@ func evidencePayload(evidence domain.VerificationEvidence) map[string]any {
 	}
 }
 
-func cloneDetails(details map[string]any, limit int) map[string]any {
+func cloneDetails(details map[string]any, limit int) (map[string]any, []Artifact) {
 	if details == nil {
-		return map[string]any{}
+		return map[string]any{}, nil
 	}
 	encoded, err := json.Marshal(details)
 	if err != nil {
-		return map[string]any{"serialization_error": err.Error()}
+		return map[string]any{"serialization_error": err.Error()}, nil
 	}
 	if limit > 0 && len(encoded) > limit {
-		return map[string]any{"truncated": true, "byte_size": len(encoded)}
+		return map[string]any{"truncated": true, "byte_size": len(encoded)}, []Artifact{{
+			Kind: "diagnostic", MediaType: "application/json", Content: string(encoded), ByteSize: len(encoded),
+		}}
 	}
 	cloned := make(map[string]any, len(details))
 	if err := json.Unmarshal(encoded, &cloned); err != nil {
-		return map[string]any{"serialization_error": err.Error()}
+		return map[string]any{"serialization_error": err.Error()}, nil
 	}
 	redacted, _ := redaction.Map(cloned)
-	return redacted
+	return redacted, nil
 }
 
 func redactText(value string) string {

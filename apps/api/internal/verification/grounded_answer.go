@@ -89,14 +89,14 @@ func (groundedAnswerVerifier) Verify(ctx context.Context, spec domain.VerifierSp
 	}
 	if len(sources) == 0 {
 		if len(claims) == 0 && noAnswerCount > 0 {
-			return Result{Status: domain.VerificationPassed, Summary: "grounded answer passed with an explicit insufficient-evidence response", Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+			return Result{Status: domain.VerificationPassed, Summary: "grounded answer passed with an explicit insufficient-evidence response", Details: details}
 		}
 		details["violations"] = []map[string]any{{"reason": "answer asserts claims without retrieved evidence"}}
-		return Result{Status: domain.VerificationFailed, Summary: "grounded answer failed: no selected evidence supports the response", Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+		return Result{Status: domain.VerificationFailed, Summary: "grounded answer failed: no selected evidence supports the response", Details: details}
 	}
 	if len(claims) == 0 {
 		details["violations"] = []map[string]any{{"reason": "selected evidence exists but the response only claims insufficient evidence"}}
-		return Result{Status: domain.VerificationFailed, Summary: "grounded answer failed: selected evidence was not used", Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+		return Result{Status: domain.VerificationFailed, Summary: "grounded answer failed: selected evidence was not used", Details: details}
 	}
 
 	violations := make([]map[string]any, 0)
@@ -128,10 +128,10 @@ func (groundedAnswerVerifier) Verify(ctx context.Context, spec domain.VerifierSp
 	}
 	details["supported_claims"] = len(claims) - len(violations)
 	if len(violations) == 0 {
-		return Result{Status: domain.VerificationPassed, Summary: fmt.Sprintf("grounded answer passed with %d supported claim(s)", len(claims)), Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+		return Result{Status: domain.VerificationPassed, Summary: fmt.Sprintf("grounded answer passed with %d supported claim(s)", len(claims)), Details: details}
 	}
 	details["violations"] = violations
-	return Result{Status: domain.VerificationFailed, Summary: fmt.Sprintf("grounded answer failed with %d unsupported claim(s)", len(violations)), Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}
+	return Result{Status: domain.VerificationFailed, Summary: fmt.Sprintf("grounded answer failed with %d unsupported claim(s)", len(violations)), Details: details}
 }
 
 func groundingClaims(answer string, noAnswerPhrases []string) ([]string, int) {
