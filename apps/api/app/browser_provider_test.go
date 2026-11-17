@@ -85,6 +85,29 @@ func TestBrowserProviderIgnoresHistoricalScenarioMarkers(t *testing.T) {
 	}
 }
 
+func TestBrowserProviderKeepsToolPairingChecksAfterSteering(t *testing.T) {
+	for _, steering := range []bool{false, true} {
+		for _, toolCallID := range []string{"expected", "wrong-id"} {
+			t.Run(fmt.Sprintf("steering=%t/result=%s", steering, toolCallID), func(t *testing.T) {
+				suffix := ""
+				if steering {
+					suffix = `,{"role":"user","content":"STEERING_CANARY: use concise wording"}`
+				}
+				body := `{"stream":true,"messages":[{"role":"system","content":"Assistant"},{"role":"user","content":"inbox-steer"},{"role":"assistant","content":"","tool_calls":[{"id":"expected","type":"function","function":{"name":"calculator","arguments":"{}"}}]},{"role":"tool","tool_call_id":"` + toolCallID + `","content":"2"}` + suffix + `]}`
+				fixture, response := newBrowserProvider(), httptest.NewRecorder()
+				fixture.respond(response, httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(body)))
+				if toolCallID == "expected" {
+					if response.Code != http.StatusOK || len(fixture.failures) != 0 {
+						t.Fatalf("valid pairing rejected: %d %s", response.Code, response.Body.String())
+					}
+				} else if len(fixture.failures) != 1 || !strings.Contains(fixture.failures[0], "pairing") {
+					t.Fatalf("invalid pairing accepted: %d %s", response.Code, response.Body.String())
+				}
+			})
+		}
+	}
+}
+
 func (f *browserProvider) contracts(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -191,6 +214,19 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		}
 		if message.Role == "tool" {
 			observations++
+		}
+	}
+	for index, message := range input.Messages {
+		if message.Role == "system" && strings.Contains(message.Content, "Worker collaboration role") && strings.Contains(task, "STEERING_CANARY") {
+			f.reject(w, "orchestration steering leaked into isolated Worker")
+			return
+		}
+		for offset, call := range message.ToolCalls {
+			position := index + offset + 1
+			if position >= len(input.Messages) || input.Messages[position].Role != "tool" || input.Messages[position].ToolCallID != call.ID {
+				f.reject(w, "assistant/Tool observation pairing is invalid")
+				return
+			}
 		}
 	}
 	if f.clarificationResponse(w, input, task) {
@@ -366,23 +402,6 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			calls = []any{map[string]any{"id": fmt.Sprintf("security-call-%d", observations), "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
 		} else {
 			content = "Private data stayed local. Calculation: 2."
-		}
-	}
-	if strings.Contains(currentTask, "inbox-steer") {
-		for index, message := range input.Messages {
-			if message.Role == "system" && strings.Contains(message.Content, "Worker collaboration role") && strings.Contains(task, "STEERING_CANARY") {
-				f.reject(w, "orchestration steering leaked into isolated Worker")
-				return
-			}
-			if len(message.ToolCalls) > 0 {
-				for offset, call := range message.ToolCalls {
-					position := index + offset + 1
-					if position >= len(input.Messages) || input.Messages[position].Role != "tool" || input.Messages[position].ToolCallID != call.ID {
-						f.reject(w, "steering interrupted assistant/Tool observation pairing")
-						return
-					}
-				}
-			}
 		}
 	}
 	if input.Stream && strings.Contains(currentTask, "sandbox-gate") {

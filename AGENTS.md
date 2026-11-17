@@ -9,7 +9,8 @@ file into a second handbook.
 1. Think before editing. State assumptions and inspect the owning code first.
 2. Prefer the smallest change that satisfies a verifiable outcome.
 3. Preserve existing boundaries and local conventions unless the task requires
-   an architectural change.
+   an architectural change. Use the repository's existing tools and workflows;
+   do not introduce new tools or processes unless explicitly requested.
 4. Do not revert or overwrite unrelated user changes in a dirty worktree.
 5. Keep command output bounded. Use `rg` before slower search tools.
 6. Before implementing a backlog item, search for complete and partial existing
@@ -22,16 +23,33 @@ file into a second handbook.
 9. Apply manual edits directly to repository files with patches and show the
    actual project diff. Do not wrap those edits in temporary intermediary scripts;
    legitimate project generators and formatting commands remain appropriate.
+   Never hand-edit generated files; change their source and regenerate.
 10. Make scope trade-offs explicit before implementation. If a feature leaves
     its normal frontend or other consumer unfinished, record separate phases,
     statuses and acceptance criteria in the backlog. Do not mark the whole
     feature complete while an expected consumer phase remains unfinished.
+    Before adding complexity for a speculative or extremely unlikely race or
+    security edge case, explain the concrete failure mode, estimated likelihood
+    and added code/maintenance cost, and obtain the user's agreement. Do not
+    silently expand scope for theoretical robustness.
 
 For commands with unknown output size:
 
 ```bash
 COMMAND 2>&1 | head -c 30000
 ```
+
+## Implementation Style
+
+- Validate external input once at its entry boundary, then pass typed, validated
+  values internally without repeating defensive input checks. This does not
+  replace authorization or mutable-state checks at the operation boundary.
+- Extract a helper only for reuse, genuinely complex logic, or a clearly named
+  concept; do not extract one-off functions preemptively. Keep the main function
+  focused on the normal flow, placing necessary validation and detail helpers
+  below their caller when extraction meets these criteria.
+- Comment only on non-obvious constraints or counterintuitive behavior, not
+  what straightforward code already says.
 
 ## Repository Map
 
@@ -253,6 +271,9 @@ are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Verification Before Finishing
 
+- Test real implementations; never copy business logic into tests. Minimize
+  mocks, using them only where isolation is needed, not to replace the behavior
+  under test.
 - Never write unit tests after writing the implementation. When a unit test is
   necessary, write the test first, confirm that it fails for the intended
   reason, and only then write the implementation.

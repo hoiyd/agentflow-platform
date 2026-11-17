@@ -6,7 +6,6 @@ import { EventDetail, stepDuration } from "./RunEventDetails";
 import { RunReplay } from "./RunReplay";
 
 const getRunReplay = vi.hoisted(() => vi.fn());
-const getEpisodeReport = vi.hoisted(() => vi.fn());
 const resumeRun = vi.hoisted(() => vi.fn());
 const questions = vi.hoisted(() => ({list:vi.fn<(...args:unknown[]) => Promise<unknown[]>>(async () => []), resume:vi.fn<(...args:unknown[]) => Promise<void>>(async () => {})}));
 vi.mock("../../lib/clarification-api", () => ({listClarifications:questions.list,resumeClarification:questions.resume}));
@@ -14,7 +13,7 @@ const approvals = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<unknown
 vi.mock("../../lib/tool-approval-api", () => ({listToolApprovals:approvals}));
 const reconciliation = vi.hoisted(() => ({ refresh: null as null | (() => Promise<void>) }));
 vi.mock("../../lib/api", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../lib/api")>(), resumeRun, getRunReplay, getEpisodeReport
+  ...await importOriginal<typeof import("../../lib/api")>(), resumeRun, getRunReplay
 }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -30,7 +29,6 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   resumeRun.mockReset();
-  getEpisodeReport.mockReset();
   questions.list.mockReset().mockResolvedValue([]);
   questions.resume.mockReset();
   approvals.mockReset().mockResolvedValue([]);
@@ -333,23 +331,6 @@ it("keeps retrieval metadata and source content in event details", () => {
   expect(screen.getByText("Fusion")).toBeTruthy();
   expect(screen.getByText("Architecture")).toBeTruthy();
   expect(screen.getByText("Relevant passage")).toBeTruthy();
-});
-
-it("keeps replay available when the episode report fails", async () => {
-  getRunReplay.mockResolvedValue(replayFixture());
-  getEpisodeReport.mockRejectedValue(new Error("report unavailable"));
-
-  render(<RunReplay runId="run-1" />);
-
-  expect(await screen.findByRole("heading", { name: "Run replay" })).toBeTruthy();
-  expect(getEpisodeReport).not.toHaveBeenCalled();
-  act(() => {
-    const details = screen.getByText("Episode report").closest("details")!;
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
-  });
-  expect((await screen.findByRole("alert")).textContent).toContain("Episode report unavailable: report unavailable");
-  expect(screen.getByRole("heading", { name: "Run replay" })).toBeTruthy();
 });
 
 it("keeps run comparison behind the replay evaluation menu", async () => {

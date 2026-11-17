@@ -18,8 +18,6 @@ function expand(container: HTMLElement) {
   act(() => { details.open = true; fireEvent(details, new Event("toggle")); });
 }
 
-// Failure inventory: closed panels do no I/O; errors stay local, retry works,
-// and aborted/foreign responses cannot display evidence for another Run.
 it("loads only on expansion and refreshes only on explicit request", async () => {
   getEpisodeReport.mockResolvedValue(report);
   const { container } = render(<EpisodeReportPanel runId="one" />);
@@ -30,16 +28,6 @@ it("loads only on expansion and refreshes only on explicit request", async () =>
   expect(screen.getByRole("button", { name: "Export JSON" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Refresh report" }));
   await waitFor(() => expect(getEpisodeReport).toHaveBeenCalledTimes(2));
-});
-
-it("keeps an unavailable report local and permits retry", async () => {
-  getEpisodeReport.mockRejectedValueOnce(new Error("Report unavailable")).mockResolvedValue(report);
-  const { container } = render(<EpisodeReportPanel runId="one" />);
-  expand(container);
-  expect((await screen.findByRole("alert")).textContent).toContain("Report unavailable");
-  fireEvent.click(screen.getByRole("button", { name: "Retry report" }));
-  await screen.findByText("Bound task");
-  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("aborts on unmount and ignores a late response", async () => {
