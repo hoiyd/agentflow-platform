@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -19,19 +18,12 @@ type Store interface {
 type Query struct {
 	ConversationID       string
 	Keywords             []string
-	MessageIDs           []string
-	EventIDs             []string
-	EventTypes           []domain.RunEventType
 	ExcludeRunID         string
 	ExcludeLatestMessage bool
-	Roles                []string
-	From                 *time.Time
-	To                   *time.Time
 	NeighborWindow       int
 	MaxResults           int
 	MaxCharacters        int
 	MaxTokens            int
-	ExcludeReferences    map[string]bool
 }
 
 type Result struct {
@@ -64,7 +56,7 @@ func Search(store Store, query Query) (Result, error) {
 	all := append(messageCandidates, eventCandidates...)
 	all = append(all, adjacentMessageCandidates(messages, messageCandidates, query)...)
 	all = append(all, adjacentEventCandidates(events, eventCandidates, query)...)
-	all = deduplicate(all, query.ExcludeReferences)
+	all = deduplicate(all)
 	direct := 0
 	for _, item := range all {
 		if item.item.DirectMatch {
@@ -94,26 +86,13 @@ func messageCandidates(messages []domain.Message, query Query) []candidate {
 		if query.ExcludeLatestMessage && index == len(messages)-1 {
 			continue
 		}
-		if !withinRange(message.CreatedAt, query.From, query.To) || !matchesRole(message.Role, query.Roles) {
+		if !matchesKeyword(message.ID+"\n"+message.Role+"\n"+message.Content, query.Keywords) {
 			continue
 		}
-		if len(query.EventIDs) > 0 || len(query.EventTypes) > 0 || (len(query.MessageIDs) > 0 && !containsFold(query.MessageIDs, message.ID)) {
-			continue
-		}
-		matchedKeyword := matchesKeyword(message.ID+"\n"+message.Role+"\n"+message.Content, query.Keywords)
-		if len(query.Keywords) > 0 && !matchedKeyword {
-			continue
-		}
-		reason := "filter_match"
-		if len(query.MessageIDs) > 0 {
-			reason = "source_id_match"
-		} else if matchedKeyword {
-			reason = "keyword_match"
-		}
-		items = append(items, candidate{position: index, priority: matchPriority(reason), item: domain.RetrievedSessionHistory{
+		items = append(items, candidate{position: index, priority: 2, item: domain.RetrievedSessionHistory{
 			Reference: "message:" + message.ID, SourceKind: domain.SessionHistorySourceMessage,
 			MessageID: message.ID, Role: message.Role, Content: message.Content,
-			MatchReason: reason, DirectMatch: true, CreatedAt: message.CreatedAt,
+			MatchReason: "keyword_match", DirectMatch: true, CreatedAt: message.CreatedAt,
 		}})
 	}
 	return items
@@ -125,33 +104,18 @@ func eventCandidates(events []domain.RunEvent, query Query) []candidate {
 		if event.RunID == query.ExcludeRunID {
 			continue
 		}
-		if usesDefaultEventPolicy(query) && !defaultSearchableEventType(event.Type) {
-			continue
-		}
-		if !withinRange(event.Timestamp, query.From, query.To) || !matchesEventType(event.Type, query.EventTypes) {
+		if !defaultSearchableEventType(event.Type) {
 			continue
 		}
 		payload, _ := json.Marshal(event.Payload)
 		content := string(payload)
-		if len(query.MessageIDs) > 0 || len(query.Roles) > 0 || (len(query.EventIDs) > 0 && !containsFold(query.EventIDs, event.ID)) {
+		if !matchesKeyword(event.ID+"\n"+string(event.Type)+"\n"+content, query.Keywords) {
 			continue
 		}
-		matchedKeyword := matchesKeyword(event.ID+"\n"+string(event.Type)+"\n"+content, query.Keywords)
-		if len(query.Keywords) > 0 && !matchedKeyword {
-			continue
-		}
-		reason := "filter_match"
-		if len(query.EventIDs) > 0 {
-			reason = "source_id_match"
-		} else if len(query.EventTypes) > 0 {
-			reason = "event_type_match"
-		} else if matchedKeyword {
-			reason = "keyword_match"
-		}
-		items = append(items, candidate{position: index, priority: matchPriority(reason), item: domain.RetrievedSessionHistory{
+		items = append(items, candidate{position: index, priority: 2, item: domain.RetrievedSessionHistory{
 			Reference: "event:" + event.ID, SourceKind: domain.SessionHistorySourceEvent,
 			EventID: event.ID, RunID: event.RunID, EventType: event.Type, Content: content,
-			MatchReason: reason, DirectMatch: true, CreatedAt: event.Timestamp,
+			MatchReason: "keyword_match", DirectMatch: true, CreatedAt: event.Timestamp,
 		}})
 	}
 	return items
@@ -181,9 +145,6 @@ func adjacentMessageCandidates(messages []domain.Message, direct []candidate, qu
 				continue
 			}
 			message := messages[index]
-			if !withinRange(message.CreatedAt, query.From, query.To) {
-				continue
-			}
 			items = append(items, candidate{position: index, priority: 3 + abs(offset), item: domain.RetrievedSessionHistory{
 				Reference: "message:" + message.ID, SourceKind: domain.SessionHistorySourceMessage,
 				MessageID: message.ID, Role: message.Role, Content: message.Content,
@@ -206,8 +167,7 @@ func adjacentEventCandidates(events []domain.RunEvent, direct []candidate, query
 				continue
 			}
 			event := events[index]
-			if event.RunID == query.ExcludeRunID || !withinRange(event.Timestamp, query.From, query.To) ||
-				(usesDefaultEventPolicy(query) && !defaultSearchableEventType(event.Type)) {
+			if event.RunID == query.ExcludeRunID || !defaultSearchableEventType(event.Type) {
 				continue
 			}
 			payload, _ := json.Marshal(event.Payload)
@@ -221,14 +181,7 @@ func adjacentEventCandidates(events []domain.RunEvent, direct []candidate, query
 	return items
 }
 
-func usesDefaultEventPolicy(query Query) bool {
-	return len(query.EventIDs) == 0 && len(query.EventTypes) == 0 && query.From == nil && query.To == nil && len(query.Keywords) > 0
-}
-
 func matchesKeyword(text string, keywords []string) bool {
-	if len(keywords) == 0 {
-		return false
-	}
 	lower := strings.ToLower(text)
 	for _, keyword := range keywords {
 		if strings.Contains(lower, strings.ToLower(keyword)) {
@@ -296,11 +249,11 @@ func boundText(value string, maxCharacters int, maxTokens int) (string, bool) {
 	return string(runes[:head]) + marker + string(runes[len(runes)-(keep-head):]), true
 }
 
-func deduplicate(candidates []candidate, excluded map[string]bool) []candidate {
+func deduplicate(candidates []candidate) []candidate {
 	seen := make(map[string]bool, len(candidates))
 	items := make([]candidate, 0, len(candidates))
 	for _, item := range candidates {
-		if excluded[item.item.Reference] || seen[item.item.Reference] {
+		if seen[item.item.Reference] {
 			continue
 		}
 		seen[item.item.Reference] = true
@@ -312,9 +265,6 @@ func deduplicate(candidates []candidate, excluded map[string]bool) []candidate {
 func normalizeQuery(query Query) Query {
 	query.ConversationID = strings.TrimSpace(query.ConversationID)
 	query.Keywords = normalizedValues(query.Keywords)
-	query.MessageIDs = normalizedValues(query.MessageIDs)
-	query.EventIDs = normalizedValues(query.EventIDs)
-	query.Roles = normalizedValues(query.Roles)
 	if query.NeighborWindow < 0 {
 		query.NeighborWindow = 0
 	}
@@ -382,31 +332,6 @@ var stopWords = map[string]bool{
 	"请": true, "帮我": true, "一下": true, "这个": true, "那个": true,
 }
 
-func matchesRole(role string, roles []string) bool {
-	return len(roles) == 0 || containsFold(roles, role)
-}
-func matchesEventType(value domain.RunEventType, types []domain.RunEventType) bool {
-	return len(types) == 0 || containsEventType(types, value)
-}
-func containsEventType(values []domain.RunEventType, value domain.RunEventType) bool {
-	for _, item := range values {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-func containsFold(values []string, value string) bool {
-	for _, item := range values {
-		if strings.EqualFold(item, value) {
-			return true
-		}
-	}
-	return false
-}
-func withinRange(value time.Time, from *time.Time, to *time.Time) bool {
-	return (from == nil || !value.Before(*from)) && (to == nil || !value.After(*to))
-}
 func normalizedValues(values []string) []string {
 	seen := map[string]bool{}
 	items := make([]string, 0, len(values))
@@ -420,16 +345,6 @@ func normalizedValues(values []string) []string {
 		items = append(items, value)
 	}
 	return items
-}
-func matchPriority(reason string) int {
-	switch reason {
-	case "source_id_match":
-		return 0
-	case "event_type_match", "filter_match":
-		return 1
-	default:
-		return 2
-	}
 }
 func estimateTokens(value string) int {
 	if value == "" {
