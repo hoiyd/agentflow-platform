@@ -2,65 +2,70 @@ package app
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/clarification"
-	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/identity"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
-// Failure inventory: malformed/unbound answers, duplicate/conflicting submit,
-// unbound Resume bypass, reload/restart, protocol loss, and budget reset.
-// The HTTP handler, Runtime, Binding, generated schema and Postgres are real.
-// Completion failure inventory: recovered candidates must retain their message
-// identity and serialized result/citation fields without a second save; rejected
-// verification must not complete, and passing verification must precede completion.
-// Resume must not regenerate a title or sync another user turn to Memory.
-// A malformed latest receipt/hash or a newer mismatched candidate must reject
-// without saving, verifying or falling back to a historical matching answer,
-// including Runs without a Completion Contract.
-// Corrupt persisted handoff data and a rejected completion write must also
-// preserve the candidate without emitting done or leaving the Run running.
+// Failure inventory: malformed/unbound/duplicate input, restart, protocol and
+// budget failures, corrupt candidate receipts/hashes/handoffs, and rejected writes.
+// Recovery must preserve candidate identity without extra saves, titles or Memory
+// sync, reject mismatched latest receipts without historical fallback, and verify
+// before completion. Failure retains the candidate, never done or an orphan Run.
+// HTTP, Runtime, Bindings and Postgres are real; the Provider is controlled.
 func TestProductionDurableClarification(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "decide_text", "completed_restart", "unsafe_restart", "uncertain_restart", "decide_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart", "verified_happy", "verified_completed_restart", "output_happy", "output_completed_restart", "output_generic_completed_restart", "ordinary_output", "binding_latest_mismatch", "binding_malformed_latest", "binding_malformed_hash", "verified_binding_latest_mismatch", "verified_binding_malformed_latest", "verified_binding_malformed_hash", "binding_missing_primary", "verified_binding_missing_primary", "binding_invalid_handoff", "binding_completion_write_failure"} {
-			t.Run(mode+"/"+scenario, func(t *testing.T) {
+		for _, test := range []struct {
+			name, scenario, mode, bindingFault string
+			generic, verified, structured      bool
+		}{
+			{name: "happy"}, {name: "cancel"}, {name: "withdraw"}, {name: "claim_restart"},
+			{name: "budget"}, {name: "corrupt"}, {name: "completed_restart"},
+			{name: "unsafe_restart"}, {name: "uncertain_restart"}, {name: "corrupt_identity"},
+			{name: "decide_text", mode: "autonomous"}, {name: "decide_invalid", mode: "autonomous"},
+			{name: "generic_happy", scenario: "happy", generic: true},
+			{name: "generic_claim_restart", scenario: "claim_restart", generic: true},
+			{name: "generic_completed_restart", scenario: "completed_restart", generic: true},
+			{name: "verified_happy", scenario: "happy", verified: true},
+			{name: "verified_completed_restart", scenario: "completed_restart", verified: true},
+			{name: "output_happy", scenario: "happy", mode: "single", structured: true},
+			{name: "output_completed_restart", scenario: "completed_restart", mode: "single", structured: true},
+			{name: "output_generic_completed_restart", scenario: "completed_restart", mode: "single", generic: true, structured: true},
+			{name: "ordinary_output", mode: "single", structured: true},
+			{name: "binding_latest_mismatch", scenario: "completed_restart", mode: "single", bindingFault: "latest_mismatch"},
+			{name: "binding_malformed_latest", scenario: "completed_restart", mode: "single", bindingFault: "malformed_latest"},
+			{name: "binding_malformed_hash", scenario: "completed_restart", mode: "single", bindingFault: "malformed_hash"},
+			{name: "verified_binding_latest_mismatch", scenario: "completed_restart", mode: "single", bindingFault: "latest_mismatch", verified: true},
+			{name: "verified_binding_malformed_latest", scenario: "completed_restart", mode: "single", bindingFault: "malformed_latest", verified: true},
+			{name: "verified_binding_malformed_hash", scenario: "completed_restart", mode: "single", bindingFault: "malformed_hash", verified: true},
+			{name: "binding_missing_primary", scenario: "completed_restart", mode: "single", bindingFault: "missing_primary"},
+			{name: "verified_binding_missing_primary", scenario: "completed_restart", mode: "single", bindingFault: "missing_primary", verified: true},
+			{name: "binding_invalid_handoff", scenario: "completed_restart", mode: "single", bindingFault: "invalid_handoff"},
+			{name: "binding_completion_write_failure", scenario: "completed_restart", mode: "single", bindingFault: "completion_write_failure"},
+		} {
+			if test.mode != "" && test.mode != mode {
+				continue
+			}
+			t.Run(mode+"/"+test.name, func(t *testing.T) {
+				scenario := test.name
+				if test.scenario != "" {
+					scenario = test.scenario
+				}
 				ordinary := scenario == "ordinary_output"
-				structured := ordinary || strings.HasPrefix(scenario, "output_")
-				contracted := structured || strings.HasPrefix(scenario, "verified_")
-				if structured && mode != "single" {
-					t.Skip("structured completion boundary is exercised in Single")
-				}
-				scenario = strings.TrimPrefix(strings.TrimPrefix(scenario, "output_"), "verified_")
-				bindingFault := strings.TrimPrefix(scenario, "binding_")
-				if bindingFault == scenario {
-					bindingFault = ""
-				} else {
-					if mode != "single" {
-						t.Skip("candidate binding recovery boundary is exercised in Single")
-					}
-					scenario = "completed_restart"
-				}
-				generic := strings.HasPrefix(scenario, "generic_")
-				scenario = strings.TrimPrefix(scenario, "generic_")
-				if (scenario == "decide_text" || scenario == "decide_invalid") && mode != "autonomous" {
-					t.Skip("Decide text ask is an Autonomous protocol")
-				}
+				structured, generic, bindingFault := test.structured, test.generic, test.bindingFault
+				contracted := structured || test.verified
 				task := "clarification-gate: prepare a report, audience unspecified"
 				if ordinary {
 					task = "structured-output-gate"
@@ -77,35 +82,12 @@ func TestProductionDurableClarification(t *testing.T) {
 				fixture := newBrowserProvider()
 				providerServer := httptest.NewServer(http.HandlerFunc(fixture.respond))
 				defer providerServer.Close()
-				t.Setenv("BROWSER_FIXTURE_KEY", "fixture-only")
-				t.Setenv("EMBEDDING_API_KEY", "fixture-only")
 				t.Setenv("TAVILY_API_KEY", "")
-				routes, _ := json.Marshal(map[string]any{"routes": []any{map[string]any{"id": "clarification-fixture", "model": "fixture-model", "base_url": providerServer.URL, "credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 20, "context_window_tokens": 128000, "max_output_tokens": 8192, "priority": 100, "capabilities": map[string]any{"tool_calling": true, "streaming": true, "structured_output": true, "structured_output_format": "openai_json_schema"}, "pricing": map[string]string{"source": "fixture"}}}})
-				route := filepath.Join(root, "routes.json")
-				if err := os.WriteFile(route, routes, 0600); err != nil {
-					t.Fatal(err)
-				}
-				cfg := config.Load()
-				cfg.DatabaseURL = database
-				cfg.ModelRouteConfigPath = route
-				cfg.ToolConfigPath = filepath.Join(root, "tools.json")
-				cfg.TrustedSkillDirectories = ""
-				cfg.AuthMode = "local"
-				cfg.SandboxEnabled = false
-				cfg.EmbeddingBaseURL = providerServer.URL
-				cfg.EmbeddingModel = "fixture-embedding"
-				cfg.EmbeddingDimensions = 1536
-				cfg.ContextCompactionMode = "off"
-				cfg.MemoryAdaptiveExtractionMode = "off"
+				cfg := durableTestConfig(t, root, database, routing.RouteConfig{ID: "clarification-fixture", BaseURL: providerServer.URL, RequestTimeoutSeconds: 20,
+					Capabilities: routing.Capabilities{StructuredOutputFormat: "openai_json_schema"}})
 				cfg.RerankerMode = "heuristic"
-				cfg.RouterMode = "query_match"
-				cfg.AutonomousMaxIterations = 1
-				cfg.ModelRetryMaxAttempts = 1
-				cfg.ModelRequestsPerMinute = 0
-				cfg.ModelTokensPerMinute = 0
 				cfg.ModelRequestCaptureMode = "redacted"
 				cfg.RunMaxModelCalls = 20
-				cfg.ToolSchemaMode = "eager"
 				if scenario == "decide_text" || scenario == "decide_invalid" {
 					cfg.AutonomousMaxIterations = 2
 				}
@@ -120,35 +102,15 @@ func TestProductionDurableClarification(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer func() {
-					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-					if err := application.Close(ctx); err != nil {
+					if err := closeDurableTestApplication(application); err != nil {
 						t.Error(err)
 					}
 				}()
 				server := httptest.NewServer(application.server.Handler)
 				defer server.Close()
-				client := &http.Client{Timeout: 30 * time.Second}
 				call := func(method, path string, body any, want int, out any) string {
 					t.Helper()
-					data, _ := json.Marshal(body)
-					req, _ := http.NewRequestWithContext(t.Context(), method, server.URL+path, bytes.NewReader(data))
-					req.Header.Set("Content-Type", "application/json")
-					res, err := client.Do(req)
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer res.Body.Close()
-					b, _ := io.ReadAll(res.Body)
-					if res.StatusCode != want {
-						t.Fatalf("%s %s: %d %s", method, path, res.StatusCode, b)
-					}
-					if out != nil {
-						if err := json.Unmarshal(b, out); err != nil {
-							t.Fatalf("JSON: %v %s", err, b)
-						}
-					}
-					return string(b)
+					return durableTestRequest(t, server, method, path, body, want, out)
 				}
 				var agent domain.Agent
 				call("POST", "/api/agents", map[string]any{"name": "Clarification fixture", "routing_hints": map[string]any{"capabilities": []string{"report"}, "task_examples": []string{"clarification-gate: prepare a report, audience unspecified"}}, "system_prompt": "Complete the report. Ask for required missing information.", "memory_enabled": false, "retrieval_enabled": false, "tools": []string{}}, 201, &agent)
@@ -231,10 +193,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				// Recreate the production application over the same fixture database before
 				// answering: the question/continuation cannot depend on a browser or goroutine.
 				server.Close()
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				err = application.Close(ctx)
-				cancel()
-				if err != nil {
+				if err := closeDurableTestApplication(application); err != nil {
 					t.Fatal(err)
 				}
 				application, err = New(cfg)
@@ -256,7 +215,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				candidateID := ""
 
 				if scenario == "claim_restart" || scenario == "corrupt" || scenario == "corrupt_identity" || scenario == "completed_restart" || scenario == "unsafe_restart" || scenario == "uncertain_restart" {
-					db, err := sql.Open("pgx", database)
+					db, err := sql.Open("pgx", cfg.DatabaseURL)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -382,10 +341,7 @@ CREATE TRIGGER reject_fixture_completion BEFORE UPDATE ON runs FOR EACH ROW EXEC
 							t.Fatal(err)
 						}
 						server.Close()
-						ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-						err = application.Close(ctx)
-						cancel()
-						if err != nil {
+						if err := closeDurableTestApplication(application); err != nil {
 							t.Fatal(err)
 						}
 						application, err = New(cfg)

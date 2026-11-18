@@ -52,14 +52,13 @@ authorize retaining prompts or reasoning.
 At non-isolated Turn entry, bounded keyword retrieval searches durable Messages
 and evidence-bearing Events for older IDs, errors, commands and nearby context.
 It excludes active raw Messages and Events from the current Run to avoid recursive
-trace matches. Internal callers can also filter by Message/Event ID, type, role
-and inclusive time range.
+trace matches. Internal queries use keywords and bounded adjacent windows only.
 
 Recovered sources keep `message:<id>` / `event:<id>` references and do not change
 the Session Log. Search limits are frozen with the Run. Search is best effort:
 `session_history.search_started/completed/failed` records counts/references, not
-raw text; Store failure does not block the answer call. Arbitrary Event types
-are available to explicit queries, not automatically searched by keyword.
+raw text; Store failure does not block the answer call. Only evidence-bearing
+Event types participate in search and adjacent expansion.
 
 ## When Compaction Runs
 

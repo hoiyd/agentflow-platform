@@ -100,7 +100,7 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 	} else if input.ModelError != nil {
 		err = input.ModelError
 	} else {
-		decision, err = parseLLMRouteDecisionWithPolicy(input.ModelResponse, eligible, true)
+		decision, err = parseLLMRouteDecision(input.ModelResponse, eligible)
 		if err != nil {
 			err = fmt.Errorf("%w: %v", ErrAgentRouteResponseInvalid, err)
 			result.InvalidResponse = true

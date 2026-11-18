@@ -2,6 +2,7 @@ package sessionhistory
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -29,8 +30,7 @@ func TestSearchFiltersMessagesAndAddsAdjacentWindow(t *testing.T) {
 		{ID: "msg-3", Role: "user", Content: "Unrelated recent question.", CreatedAt: base.Add(2 * time.Minute)},
 	}}
 	result, err := Search(store, Query{
-		ConversationID: "conv", Keywords: []string{"release-2026-08"}, Roles: []string{"user"},
-		From: ptrTime(base.Add(-time.Second)), To: ptrTime(base.Add(time.Minute + time.Second)),
+		ConversationID: "conv", Keywords: []string{"release-2026-08"},
 		NeighborWindow: 1, MaxResults: 4, MaxCharacters: 1000, MaxTokens: 250,
 	})
 	if err != nil {
@@ -44,15 +44,15 @@ func TestSearchFiltersMessagesAndAddsAdjacentWindow(t *testing.T) {
 	}
 }
 
-func TestSearchSupportsEventIDTypeAndExcludesCurrentRun(t *testing.T) {
+func TestSearchFindsEventKeywordsAndExcludesCurrentRun(t *testing.T) {
 	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
 	store := testStore{events: []domain.RunEvent{
 		{ID: "event-1", RunID: "old-run", Type: domain.EventToolFailed, Payload: map[string]any{"error": "connection refused on port 8123"}, Timestamp: base},
-		{ID: "event-2", RunID: "current-run", Type: domain.EventToolFailed, Payload: map[string]any{"error": "connection refused on port 9000"}, Timestamp: base.Add(time.Minute)},
+		{ID: "event-2", RunID: "current-run", Type: domain.EventToolFailed, Payload: map[string]any{"error": "connection refused on port 8123"}, Timestamp: base.Add(time.Minute)},
 	}}
 	result, err := Search(store, Query{
-		ConversationID: "conv", EventIDs: []string{"event-1"}, EventTypes: []domain.RunEventType{domain.EventToolFailed},
-		Keywords: []string{"8123"}, ExcludeRunID: "current-run", MaxResults: 2, MaxCharacters: 1000, MaxTokens: 250,
+		ConversationID: "conv",
+		Keywords:       []string{"8123"}, ExcludeRunID: "current-run", MaxResults: 2, MaxCharacters: 1000, MaxTokens: 250,
 	})
 	if err != nil {
 		t.Fatalf("search: %v", err)
@@ -60,7 +60,7 @@ func TestSearchSupportsEventIDTypeAndExcludesCurrentRun(t *testing.T) {
 	if len(result.Items) != 1 || result.Items[0].Reference != "event:event-1" || result.Items[0].EventType != domain.EventToolFailed {
 		t.Fatalf("unexpected event result: %#v", result.Items)
 	}
-	if result.Items[0].MatchReason != "source_id_match" || !strings.Contains(result.Items[0].Content, "8123") {
+	if result.Items[0].MatchReason != "keyword_match" || !strings.Contains(result.Items[0].Content, "8123") {
 		t.Fatalf("event source was not preserved: %#v", result.Items[0])
 	}
 }
@@ -84,7 +84,7 @@ func TestSearchEnforcesResultCharacterAndTokenLimits(t *testing.T) {
 
 func TestKeywordsAddsCJKSubtermsAndRemovesNoise(t *testing.T) {
 	keywords := Keywords("请帮我恢复之前的错误原文 release-42")
-	if !containsFold(keywords, "release-42") || !containsFold(keywords, "错误") || containsFold(keywords, "请") {
+	if !slices.Contains(keywords, "release-42") || !slices.Contains(keywords, "错误") || slices.Contains(keywords, "请") {
 		t.Fatalf("unexpected keywords: %#v", keywords)
 	}
 }
@@ -124,25 +124,25 @@ func TestSearchPropagatesStoreErrors(t *testing.T) {
 	}
 }
 
-func TestSearchSupportsMessageIDRoleAndDefaultLimits(t *testing.T) {
+func TestSearchNormalizesKeywordsAndAppliesDefaultLimits(t *testing.T) {
 	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
 	store := testStore{messages: []domain.Message{
-		{ID: "msg-user", Role: "user", Content: "exact command", CreatedAt: base},
+		{ID: "msg-user", Role: "user", Content: "exact command release-42", CreatedAt: base},
 		{ID: "msg-assistant", Role: "assistant", Content: "exact command result", CreatedAt: base.Add(time.Minute)},
 	}}
 	result, err := Search(store, Query{
-		ConversationID: " conv ", MessageIDs: []string{" MSG-USER ", "msg-user"}, Roles: []string{" USER "},
+		ConversationID: " conv ", Keywords: []string{" RELEASE-42 ", "release-42"},
 		NeighborWindow: -1,
 	})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
-	if len(result.Items) != 1 || result.Items[0].Reference != "message:msg-user" || result.Items[0].MatchReason != "source_id_match" {
+	if len(result.Items) != 1 || result.Items[0].Reference != "message:msg-user" || result.Items[0].MatchReason != "keyword_match" {
 		t.Fatalf("unexpected filtered message: %#v", result.Items)
 	}
 }
 
-func TestSearchSupportsEventTypeTimeRangeAndAdjacentWindow(t *testing.T) {
+func TestSearchFindsEventKeywordsAndAdjacentWindow(t *testing.T) {
 	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
 	store := testStore{events: []domain.RunEvent{
 		{ID: "event-before", RunID: "run-old", Type: domain.EventToolStarted, Payload: map[string]any{"tool": "deploy"}, Timestamp: base},
@@ -151,8 +151,7 @@ func TestSearchSupportsEventTypeTimeRangeAndAdjacentWindow(t *testing.T) {
 		{ID: "event-outside", RunID: "run-old", Type: domain.EventToolFailed, Payload: map[string]any{"error": "outside"}, Timestamp: base.Add(5 * time.Minute)},
 	}}
 	result, err := Search(store, Query{
-		ConversationID: "conv", EventTypes: []domain.RunEventType{domain.EventToolFailed},
-		From: ptrTime(base), To: ptrTime(base.Add(2 * time.Minute)), NeighborWindow: 1,
+		ConversationID: "conv", Keywords: []string{"8123"}, NeighborWindow: 1,
 		MaxResults: 5, MaxCharacters: 2000, MaxTokens: 500,
 	})
 	if err != nil {
@@ -161,7 +160,7 @@ func TestSearchSupportsEventTypeTimeRangeAndAdjacentWindow(t *testing.T) {
 	if len(result.Items) != 3 || result.Items[0].Reference != "event:event-before" || result.Items[1].Reference != "event:event-match" || result.Items[2].Reference != "event:event-after" {
 		t.Fatalf("unexpected event window: %#v", result.Items)
 	}
-	if result.Items[1].MatchReason != "event_type_match" || result.Items[0].MatchReason != "adjacent_window" {
+	if result.Items[1].MatchReason != "keyword_match" || result.Items[0].MatchReason != "adjacent_window" {
 		t.Fatalf("unexpected event match reasons: %#v", result.Items)
 	}
 }
@@ -180,8 +179,7 @@ func TestSearchSuppressesNoisyEventsAndDeduplicatesWindows(t *testing.T) {
 	}
 	result, err := Search(store, Query{
 		ConversationID: "conv", Keywords: []string{"needle"}, NeighborWindow: 1,
-		ExcludeReferences: map[string]bool{"message:msg-1": true},
-		MaxResults:        8, MaxCharacters: 2000, MaxTokens: 500,
+		MaxResults: 8, MaxCharacters: 2000, MaxTokens: 500,
 	})
 	if err != nil {
 		t.Fatalf("search: %v", err)
@@ -190,7 +188,7 @@ func TestSearchSuppressesNoisyEventsAndDeduplicatesWindows(t *testing.T) {
 	for _, item := range result.Items {
 		seen[item.Reference]++
 	}
-	if seen["event:event-noisy"] != 0 || seen["message:msg-1"] != 0 || seen["message:msg-2"] != 1 || seen["event:event-useful"] != 1 {
+	if seen["event:event-noisy"] != 0 || seen["message:msg-1"] != 1 || seen["message:msg-2"] != 1 || seen["event:event-useful"] != 1 {
 		t.Fatalf("unexpected deduplication/filter result: items=%#v counts=%#v", result.Items, seen)
 	}
 }
@@ -209,7 +207,7 @@ func TestSearchOrdersEqualTimestampsByReference(t *testing.T) {
 	}
 }
 
-func TestSearchRejectsCrossSourceAndNonMatchingFilters(t *testing.T) {
+func TestSearchReturnsNoUnmatchedSources(t *testing.T) {
 	createdAt := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
 	store := testStore{
 		messages: []domain.Message{{ID: "msg-1", Role: "user", Content: "release-42", CreatedAt: createdAt}},
@@ -218,39 +216,15 @@ func TestSearchRejectsCrossSourceAndNonMatchingFilters(t *testing.T) {
 			Payload: map[string]any{"error": "release-42"}, Timestamp: createdAt,
 		}},
 	}
-	tests := []Query{
-		{EventTypes: []domain.RunEventType{domain.EventToolFailed}, MessageIDs: []string{"msg-1"}},
-		{MessageIDs: []string{"missing"}},
-		{Roles: []string{"assistant"}},
-		{EventIDs: []string{"missing"}},
-		{Keywords: []string{"not-present"}},
-	}
-	for _, query := range tests {
-		query.MaxResults, query.MaxCharacters, query.MaxTokens = 5, 1000, 250
-		result, err := Search(store, query)
-		if err != nil {
-			t.Fatalf("search %#v: %v", query, err)
-		}
-		if len(result.Items) != 0 {
-			t.Fatalf("filters leaked cross-source results for %#v: %#v", query, result.Items)
-		}
-	}
-}
-
-func TestSearchExcludesAdjacentMessagesOutsideTimeRange(t *testing.T) {
-	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
-	result, err := Search(testStore{messages: []domain.Message{
-		{ID: "outside", Role: "assistant", Content: "prior context", CreatedAt: base},
-		{ID: "match", Role: "user", Content: "release-42", CreatedAt: base.Add(time.Minute)},
-	}}, Query{
-		Keywords: []string{"release-42"}, From: ptrTime(base.Add(time.Minute)), NeighborWindow: 1,
+	result, err := Search(store, Query{
+		Keywords:   []string{"not-present"},
 		MaxResults: 5, MaxCharacters: 1000, MaxTokens: 250,
 	})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
-	if len(result.Items) != 1 || result.Items[0].Reference != "message:match" {
-		t.Fatalf("out-of-range neighbor was included: %#v", result.Items)
+	if len(result.Items) != 0 {
+		t.Fatalf("unmatched sources were included: %#v", result.Items)
 	}
 }
 
@@ -281,5 +255,3 @@ func TestBoundTextAndTokenEstimateHandleEdgeCases(t *testing.T) {
 		t.Fatalf("unexpected token estimates: empty=%d ascii=%d unicode=%d", estimateTokens(""), estimateTokens("abcd"), estimateTokens("中文"))
 	}
 }
-
-func ptrTime(value time.Time) *time.Time { return &value }
