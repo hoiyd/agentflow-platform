@@ -1,6 +1,7 @@
 package contexteval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,20 @@ func TestLiveCompactionContinuation(t *testing.T) {
 			sourceContract := fault == "source_contract" || fault == "physical_source_ids" || taskContract
 			expectedGate := fault == "" || fault == "estimated_usage" || calibrated || (sourceContract && fault != "task_status_action_mixed")
 			facts, outcome := liveFixtureFacts(), liveFixtureOutcome()
+			datasetPath := "../../../../../examples/context/compaction-continuation.v1.json"
+			if fault == "" {
+				// An unrelated identifier containing the fault value must not change the amount.
+				dataset, err := os.ReadFile(datasetPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				datasetPath = filepath.Join(t.TempDir(), "compaction-continuation.json")
+				if err := os.WriteFile(datasetPath, bytes.ReplaceAll(dataset, []byte("INV-2048"), []byte("INV-99000")), 0600); err != nil {
+					t.Fatal(err)
+				}
+				facts = strings.ReplaceAll(facts, "INV-2048", "INV-99000")
+				outcome = strings.ReplaceAll(outcome, "INV-2048", "INV-99000")
+			}
 			if calibrated {
 				facts = strings.ReplaceAll(facts, "Approved cap is EUR", "Correction: Approved cap is EUR")
 				outcome = strings.ReplaceAll(outcome, "Approved cap is EUR", "Correction: Approved cap is EUR")
@@ -158,9 +173,6 @@ func TestLiveCompactionContinuation(t *testing.T) {
 							answer = strings.TrimSpace(claims)
 						}
 					}
-					if strings.Contains(all, "99000") {
-						answer = strings.ReplaceAll(answer, "45000", "99000")
-					}
 					if strings.Contains(all, "summary truncated") {
 						answer = `{}`
 					}
@@ -236,8 +248,12 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					if fault == "invented_evidence" {
 						answer = strings.ReplaceAll(answer, "Evidence: receipt is pending.", "Receipt has cleared.")
 					}
-					if strings.Contains(all, "99000") {
-						answer = strings.ReplaceAll(answer, "45000", "99000")
+					if fault == "changed_fact" {
+						_, summary, _ := strings.Cut(all, "<conversation_summary ")
+						summary, _, _ = strings.Cut(summary, "</conversation_summary>")
+						if strings.Contains(summary, `"amount_minor":{"value":99000,`) {
+							answer = strings.Replace(answer, `"amount_minor":{"value":45000,`, `"amount_minor":{"value":99000,`, 1)
+						}
 					}
 					delta = map[string]any{"content": answer}
 				}
@@ -249,7 +265,7 @@ func TestLiveCompactionContinuation(t *testing.T) {
 				fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", encoded)
 			}))
 			defer server.Close()
-			opts := LiveOptions{DatasetPath: "../../../../../examples/context/compaction-continuation.v1.json", Trials: 2,
+			opts := LiveOptions{DatasetPath: datasetPath, Trials: 2,
 				MaxModelCalls: 40, MaxTotalTokens: 100000, Timeout: time.Second, Revision: "fixture-revision", EvidenceMode: "deterministic_http_fixture"}
 			if calibrated {
 				opts.DatasetPath = "../../../../../examples/context/compaction-continuation.v2.json"
@@ -317,6 +333,13 @@ func TestLiveCompactionContinuation(t *testing.T) {
 				check := sample["fidelity"].(map[string]any)
 				if check["fact_values_passed"] != (fault != "changed_fact") || check["fact_provenance_passed"] != (fault == "changed_fact") || check["passed"] != false {
 					t.Fatalf("fact loss and provenance failure were conflated: %v", check)
+				}
+			}
+			if fault == "changed_fact" {
+				for _, sample := range report.Samples {
+					if sample.Outcome.ValuesPassed != (sample.Arm == StrategyFullHistory) || !sample.Outcome.ProvenancePassed {
+						t.Fatalf("continuation must reject only the compacted amount: arm=%s outcome=%+v", sample.Arm, sample.Outcome)
+					}
 				}
 			}
 			if fault == "" || calibrated {
