@@ -58,8 +58,10 @@ test("HTTP boundaries and command retirement survive persistence and reload", as
     expect(replay.verification_evidence[0].status).toBe(scenario.status);
     expect(replay.verification_evidence[0].details.reason_code).toBe(scenario.reason);
     await page.goto(href);
+    await page.locator("#run-verification-evidence > summary").click();
     await expect(page.locator("#run-verification-evidence")).toContainText(scenario.status);
     await page.reload();
+    await page.locator("#run-verification-evidence > summary").click();
     await expect(page.locator("#run-verification-evidence")).toContainText(scenario.status);
     evidence.push({ scenario: scenario.name, contract, run: replay.run, verification: replay.verification_evidence });
     await page.goto("/workspace");

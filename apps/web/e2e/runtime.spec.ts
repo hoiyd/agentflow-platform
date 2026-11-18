@@ -260,5 +260,6 @@ test("Verification UI sends a real contract and a failed verifier blocks complet
   const { replay } = await retainRun(request, runId, prompt);
   expect(replay.run.verification_status).toBe("failed");
   await page.getByRole("link", { name: "View trace" }).click();
+  await page.locator("#run-verification-evidence > summary").click();
   await expect(page.locator("#run-verification-evidence")).toContainText("failed");
 });
