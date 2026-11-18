@@ -104,7 +104,7 @@ func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, re
 		log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, decision.FallbackReasonCode)
 		return decision, nil
 	}
-	decision, err := r.routeWorkerAgentWithLLM(ctx, runID, agents, task, plan, requirements, true)
+	decision, err := r.routeWorkerAgentWithLLM(ctx, runID, agents, task, plan, requirements)
 	if err == nil {
 		return decision, nil
 	}
@@ -230,7 +230,7 @@ func agentHasTool(agent domain.Agent, name string) bool {
 	return false
 }
 
-func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements, strict bool) (routeDecision, error) {
+func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
 	input := routerUserPrompt(task, plan, requirements, agents)
 	run, _, _ := r.store.GetRun(runID)
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{RunID: runID, ConversationID: run.ConversationID,
@@ -240,12 +240,9 @@ func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, age
 		return routeDecision{}, err
 	}
 	response := result.Output
-	decision, err := parseLLMRouteDecisionWithPolicy(response, agents, strict)
+	decision, err := parseLLMRouteDecision(response, agents)
 	if err != nil {
-		if strict {
-			return routeDecision{}, fmt.Errorf("%w: %v", ErrAgentRouteResponseInvalid, err)
-		}
-		return routeDecision{}, err
+		return routeDecision{}, fmt.Errorf("%w: %v", ErrAgentRouteResponseInvalid, err)
 	}
 	decision.Mode = "llm"
 	log.Printf("router_llm_response run_id=%s raw_len=%d selected_agent_id=%s", runID, len(response), decision.Agent.ID)
@@ -370,10 +367,6 @@ type llmCandidateScore struct {
 }
 
 func parseLLMRouteDecision(response string, agents []domain.Agent) (routeDecision, error) {
-	return parseLLMRouteDecisionWithPolicy(response, agents, true)
-}
-
-func parseLLMRouteDecisionWithPolicy(response string, agents []domain.Agent, strict bool) (routeDecision, error) {
 	jsonText, err := extractJSONObject(response)
 	if err != nil {
 		return routeDecision{}, err
@@ -402,32 +395,20 @@ func parseLLMRouteDecisionWithPolicy(response string, agents []domain.Agent, str
 		if seen[agentID] {
 			return routeDecision{}, fmt.Errorf("router scored agent_id %q more than once", agentID)
 		}
-		if strict && (item.Score < 0 || item.Score > 100) {
+		if item.Score < 0 || item.Score > 100 {
 			return routeDecision{}, fmt.Errorf("router score for agent_id %q must be between 0 and 100", agentID)
 		}
 		score := int(item.Score + 0.5)
-		if score < 0 {
-			score = 0
-		}
-		if score > 100 {
-			score = 100
-		}
 		reason := strings.TrimSpace(item.Reason)
-		if strict && reason == "" {
-			return routeDecision{}, fmt.Errorf("router score for agent_id %q has no reason", agentID)
-		}
 		if reason == "" {
-			reason = "LLM semantic match score"
+			return routeDecision{}, fmt.Errorf("router score for agent_id %q has no reason", agentID)
 		}
 		scores = append(scores, agentScore{Agent: agent, Score: score, Reason: reason})
 		seen[agent.ID] = true
 	}
 	for _, agent := range agents {
 		if !seen[agent.ID] {
-			if strict {
-				return routeDecision{}, fmt.Errorf("router did not score candidate agent_id %q", agent.ID)
-			}
-			scores = append(scores, agentScore{Agent: agent, Score: 0, Reason: "LLM did not score this candidate"})
+			return routeDecision{}, fmt.Errorf("router did not score candidate agent_id %q", agent.ID)
 		}
 	}
 	sort.SliceStable(scores, func(i, j int) bool {
@@ -445,26 +426,14 @@ func parseLLMRouteDecisionWithPolicy(response string, agents []domain.Agent, str
 		}
 	}
 	confidence := decoded.Confidence
-	if strict && (confidence < 0 || confidence > 1) {
+	if confidence < 0 || confidence > 1 {
 		return routeDecision{}, fmt.Errorf("router confidence must be between 0 and 1")
 	}
-	if !strict && confidence > 1 {
-		confidence = confidence / 100
-	}
-	if confidence < 0 {
-		confidence = 0
-	}
-	if confidence > 1 {
-		confidence = 1
-	}
 	reason := strings.TrimSpace(decoded.Reason)
-	if strict && reason == "" {
+	if reason == "" {
 		return routeDecision{}, fmt.Errorf("router selection has no reason")
 	}
-	if reason == "" {
-		reason = "LLM selected this agent as the best semantic fit."
-	}
-	if strict && len(scores) > 0 && selectedScore < scores[0].Score {
+	if len(scores) > 0 && selectedScore < scores[0].Score {
 		return routeDecision{}, fmt.Errorf("router selected agent_id %q below the highest-scored candidate", selected.ID)
 	}
 	return routeDecision{
