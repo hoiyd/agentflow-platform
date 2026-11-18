@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,11 +16,14 @@ import (
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
-var fixtureModelServer = modelstream.NewServer()
+var fixtureModelServer *httptest.Server
+var fixtureModelOnce sync.Once
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	fixtureModelServer.Close()
+	if fixtureModelServer != nil {
+		fixtureModelServer.Close()
+	}
 	os.Exit(code)
 }
 
@@ -51,5 +56,6 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 }
 
 func newHTTPFixtureClientForTest() *openai.Client {
+	fixtureModelOnce.Do(func() { fixtureModelServer = modelstream.NewServer() })
 	return openai.NewClientWithTimeoutAndEmbeddingModel("fixture-only", fixtureModelServer.URL, fixtureModelServer.URL, "fixture-model", "local_hash_embedding", 1536, time.Second)
 }
