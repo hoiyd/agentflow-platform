@@ -19,10 +19,10 @@ import (
 	"agentflow-platform/apps/api/internal/approval"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/clarification"
-	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/identity"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/filesystem"
@@ -34,21 +34,22 @@ import (
 // original Tool-call and reasoning protocol, budget, scope and file receipts.
 func TestProductionDurableToolApproval(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "undo", "lazy", "restart", "legacy_policy_restart", "claim_restart", "consume_restart", "write_restart", "completed_restart", "uncertain_restart", "reject", "cancel", "budget", "expired", "revoke", "policy_changed", "live_approval_policy_drift", "grant_revoked", "stale_args", "snapshot_drift", "root_drift", "prewrite_conflict", "corrupt_checkpoint", "corrupt_protocol", "mixed_batch", "legacy_mixed_batch", "concurrent", "generic_calculator", "generic_file_write", "generic_file_read", "generic_update_task_state", "generic_request_user_input", "generic_mcp_docs__read"} {
-			if mode != "single" && !strings.HasPrefix(scenario, "generic_") && scenario != "happy" && scenario != "restart" && scenario != "claim_restart" && scenario != "write_restart" && scenario != "completed_restart" && scenario != "reject" && scenario != "budget" {
-				continue
-			}
+		scenarios := []string{"happy", "restart", "claim_restart", "write_restart", "completed_restart", "reject", "budget",
+			"generic_calculator", "generic_file_write", "generic_file_read", "generic_update_task_state", "generic_request_user_input", "generic_mcp_docs__read"}
+		if mode == "single" {
+			scenarios = append(scenarios, "undo", "lazy", "legacy_policy_restart", "consume_restart", "uncertain_restart", "cancel", "expired", "revoke", "policy_changed", "live_approval_policy_drift", "grant_revoked", "stale_args", "snapshot_drift", "root_drift", "prewrite_conflict", "corrupt_checkpoint", "corrupt_protocol", "mixed_batch", "legacy_mixed_batch", "concurrent")
+		}
+		for _, scenario := range scenarios {
 			t.Run(mode+"/"+scenario, func(t *testing.T) { testProductionToolApproval(t, mode, scenario) })
 		}
 	}
 }
 
 func testProductionToolApproval(t *testing.T, mode, scenario string) {
+	database := pgfixture.DatabaseURL(t)
 	root := t.TempDir()
 	t.Chdir(root)
 	t.Setenv("AGENTFLOW_FILESYSTEM_WRITE_TEST", "1")
-	t.Setenv("BROWSER_FIXTURE_KEY", "fixture-only")
-	t.Setenv("EMBEDDING_API_KEY", "fixture-only")
 	provider := newBrowserProvider()
 	var changedPolicy sync.Once
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,27 +89,8 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		provider.respond(w, r)
 	}))
 	defer model.Close()
-	route := filepath.Join(root, "routes.json")
-	routes, _ := json.Marshal(map[string]any{"routes": []any{map[string]any{
-		"id": "approval-fixture", "model": "fixture-model", "base_url": model.URL,
-		"credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 10,
-		"context_window_tokens": 128000, "max_output_tokens": 8192,
-		"priority": 100, "pricing": map[string]string{"source": "fixture"},
-		"capabilities": map[string]any{"tool_calling": true, "streaming": true, "structured_output": true},
-	}}})
-	if err := os.WriteFile(route, routes, 0600); err != nil {
-		t.Fatal(err)
-	}
-	cfg := config.Load()
-	cfg.DatabaseURL = pgfixture.DatabaseURL(t)
-	cfg.AuthMode, cfg.TrustedSkillDirectories, cfg.SkillReviewManifestPath = "local", "", ""
-	cfg.ModelRouteConfigPath, cfg.ToolConfigPath = route, filepath.Join(root, "tools.json")
-	cfg.MemoryAdaptiveExtractionMode, cfg.ContextCompactionMode = "off", "off"
-	cfg.EmbeddingBaseURL, cfg.EmbeddingModel, cfg.EmbeddingDimensions = model.URL, "fixture-embedding", 1536
-	cfg.RouterMode, cfg.AutonomousMaxIterations, cfg.ToolSchemaMode = "query_match", 1, "eager"
-	cfg.ModelRetryMaxAttempts, cfg.RunMaxModelCalls = 1, 25
-	cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute = 0, 0
-	cfg.SandboxEnabled = false
+	cfg := durableTestConfig(t, root, database, routing.RouteConfig{ID: "approval-fixture", BaseURL: model.URL, RequestTimeoutSeconds: 10})
+	cfg.SkillReviewManifestPath, cfg.RunMaxModelCalls = "", 25
 	if scenario == "budget" {
 		cfg.RunMaxToolCalls = 1
 	}
@@ -173,9 +155,7 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 		t.Fatal(err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := application.Close(ctx); err != nil {
+		if err := closeDurableTestApplication(application); err != nil {
 			t.Error(err)
 		}
 	}()
@@ -183,24 +163,7 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	defer func() { server.Close() }()
 	call := func(method, path string, input any, want int, out any) string {
 		t.Helper()
-		data, _ := json.Marshal(input)
-		req, _ := http.NewRequestWithContext(t.Context(), method, server.URL+path, bytes.NewReader(data))
-		req.Header.Set("Content-Type", "application/json")
-		res, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer res.Body.Close()
-		body, _ := io.ReadAll(res.Body)
-		if res.StatusCode != want {
-			t.Fatalf("%s %s: %d %s", method, path, res.StatusCode, body)
-		}
-		if out != nil {
-			if err := json.Unmarshal(body, out); err != nil {
-				t.Fatalf("decode: %v %s", err, body)
-			}
-		}
-		return string(body)
+		return durableTestRequest(t, server, method, path, input, want, out)
 	}
 	var agent domain.Agent
 	boundTools := []string{"file_write", "file_patch"}
@@ -456,10 +419,7 @@ func testProductionToolApproval(t *testing.T, mode, scenario string) {
 	}
 	if strings.HasSuffix(scenario, "restart") {
 		server.Close()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err = application.Close(ctx)
-		cancel()
-		if err != nil {
+		if err := closeDurableTestApplication(application); err != nil {
 			t.Fatal(err)
 		}
 		application, err = New(cfg)
