@@ -136,7 +136,6 @@ function ComposerFixture({chatMode, skills, input, onInputChange, isStreaming, o
       error=""
       input={input}
       isAgentDescriptionExpanded={expanded}
-      isAwaitingHumanInput={false}
       isAwaitingPlanApproval={false}
       isCreatingAgent={false}
       isNewAgentFormOpen={false}

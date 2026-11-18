@@ -89,7 +89,11 @@ func TestHeadlessRecoveryRejectsWithoutWriting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = storage.UpdateRunStatus(run.ID, domain.RunWaitingForUser, "")
+			status := domain.RunFailedRecoverable
+			if name == "waiting input" {
+				status = domain.RunWaitingForUser
+			}
+			_, err = storage.UpdateRunStatus(run.ID, status, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -100,7 +104,7 @@ func TestHeadlessRecoveryRejectsWithoutWriting(t *testing.T) {
 			id, input := run.ID, "resume"
 			reason := runcommands.Invalid
 			observer := runcommands.Observer{}
-			wantStatus := domain.RunWaitingForUser
+			wantStatus := status
 			switch name {
 			case "owner":
 				scope.Owner = ""
@@ -114,6 +118,7 @@ func TestHeadlessRecoveryRejectsWithoutWriting(t *testing.T) {
 				reason = ""
 			case "waiting input":
 				input = ""
+				reason = runcommands.Conflict
 			case "queued cancellation":
 				reservation, err := controller.Reserve()
 				if err != nil {

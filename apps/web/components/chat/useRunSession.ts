@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from "react";
 import {
-  cancelRun, continueRun, getRunProjection, observeRunEvents, resumeRun, streamChat,
+  cancelRun, continueRun, getRunProjection, observeRunEvents, streamChat,
   type AgentRoutingRequirements, type ChatMode
 } from "../../lib/api";
 import { createLatestRequestController } from "../../lib/latest-request";
@@ -23,7 +23,7 @@ import type { ProjectContext } from "../../lib/project-guidance";
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
-  | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest; approvalId?:string; approvalDecision?:ToolApprovalDecision };
+  | { kind: "resuming"; questionId?:string; answer?:ClarificationAnswerRequest; approvalId?:string; approvalDecision?:ToolApprovalDecision };
 type Activity = "idle" | Command["kind"];
 type Workspace = Pick<ReturnType<typeof useConversationWorkspace>,
   "activeId" | "setActiveId" | "setInput" | "setMessages" | "setError" | "applyTitle">;
@@ -233,7 +233,6 @@ export function useRunSession(options: SessionOptions) {
     } else if (command.kind === "continuing") {
       trace.setPlanDraft(command.plan);
     } else {
-      trace.setHumanInputDraft(command.input);
       if (!command.approvalDecision || command.approvalDecision.decision === "approve") setRunState(previousRun ? { ...previousRun, status: "running" } : null);
     }
 
@@ -257,10 +256,7 @@ export function useRunSession(options: SessionOptions) {
         conversationId = event.conversation_id;
         workspace.setActiveId(conversationId);
       },
-      onDone: (event) => workspace.applyTitle(event.conversation_id, event.title),
-      onRunState: (event) => {
-        if (command.kind === "resuming" && event.status !== "waiting_for_user") trace.setHumanInputDraft("");
-      }
+      onDone: (event) => workspace.applyTitle(event.conversation_id, event.title)
     });
     const onEvent: Parameters<typeof streamChat>[1] = (event) => { if (request.isCurrent()) handle(event); };
     try {
@@ -276,7 +272,7 @@ export function useRunSession(options: SessionOptions) {
         } else if(command.questionId){
           if(command.answer)await answerClarification(runId,command.questionId,command.answer,request.signal);
           await resumeClarification(runId,command.questionId,onEvent,request.signal);
-        }else await resumeRun({ run_id: runId, user_input: command.input }, onEvent, request.signal);
+        }
       }
       if (request.isCurrent()) await latest.current.options.onReload(conversationId, command.kind);
     } catch (error) {
@@ -351,12 +347,8 @@ export function useRunSession(options: SessionOptions) {
       const approved = (plan ?? current.planDraft).trim();
       return approved ? execute({ kind: "continuing", plan: approved, requirements: requirements ?? current.routingRequirements }) : Promise.resolve();
     },
-    resume: (input?: string) => {
-      const answer = (input ?? latest.current.trace.humanInputDraft).trim();
-      return answer ? execute({ kind: "resuming", input: answer }) : Promise.resolve();
-    },
-    resumeClarification:(questionId:string,answer?:ClarificationAnswerRequest)=>execute({kind:"resuming",input:"",questionId,answer}),
-    resumeToolApproval:(approvalId:string,approvalDecision?:ToolApprovalDecision)=>execute({kind:"resuming",input:"",approvalId,approvalDecision})
+    resumeClarification:(questionId:string,answer?:ClarificationAnswerRequest)=>execute({kind:"resuming",questionId,answer}),
+    resumeToolApproval:(approvalId:string,approvalDecision?:ToolApprovalDecision)=>execute({kind:"resuming",approvalId,approvalDecision})
   };
 }
 

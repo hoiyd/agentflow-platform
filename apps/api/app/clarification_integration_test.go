@@ -25,7 +25,7 @@ import (
 )
 
 // Failure inventory: malformed/unbound answers, duplicate/conflicting submit,
-// legacy Resume bypass, reload/restart, protocol loss, and budget reset.
+// unbound Resume bypass, reload/restart, protocol loss, and budget reset.
 // The HTTP handler, Runtime, Binding, generated schema and Postgres are real.
 // Completion failure inventory: recovered candidates must retain their message
 // identity and serialized result/citation fields without a second save; rejected
@@ -38,7 +38,7 @@ import (
 // preserve the candidate without emitting done or leaving the Run running.
 func TestProductionDurableClarification(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "uncertain_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart", "verified_happy", "verified_completed_restart", "output_happy", "output_completed_restart", "output_generic_completed_restart", "ordinary_output", "binding_latest_mismatch", "binding_malformed_latest", "binding_malformed_hash", "verified_binding_latest_mismatch", "verified_binding_malformed_latest", "verified_binding_malformed_hash", "binding_missing_primary", "verified_binding_missing_primary", "binding_invalid_handoff", "binding_completion_write_failure"} {
+		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "decide_text", "completed_restart", "unsafe_restart", "uncertain_restart", "decide_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart", "verified_happy", "verified_completed_restart", "output_happy", "output_completed_restart", "output_generic_completed_restart", "ordinary_output", "binding_latest_mismatch", "binding_malformed_latest", "binding_malformed_hash", "verified_binding_latest_mismatch", "verified_binding_malformed_latest", "verified_binding_malformed_hash", "binding_missing_primary", "verified_binding_missing_primary", "binding_invalid_handoff", "binding_completion_write_failure"} {
 			t.Run(mode+"/"+scenario, func(t *testing.T) {
 				ordinary := scenario == "ordinary_output"
 				structured := ordinary || strings.HasPrefix(scenario, "output_")
@@ -58,16 +58,16 @@ func TestProductionDurableClarification(t *testing.T) {
 				}
 				generic := strings.HasPrefix(scenario, "generic_")
 				scenario = strings.TrimPrefix(scenario, "generic_")
-				if (scenario == "legacy_text" || scenario == "legacy_invalid") && mode != "autonomous" {
-					t.Skip("legacy text ask is an Autonomous protocol")
+				if (scenario == "decide_text" || scenario == "decide_invalid") && mode != "autonomous" {
+					t.Skip("Decide text ask is an Autonomous protocol")
 				}
 				task := "clarification-gate: prepare a report, audience unspecified"
 				if ordinary {
 					task = "structured-output-gate"
 				}
-				if scenario == "legacy_text" || scenario == "legacy_invalid" {
-					task = "clarification-gate-legacy: prepare a report, audience unspecified"
-					if scenario == "legacy_invalid" {
+				if scenario == "decide_text" || scenario == "decide_invalid" {
+					task = "clarification-gate-text: prepare a report, audience unspecified"
+					if scenario == "decide_invalid" {
 						task += " rejected-credential-question"
 					}
 				}
@@ -106,7 +106,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				cfg.ModelRequestCaptureMode = "redacted"
 				cfg.RunMaxModelCalls = 20
 				cfg.ToolSchemaMode = "eager"
-				if scenario == "legacy_text" || scenario == "legacy_invalid" {
+				if scenario == "decide_text" || scenario == "decide_invalid" {
 					cfg.AutonomousMaxIterations = 2
 				}
 				if scenario == "budget" {
@@ -177,7 +177,7 @@ func TestProductionDurableClarification(t *testing.T) {
 					t.Logf("ref1101-02 ordinary SSE: %s", payload)
 					return
 				}
-				if scenario == "legacy_invalid" {
+				if scenario == "decide_invalid" {
 					runs, err := application.store.ListRunsByWorkspace(agent.WorkspaceID)
 					if err != nil || len(runs) != 1 || runs[0].Status != domain.RunFailed {
 						t.Fatalf("invalid question accepted: %+v %v %s", runs, err, payload)
@@ -612,7 +612,7 @@ CREATE TRIGGER reject_fixture_completion BEFORE UPDATE ON runs FOR EACH ROW EXEC
 						}
 					}
 				}
-				if scenario != "completed_restart" && (!foundCapture || scenario != "legacy_text" && !foundManifest) {
+				if scenario != "completed_restart" && (!foundCapture || scenario != "decide_text" && !foundManifest) {
 					t.Fatalf("answer absent from actual capture/manifest: capture=%t manifest=%t", foundCapture, foundManifest)
 				}
 				if len(replay.Projection.InvariantFailures) != 0 {

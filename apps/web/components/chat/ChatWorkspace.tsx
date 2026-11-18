@@ -35,7 +35,6 @@ type ChatWorkspaceProps = {
   autonomousProgress: AutonomousProgress | null;
   chatMode: ChatMode;
   collaborationSteps: CollaborationStepView[];
-  humanInputDraft: string;
   isCanceling: boolean;
   isCollaborationPanelOpen: boolean;
   isContinuing: boolean;
@@ -49,11 +48,9 @@ type ChatWorkspaceProps = {
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
-  onHumanInputChange: (value: string) => void;
   onModeChange: (mode: ChatMode) => void;
   onPanelOpenChange: (open: boolean) => void;
   onPromptSelect: (prompt: string) => void;
-  onResume: (value?: string) => void;
   onRoleSelect: (role: string) => void;
   onRoutingRequirementsChange: (requirements: AgentRoutingRequirements) => void;
   onTaskStateClose: () => void;
@@ -78,7 +75,6 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     autonomousProgress,
     chatMode,
     collaborationSteps,
-    humanInputDraft,
     isCanceling,
     isCollaborationPanelOpen,
     isContinuing,
@@ -89,12 +85,10 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     messagesRef,
     onCancel,
     onContinue,
-    onHumanInputChange,
     onModeChange,
     onPanelOpenChange,
     onPlanDraftChange,
     onPromptSelect,
-    onResume,
     onRoleSelect,
     onRoutingRequirementsChange,
     onTaskStateClose,
@@ -193,15 +187,9 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
       {showCollaborationPanel && isCollaborationPanelOpen ? (
         showAutonomousTrace ? (
           <AutonomousPanel
-            hasStructuredClarification={hasClarification||hasApproval||clarificationUnavailable}
-            humanInputDraft={humanInputDraft}
-            isBusy={isStreaming || isCanceling}
             isCanceling={isCanceling}
-            isResuming={isResuming}
             onCancel={onCancel}
             onCollapse={() => onPanelOpenChange(false)}
-            onHumanInputChange={onHumanInputChange}
-            onResume={onResume}
             progress={autonomousProgress}
             runStatus={runStatus}
             steps={collaborationSteps}

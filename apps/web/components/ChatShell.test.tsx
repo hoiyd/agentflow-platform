@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ChatShell } from "./ChatShell";
+import type { Clarification } from "../lib/clarification-api";
 
 const api = vi.hoisted(() => ({
   getAPIHealth: vi.fn(),
@@ -16,14 +17,14 @@ const api = vi.hoisted(() => ({
   listSkills: vi.fn(),
   streamChat: vi.fn(),
   continueRun: vi.fn(),
-  resumeRun: vi.fn(),
   cancelRun: vi.fn(),
   observeRunEvents: vi.fn()
 }));
 
 vi.mock("../lib/api", () => api);
 const listClarifications = vi.hoisted(() => vi.fn());
-vi.mock("../lib/clarification-api", () => ({listClarifications}));
+const resumeClarification = vi.hoisted(() => vi.fn());
+vi.mock("../lib/clarification-api", () => ({listClarifications,resumeClarification}));
 vi.mock("../lib/tool-approval-api", () => ({listToolApprovals:vi.fn(async () => []),decideToolApproval:vi.fn(),resumeToolApproval:vi.fn()}));
 const knowledgeAPI = vi.hoisted(() => ({ listDocuments: vi.fn() }));
 vi.mock("../lib/knowledge-api", () => knowledgeAPI);
@@ -39,20 +40,19 @@ vi.mock("./chat/ChatChrome", () => ({
   ToolsPanel: () => null
 }));
 vi.mock("./chat/ChatWorkspace", () => ({
-  ChatWorkspace: ({ messages, chatMode, planDraft, runStatus, isStreaming, isCanceling, clarificationLoading, clarificationError, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
+  ChatWorkspace: ({ messages, chatMode, planDraft, runStatus, isStreaming, isCanceling, clarificationLoading, clarificationError, clarifications=[], onContinue, onClarificationResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
     chatMode: string;
     planDraft: string;
     messages: Array<{ content: string }>; runStatus: string; isStreaming: boolean; isCanceling: boolean;
-    onContinue: () => void; onResume: (input?: string) => void; onCancel: () => void;
+    onContinue: () => void; onClarificationResume: (question:Clarification, answers:Record<string,string>) => void; onCancel: () => void;
     onTaskStateRefresh: () => void; taskState: { version: number } | null; taskStateError: string;
     taskStateLoading: boolean;
-    clarificationLoading?: boolean; clarificationError?: string;
+    clarificationLoading?: boolean; clarificationError?: string; clarifications?:Clarification[];
   }) => (
     <div><output aria-label="Restored mode">{chatMode}</output>{messages.map((message, index) => <p data-testid="message" key={index}>{message.content}</p>)}<output>{runStatus}</output><output>{planDraft}</output>
       <output aria-label="Command state">{isStreaming ? "busy" : "idle"}</output>
       <output aria-label="Cancel state">{isCanceling ? "canceling" : "idle"}</output>
-      <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onContinue()}>Continue</button><button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onResume()}>Resume</button><button onClick={onCancel}>Cancel run</button>
-      <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onResume("answer")}>Resume with input</button>
+      <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onContinue()}>Continue</button><button disabled={clarificationLoading || Boolean(clarificationError) || !clarifications.length} onClick={() => onClarificationResume(clarifications[0],{})}>Resume</button><button onClick={onCancel}>Cancel run</button>
       <button onClick={onTaskStateRefresh}>Refresh task state</button>
       <output aria-label="Task version">{taskState?.version}</output>
       <output aria-label="Task error">{taskStateError}</output>
@@ -561,21 +561,22 @@ it("does not roll back partial output or resubmit a consumed prompt on transport
 for (const command of ["Continue", "Resume"] as const) {
   it(`${command} failure before the first event restores the waiting Run and removes its draft`, async () => {
     setupAPI();
-    let finishClarifications!: (items: []) => void;
+    const questions: Clarification[] = command === "Resume" ? [{id:"question-1",run_id:"waiting",conversation_id:"a",turn_id:"turn-1",version:1,status:"answered",created_at:"2026-11-18T00:00:00Z",expires_at:"2026-11-19T00:00:00Z",questions:[{id:"audience",question:"Who is the audience?"}],answers:{audience:"Engineers"}}] : [];
+    let finishClarifications!: (items: Clarification[]) => void;
+    listClarifications.mockResolvedValue(questions);
     listClarifications.mockImplementationOnce(() => new Promise(resolve => { finishClarifications = resolve; }));
     api.listRuns.mockResolvedValue([{ id: "waiting", conversation_id: "a", status: "waiting_for_user", verification_status: "pending" }]);
     api.listCollaborationSteps.mockResolvedValue([{ id: "stage", role: command === "Continue" ? "planner" : "human_input", status: command === "Continue" ? "completed" : "running", output: "approved plan" }]);
-    const request = command === "Continue" ? api.continueRun : api.resumeRun;
+    const request = command === "Continue" ? api.continueRun : resumeClarification;
     request.mockRejectedValue(new Error("request rejected"));
     render(<ChatShell initialConversationId="a" />);
     await screen.findByText("waiting_for_user");
     if (command === "Continue") await screen.findByText("approved plan");
-    const button = screen.getByRole("button", { name: command === "Resume" ? "Resume with input" : command });
+    const button = screen.getByRole("button", { name: command });
     expect((button as HTMLButtonElement).disabled).toBe(true);
     expect(request).not.toHaveBeenCalled();
-    await act(async () => finishClarifications([]));
+    await act(async () => finishClarifications(questions));
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
-    // Resume reads the supplied answer, not a fabricated Run/Stage identity.
     fireEvent.click(button);
     await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
     await screen.findByText("request rejected");

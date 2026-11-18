@@ -69,7 +69,7 @@ func TestResumeRoutesPersistedRecoveryState(t *testing.T) {
 		{"single unsupported", agent.ChatModeSingle, domain.RunFailedRecoverable, "", "resume", ""},
 		{"multi recovery", agent.ChatModeMultiAgent, domain.RunFailedRecoverable, "", "", "multi"},
 		{"autonomous recovery", agent.ChatModeAutonomous, domain.RunFailedRecoverable, "", "", "autonomous"},
-		{"legacy human input", agent.ChatModeAutonomous, domain.RunWaitingForUser, "", "answer", "human"},
+		{"legacy human input", agent.ChatModeAutonomous, domain.RunWaitingForUser, "", "answer", ""},
 		{"multi approval is not resume", agent.ChatModeMultiAgent, domain.RunWaitingForUser, "", "answer", ""},
 		{"answered single", agent.ChatModeSingle, domain.RunWaitingForUser, "answered", "", "clarification"},
 		{"applied single", agent.ChatModeSingle, domain.RunFailedRecoverable, "applied", "", "clarification"},
@@ -182,9 +182,6 @@ func (r *recoveryRuntime) probe(route string) (<-chan domain.RunEvent, <-chan er
 	errs <- errors.New("runtime probe")
 	close(errs)
 	return events, errs
-}
-func (r *recoveryRuntime) ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error) {
-	return r.probe("human")
 }
 func (r *recoveryRuntime) ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error) {
 	return r.probe("autonomous")

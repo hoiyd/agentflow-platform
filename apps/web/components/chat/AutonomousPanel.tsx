@@ -50,30 +50,18 @@ export function toAutonomousProgress(event: {
 }
 
 type AutonomousPanelProps = {
-  humanInputDraft: string;
-  isBusy: boolean;
   isCanceling: boolean;
-  isResuming: boolean;
   onCancel: () => void;
   onCollapse: () => void;
-  onHumanInputChange: (value: string) => void;
-  onResume: (value?: string) => void;
-  hasStructuredClarification?:boolean;
   progress: AutonomousProgress | null;
   runStatus: string;
   steps: CollaborationStepView[];
 };
 
 export function AutonomousPanel({
-  humanInputDraft,
-  isBusy,
   isCanceling,
-  isResuming,
   onCancel,
   onCollapse,
-  onHumanInputChange,
-  onResume,
-  hasStructuredClarification=false,
   progress,
   runStatus,
   steps
@@ -82,7 +70,6 @@ export function AutonomousPanel({
   const latestIteration = progress?.iteration ?? activeIterations[activeIterations.length - 1]?.iteration ?? 0;
   const completedSteps = steps.filter((step) => step.status === "completed").length;
   const canStop = runStatus === "running" || runStatus === "canceling" || runStatus === "waiting_for_user";
-  const humanInputStep = steps.find((step) => step.role === "human_input" && step.status === "running");
 
   return (
     <aside className="collaboration-panel autonomous-panel" aria-label="Autonomous trace">
@@ -129,30 +116,6 @@ export function AutonomousPanel({
         ) : null}
       </div>
       <div className="autonomous-scroll-area">
-        {humanInputStep && !hasStructuredClarification ? (
-          <section className="human-input-panel" aria-label="Human input required">
-            <div className="human-input-header">
-              <div>
-                <span>Input required</span>
-                <strong>{humanInputStep.output || "Please provide the missing information."}</strong>
-              </div>
-              <button
-                disabled={isBusy || isResuming || humanInputDraft.trim().length === 0}
-                onClick={() => onResume(humanInputDraft)}
-                type="button"
-              >
-                {isResuming ? "Continuing..." : "Submit & Continue"}
-              </button>
-            </div>
-            {humanInputStep.input ? <p>{humanInputStep.input}</p> : null}
-            <textarea
-              disabled={isResuming}
-              onChange={(event) => onHumanInputChange(event.target.value)}
-              placeholder="Provide the missing details..."
-              value={humanInputDraft}
-            />
-          </section>
-        ) : null}
         <div className="autonomous-iterations">
           {activeIterations.length === 0 ? (
             <div className="autonomous-empty">Waiting for the first autonomous iteration.</div>

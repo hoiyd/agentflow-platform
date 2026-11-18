@@ -26,7 +26,6 @@ type ChatComposerProps = {
   isAgentDescriptionExpanded: boolean;
   isAwaitingClarification?: boolean;
   isAwaitingToolApproval?: boolean;
-  isAwaitingHumanInput: boolean;
   isAwaitingPlanApproval: boolean;
   isCreatingAgent: boolean;
   isNewAgentFormOpen: boolean;
@@ -55,7 +54,6 @@ export function ChatComposer(props: ChatComposerProps) {
     isAgentDescriptionExpanded,
     isAwaitingClarification = false,
     isAwaitingToolApproval = false,
-    isAwaitingHumanInput,
     isAwaitingPlanApproval,
     isCreatingAgent,
     isNewAgentFormOpen,
@@ -70,7 +68,7 @@ export function ChatComposer(props: ChatComposerProps) {
     showAgentActions
   } = props;
   const needsAgent = chatMode === "single" && !activeAgent;
-  const awaitingInput = isAwaitingToolApproval || isAwaitingClarification || isAwaitingHumanInput || isAwaitingPlanApproval;
+  const awaitingInput = isAwaitingToolApproval || isAwaitingClarification || isAwaitingPlanApproval;
   const descriptionId = useId();
   const boundSkills = activeAgent?.skills ?? [];
   const hasAutomaticSkill = boundSkills.some(name => skillReadiness(props.availableSkills?.find(item => item.name === name), activeAgent!, props.availableTools).policy === "automatic");
@@ -179,9 +177,7 @@ export function ChatComposer(props: ChatComposerProps) {
               ? "Review the Tool approval above, then continue." : isAwaitingClarification
               ? "Answer the clarification above, then continue." : isAwaitingPlanApproval
               ? "Review and edit the plan in Collaboration Trace, then continue."
-              : isAwaitingHumanInput
-                ? "Answer the question in Autonomous Trace, then continue."
-                : "Ask AgentFlow anything..."
+              : "Ask AgentFlow anything..."
           }
         />
         <button

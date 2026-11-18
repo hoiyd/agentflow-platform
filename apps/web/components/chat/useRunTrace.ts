@@ -13,7 +13,6 @@ function emptyRoutingRequirements(): AgentRoutingRequirements {
 export function useRunTrace() {
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
-  const [humanInputDraft, setHumanInputDraft] = useState("");
   const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
   const [routingRequirements, setRoutingRequirements] = useState<AgentRoutingRequirements>(emptyRoutingRequirements);
@@ -23,18 +22,16 @@ export function useRunTrace() {
     setAutonomousProgress(null);
     setPlanDraft("");
     setRoutingRequirements(emptyRoutingRequirements());
-    setHumanInputDraft("");
     setSelectedCollaborationRole("planner");
   }
 
   function restore(previous: {
     collaborationSteps: CollaborationStepView[]; autonomousProgress: AutonomousProgress | null;
-    humanInputDraft: string; selectedCollaborationRole: string; planDraft: string;
+    selectedCollaborationRole: string; planDraft: string;
     routingRequirements: AgentRoutingRequirements;
   }) {
     setCollaborationSteps(previous.collaborationSteps);
     setAutonomousProgress(previous.autonomousProgress);
-    setHumanInputDraft(previous.humanInputDraft);
     setSelectedCollaborationRole(previous.selectedCollaborationRole);
     setPlanDraft(previous.planDraft);
     setRoutingRequirements(previous.routingRequirements);
@@ -42,7 +39,7 @@ export function useRunTrace() {
 
   return {
     collaborationSteps, setCollaborationSteps, autonomousProgress, setAutonomousProgress,
-    humanInputDraft, setHumanInputDraft, selectedCollaborationRole, setSelectedCollaborationRole,
+    selectedCollaborationRole, setSelectedCollaborationRole,
     planDraft, setPlanDraft, routingRequirements, setRoutingRequirements, reset, restore
   };
 }

@@ -71,89 +71,6 @@ func (r *Runtime) RunAutonomous(ctx context.Context, prepared PreparedCollaborat
 	})
 }
 
-func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput string) (<-chan domain.RunEvent, <-chan error) {
-	events := make(chan domain.RunEvent)
-	errs := make(chan error, 1)
-
-	go func() {
-		defer close(events)
-		defer close(errs)
-
-		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
-		if err != nil {
-			errs <- rejectRecovery(err)
-			return
-		}
-		if !ok {
-			errs <- rejectRecovery(fmt.Errorf("run not found"))
-			return
-		}
-		if run.Status != domain.RunWaitingForUser {
-			errs <- rejectRecovery(fmt.Errorf("run is not waiting for user input"))
-			return
-		}
-
-		steps, err := r.store.ListCollaborationSteps(run.ID)
-		if err != nil {
-			errs <- rejectRecovery(err)
-			return
-		}
-		checkpoint := latestHumanInputStep(steps)
-		if checkpoint == nil || checkpoint.Status != domain.CollaborationStepRunning {
-			errs <- rejectRecovery(fmt.Errorf("human input checkpoint not found"))
-			return
-		}
-		userInput = strings.TrimSpace(userInput)
-		if userInput == "" {
-			errs <- rejectRecovery(fmt.Errorf("user input is required"))
-			return
-		}
-
-		restored, err := r.restoreRuntime(run)
-		if err != nil {
-			errs <- rejectRecovery(err)
-			return
-		}
-		if restored.mode != ChatModeAutonomous {
-			errs <- rejectRecovery(fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous))
-			return
-		}
-		if err := r.resetProgressGuard(run); err != nil {
-			errs <- rejectRecovery(err)
-			return
-		}
-
-		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
-		if err != nil {
-			errs <- err
-			return
-		}
-		completedCheckpoint, err := r.store.UpdateCollaborationStep(checkpoint.ID, domain.CollaborationStepCompleted, userInput, "")
-		if err != nil {
-			errs <- err
-			return
-		}
-		log.Printf("autonomous_resume run_id=%s checkpoint_id=%s input_len=%d", run.ID, checkpoint.ID, len(userInput))
-		if err := r.publishStage(ctx, completedCheckpoint, domain.EventStageCompleted); err != nil {
-			errs <- err
-			return
-		}
-		events <- liveRunEvent(run)
-		events <- liveStageEvent(completedCheckpoint)
-
-		state := rebuildAutonomousState(steps, completedCheckpoint)
-		prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
-		resumedEvents, resumedErrs := r.runAutonomousFromState(ctx, prepared, firstAutonomousTask(steps), state)
-		for event := range resumedEvents {
-			events <- event
-		}
-		if err := <-resumedErrs; err != nil {
-			errs <- err
-		}
-	}()
-	return events, errs
-}
-
 func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string, recoveryNote string) (<-chan domain.RunEvent, <-chan error) {
 	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
@@ -417,6 +334,10 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			log.Printf("autonomous_iteration_decision run_id=%s iteration=%d decision=%s reason=%q output_chars=%d", prepared.Run.ID, iteration, decision.Decision, decision.Reason, outputChars)
 
 			if decision.Decision == "ask_user" {
+				if r.clarifications == nil {
+					errs <- errors.New("autonomous human input requires a clarification store")
+					return
+				}
 				question := strings.TrimSpace(decision.Question)
 				if question == "" {
 					question = "Please provide the missing information needed to continue."
@@ -435,25 +356,15 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					errs <- err
 					return
 				}
-				run := prepared.Run
-				if r.clarifications == nil {
-					run, err = r.transitionRun(prepared.Run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"question": question})
-				}
-				if err != nil {
-					errs <- err
-					return
-				}
 				log.Printf("autonomous_waiting_for_user run_id=%s iteration=%d question=%q reason=%q", prepared.Run.ID, iteration, question, decision.Reason)
 				if err := r.publishStage(executionCtx, step, domain.EventStageStarted); err != nil {
 					errs <- err
 					return
 				}
-				if r.clarifications != nil {
-					run, err = r.suspendHumanInputClarification(executionCtx, prepared, step, question, task)
-					if err != nil {
-						errs <- err
-						return
-					}
+				run, err := r.suspendHumanInputClarification(executionCtx, prepared, step, question, task)
+				if err != nil {
+					errs <- err
+					return
 				}
 				events <- liveStageEvent(step)
 				events <- liveRunEvent(run)
