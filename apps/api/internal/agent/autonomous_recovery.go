@@ -8,19 +8,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func latestHumanInputStep(steps []domain.CollaborationStep) *domain.CollaborationStep {
-	var latest *domain.CollaborationStep
-	for i := range steps {
-		if steps[i].Role != "human_input" {
-			continue
-		}
-		if latest == nil || steps[i].CreatedAt.After(latest.CreatedAt) {
-			latest = &steps[i]
-		}
-	}
-	return latest
-}
-
 func firstAutonomousTask(steps []domain.CollaborationStep) string {
 	for _, step := range steps {
 		if step.Role == "observe" && strings.TrimSpace(step.Input) != "" {

@@ -21,6 +21,8 @@ for(const mode of ["Single agent","Multi-agent","Bounded loop"]){
   await page.getByRole("button",{name:"Send message",exact:true}).click();
   const panel=page.getByRole("region",{name:"Run clarification",exact:true});
   await expect(panel.getByText("Who is the audience?",{exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Submit & Continue",exact:true})).toHaveCount(0);
+  await test.info().attach("clarification-paused.png",{body:await page.screenshot(),contentType:"image/png"});
   if(mode==="Multi-agent")await expect(page.getByRole("button",{name:"Approve & Continue"})).toHaveCount(0);
   const runId=(await page.getByRole("link",{name:"View trace"}).getAttribute("href"))!.split("/").at(-1)!;
   const read=async(path:string)=>{const response=await request.get(`${api}${path}`,{headers:{"X-Workspace-ID":workspace}});expect(response.ok()).toBe(true);return response.json();};

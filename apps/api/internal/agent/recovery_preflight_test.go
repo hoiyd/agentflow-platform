@@ -9,10 +9,10 @@ import (
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 )
 
-// Failure inventory: stale Run status, wrong frozen mode, and missing human
-// input must reject without writing Run, Stage, or lifecycle events.
+// Failure inventory: stale Run status and wrong frozen mode must reject
+// without writing Run, Stage, or lifecycle events.
 func TestRecoveryPreflightRejectsWithoutMutation(t *testing.T) {
-	for _, entry := range []string{"human", "autonomous", "collaboration", "continue"} {
+	for _, entry := range []string{"autonomous", "collaboration", "continue"} {
 		t.Run(entry, func(t *testing.T) {
 			storage := fixturestore.New()
 			runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, newHTTPFixtureClientForTest())
@@ -29,8 +29,6 @@ func TestRecoveryPreflightRejectsWithoutMutation(t *testing.T) {
 			var events <-chan domain.RunEvent
 			var errs <-chan error
 			switch entry {
-			case "human":
-				events, errs = runtime.ResumeAutonomous(t.Context(), before.ID, "answer")
 			case "autonomous":
 				events, errs = runtime.ResumeRecoverableAutonomous(t.Context(), before.ID, "")
 			case "collaboration":
@@ -56,48 +54,29 @@ func TestRecoveryPreflightRejectsWithoutMutation(t *testing.T) {
 }
 
 func TestAutonomousForwardedExecutionFailureIsNotPreflight(t *testing.T) {
-	for _, recoverable := range []bool{false, true} {
-		t.Run(map[bool]string{false: "human input", true: "recovery"}[recoverable], func(t *testing.T) {
-			storage := &postResumeReadFailure{Store: fixturestore.New()}
-			runtime := newRuntimeForTest(RuntimeOptions{Store: storage, CheckpointProvider: &checkpointProviderStub{}}, newHTTPFixtureClientForTest())
-			conv, err := storage.CreateConversation("Post-resume failure")
-			if err != nil {
-				t.Fatal(err)
-			}
-			prepared, err := runtime.PrepareAutonomousRunWithContract(t.Context(), "agent_planner", conv.ID, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			status := domain.RunWaitingForUser
-			if recoverable {
-				status = domain.RunFailedRecoverable
-			} else {
-				_, err = storage.CreateCollaborationStep(domain.CollaborationStep{RunID: prepared.Run.ID, ConversationID: conv.ID, Role: "human_input", Status: domain.CollaborationStepRunning, Iteration: 1, Input: "task"})
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			if _, err = storage.UpdateRunStatus(prepared.Run.ID, status, ""); err != nil {
-				t.Fatal(err)
-			}
-			storage.failRunning.Store(true)
-			var events <-chan domain.RunEvent
-			var errs <-chan error
-			if recoverable {
-				events, errs = runtime.ResumeRecoverableAutonomous(t.Context(), prepared.Run.ID, "")
-			} else {
-				events, errs = runtime.ResumeAutonomous(t.Context(), prepared.Run.ID, "answer")
-			}
-			accepted := false
-			for event := range events {
-				accepted = accepted || event.Type == domain.EventRunStarted
-			}
-			err = <-errs
-			var rejected *PreExecutionRejection
-			if !accepted || err == nil || errors.As(err, &rejected) {
-				t.Fatalf("execution failure became preflight: accepted=%v error=%v", accepted, err)
-			}
-		})
+	storage := &postResumeReadFailure{Store: fixturestore.New()}
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, CheckpointProvider: &checkpointProviderStub{}}, newHTTPFixtureClientForTest())
+	conv, err := storage.CreateConversation("Post-resume failure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := runtime.PrepareAutonomousRunWithContract(t.Context(), "agent_planner", conv.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, ""); err != nil {
+		t.Fatal(err)
+	}
+	storage.failRunning.Store(true)
+	events, errs := runtime.ResumeRecoverableAutonomous(t.Context(), prepared.Run.ID, "")
+	accepted := false
+	for event := range events {
+		accepted = accepted || event.Type == domain.EventRunStarted
+	}
+	err = <-errs
+	var rejected *PreExecutionRejection
+	if !accepted || err == nil || errors.As(err, &rejected) {
+		t.Fatalf("execution failure became preflight: accepted=%v error=%v", accepted, err)
 	}
 }
 

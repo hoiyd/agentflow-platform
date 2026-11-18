@@ -9,39 +9,33 @@ import { ReasoningDisclosure } from "./ReasoningDisclosure";
 
 afterEach(cleanup);
 
-for (const mode of ["multi_agent", "autonomous"] as const) {
-  for (const read of ["delayed", "failed"] as const) {
-    it(`${mode} hides continuation sections while clarification hydration is ${read}`, () => {
-      const onContinue = vi.fn();
-      const onResume = vi.fn();
-      const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
-        chatMode: mode, runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
-        showCollaborationPanel: true, showAutonomousTrace: mode === "autonomous",
-        clarifications: [], clarificationLoading: read === "delayed",
-        clarificationError: read === "failed" ? "Clarification read unavailable" : "",
-        onContinue, onResume,
-        collaborationSteps: mode === "multi_agent" ? [{role:"planner",status:"completed"}]
-          : [{role:"human_input",status:"running",output:""}]
-      };
-      const view = render(workspace([], false, [], props));
-      const region = mode === "multi_agent" ? "Review generated plan" : "Human input required";
-      const button = mode === "multi_agent" ? "Approve & Continue" : "Submit & Continue";
-      expect(screen.queryByRole("region", {name:region})).toBeNull();
-      expect(screen.queryByRole("button", {name:button})).toBeNull();
-      if (read === "failed") expect(screen.getByRole("alert").textContent).toBe("Clarification read unavailable");
-      view.rerender(workspace([], false, [], {...props,isCollaborationPanelOpen:false}));
-      expect(screen.queryByRole("button", {name:"Review Plan & Continue"})).toBeNull();
-      expect(screen.getByRole("button", {name:mode === "multi_agent" ? "Show Collaboration Trace" : "Show Autonomous Trace"})).toBeTruthy();
-      expect(onContinue).not.toHaveBeenCalled();
-      expect(onResume).not.toHaveBeenCalled();
-      view.rerender(workspace([], false, [], {...props,clarificationLoading:false,clarificationError:"",planDraft:"Approved plan",humanInputDraft:"Approved input"}));
-      expect(screen.queryByRole("alert")).toBeNull();
-      expect(screen.getByRole("region", {name:region})).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", {name:button}));
-      if (mode === "multi_agent") expect(onContinue).toHaveBeenCalledWith("Approved plan",{});
-      else expect(onResume).toHaveBeenCalledWith("Approved input");
-    });
-  }
+for (const read of ["delayed", "failed"] as const) {
+  it(`multi_agent hides continuation sections while clarification hydration is ${read}`, () => {
+    const onContinue = vi.fn();
+    const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
+      chatMode: "multi_agent", runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
+      showCollaborationPanel: true, showAutonomousTrace: false,
+      clarifications: [], clarificationLoading: read === "delayed",
+      clarificationError: read === "failed" ? "Clarification read unavailable" : "",
+      onContinue,
+      collaborationSteps: [{role:"planner",status:"completed"}]
+    };
+    const view = render(workspace([], false, [], props));
+    const region = "Review generated plan";
+    const button = "Approve & Continue";
+    expect(screen.queryByRole("region", {name:region})).toBeNull();
+    expect(screen.queryByRole("button", {name:button})).toBeNull();
+    if (read === "failed") expect(screen.getByRole("alert").textContent).toBe("Clarification read unavailable");
+    view.rerender(workspace([], false, [], {...props,isCollaborationPanelOpen:false}));
+    expect(screen.queryByRole("button", {name:"Review Plan & Continue"})).toBeNull();
+    expect(screen.getByRole("button", {name:"Show Collaboration Trace"})).toBeTruthy();
+    expect(onContinue).not.toHaveBeenCalled();
+    view.rerender(workspace([], false, [], {...props,clarificationLoading:false,clarificationError:"",planDraft:"Approved plan"}));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("region", {name:region})).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name:button}));
+    expect(onContinue).toHaveBeenCalledWith("Approved plan",{});
+  });
 }
 
 for (const read of ["delayed", "failed"] as const) {
@@ -64,26 +58,22 @@ for (const read of ["delayed", "failed"] as const) {
   });
 }
 
-for (const mode of ["multi_agent", "autonomous"] as const) {
-  it(`${mode} waits for command settlement before accepting human continuation`, () => {
-    const onContinue = vi.fn();
-    const onResume = vi.fn();
-    const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
-      chatMode: mode, runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
-      showCollaborationPanel: true, showAutonomousTrace: mode === "autonomous",
-      planDraft: "Approved plan", humanInputDraft: "Approved input", onContinue, onResume,
-      collaborationSteps: mode === "multi_agent" ? [{ role: "planner", status: "completed" }]
-        : [{ role: "human_input", status: "running", output: "Confirm" }]
-    };
-    const view = render(workspace([], true, [], props));
-    const name = mode === "multi_agent" ? "Approve & Continue" : "Submit & Continue";
-    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
-    view.rerender(workspace([], false, [], { ...props, isCanceling: true }));
-    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
-    view.rerender(workspace([], false, [], props));
-    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(false);
-  });
-}
+it("multi_agent waits for command settlement before accepting plan continuation", () => {
+  const onContinue = vi.fn();
+  const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
+    chatMode: "multi_agent", runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
+    showCollaborationPanel: true, showAutonomousTrace: false,
+    planDraft: "Approved plan", onContinue,
+    collaborationSteps: [{ role: "planner", status: "completed" }]
+  };
+  const view = render(workspace([], true, [], props));
+  const name = "Approve & Continue";
+  expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+  view.rerender(workspace([], false, [], { ...props, isCanceling: true }));
+  expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+  view.rerender(workspace([], false, [], props));
+  expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(false);
+});
 
 it("shows live reasoning separately and drops unfinished text when the Run stops", () => {
   const entry: ReasoningEntry = { run_id: "run-1", turn_id: "turn-1", model_call_id: "call-1", format: "deepseek_reasoning_content", status: "receiving", text: "Safe live prefix" };
@@ -148,7 +138,6 @@ function workspace(messages: Message[], isStreaming: boolean, reasoning: Reasoni
     autonomousProgress={null}
     chatMode="single"
     collaborationSteps={[]}
-    humanInputDraft=""
     isCanceling={false}
     isCollaborationPanelOpen={false}
     isContinuing={false}
@@ -160,11 +149,9 @@ function workspace(messages: Message[], isStreaming: boolean, reasoning: Reasoni
     messagesRef={{ current: null }}
     onCancel={noop}
     onContinue={noop}
-    onHumanInputChange={noop}
     onModeChange={noop}
     onPanelOpenChange={noop}
     onPromptSelect={noop}
-    onResume={noop}
     onRoleSelect={noop}
     onRoutingRequirementsChange={noop}
     onTaskStateClose={noop}

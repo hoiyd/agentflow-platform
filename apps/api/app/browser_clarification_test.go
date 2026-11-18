@@ -67,8 +67,8 @@ func (f *browserProvider) clarificationResponse(w http.ResponseWriter, input bro
 	reason := "stop"
 	var calls []any
 	var thinking *string
-	legacy := strings.Contains(input.currentTask(), "clarification-gate-legacy")
-	if input.Stream && control && !answerSeen && !legacy {
+	textAsk := strings.Contains(input.currentTask(), "clarification-gate-text")
+	if input.Stream && control && !answerSeen && !textAsk {
 		content = ""
 		reason = "tool_calls"
 		v := "CLARIFICATION_PROTOCOL_CANARY"
@@ -80,7 +80,7 @@ func (f *browserProvider) clarificationResponse(w http.ResponseWriter, input bro
 			content = `{"decision":"stop","reason":"task complete","question":"","final_answer":"Report for Engineering leads."}`
 		}
 	}
-	if legacy {
+	if textAsk {
 		content = "Ready to prepare the report."
 		for _, m := range input.Messages {
 			if m.Role == "system" && strings.Contains(m.Content, "Decide stage") {

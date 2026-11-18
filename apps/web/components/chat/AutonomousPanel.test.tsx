@@ -1,24 +1,18 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { AutonomousPanel, toAutonomousProgress } from "./AutonomousPanel";
 
 afterEach(cleanup);
 
-it("shows the loop trace and submits required human input", () => {
-  const onResume = vi.fn();
+it("keeps historical human input readable without offering legacy submission", () => {
   const progress = toAutonomousProgress({ iteration: 2, max_iterations: 4, tool_calls: 1, max_tool_calls: 3 });
 
   render(
     <AutonomousPanel
-      humanInputDraft="Proceed with the report"
-      isBusy={false}
       isCanceling={false}
-      isResuming={false}
       onCancel={vi.fn()}
       onCollapse={vi.fn()}
-      onHumanInputChange={vi.fn()}
-      onResume={onResume}
       progress={progress}
       runStatus="waiting_for_user"
       steps={[
@@ -30,7 +24,8 @@ it("shows the loop trace and submits required human input", () => {
 
   expect(screen.getByText("Iteration 2")).toBeTruthy();
   expect(screen.getByText("Found the source")).toBeTruthy();
-  expect(within(screen.getByRole("region", { name: "Human input required" })).getByText("Confirm the next step")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Submit & Continue" }));
-  expect(onResume).toHaveBeenCalledWith("Proceed with the report");
+  expect(screen.getAllByText("Confirm the next step").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("region", { name: "Human input required" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Submit & Continue" })).toBeNull();
+  expect(screen.queryByRole("textbox")).toBeNull();
 });

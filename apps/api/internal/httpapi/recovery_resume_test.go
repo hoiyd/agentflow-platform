@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +22,44 @@ import (
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestLegacyAutonomousResumeRejectsAndKeepsHistory(t *testing.T) {
+	storage := fixturestore.New()
+	conversation, err := storage.CreateConversation("Legacy waiting Run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := storage.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.CreateCollaborationStep(domain.CollaborationStep{RunID: run.ID, ConversationID: conversation.ID, Role: "human_input", Status: domain.CollaborationStepRunning, Output: "Which project?", Iteration: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = storage.UpdateRunStatus(run.ID, domain.RunWaitingForUser, ""); err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := storage.GetRunReplay(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: storage, agentRuntime: newRuntimeForTest(agent.RuntimeOptions{Store: storage}, nil),
+		runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
+	response := httptest.NewRecorder()
+	handler.resumeRun(response, httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", strings.NewReader(`{"user_input":"AgentFlow"}`)))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "retired") {
+		t.Fatalf("legacy Resume: %d %s", response.Code, response.Body.String())
+	}
+	after, found, err := storage.GetRunReplay(run.ID)
+	if err != nil || !found || !reflect.DeepEqual(before.Run, after.Run) || !reflect.DeepEqual(before.Steps, after.Steps) || !reflect.DeepEqual(before.RunEvents, after.RunEvents) {
+		t.Fatalf("legacy rejection changed history: %v", err)
+	}
+	response = httptest.NewRecorder()
+	handler.getRunReplay(response, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Which project?") {
+		t.Fatalf("legacy Replay: %d %s", response.Code, response.Body.String())
+	}
+}
 
 func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	fixtureStore := fixturestore.New()
@@ -78,7 +117,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", bytes.NewReader([]byte(`{"user_input":"Resume from test"}`)))
 	recorder := httptest.NewRecorder()
 	handler.resumeRun(recorder, req)
-	if probe.ordinary != 0 || probe.autonomous != 1 || probe.collaboration != 0 {
+	if probe.autonomous != 1 || probe.collaboration != 0 {
 		t.Fatalf("Resume must invoke exactly one matching entry: %+v", probe)
 	}
 	if recorder.Code != http.StatusOK {
@@ -191,7 +230,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableStages(t *testing.T)
 	}
 	recorder := httptest.NewRecorder()
 	handler.resumeRun(recorder, httptest.NewRequest(http.MethodPost, "/api/runs/"+prepared.Run.ID+"/resume", bytes.NewReader([]byte(`{}`))))
-	if probe.ordinary != 0 || probe.autonomous != 0 || probe.collaboration != 1 {
+	if probe.autonomous != 0 || probe.collaboration != 1 {
 		t.Fatalf("Resume must invoke exactly one matching entry: %+v", probe)
 	}
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: done") {
@@ -348,12 +387,7 @@ func resumeFailurePolicy(err error) (int, bool) {
 
 type resumeEntryProbe struct {
 	AgentRuntimeOperations
-	ordinary, autonomous, collaboration int
-}
-
-func (p *resumeEntryProbe) ResumeAutonomous(ctx context.Context, id, input string) (<-chan domain.RunEvent, <-chan error) {
-	p.ordinary++
-	return p.AgentRuntimeOperations.ResumeAutonomous(ctx, id, input)
+	autonomous, collaboration int
 }
 
 func (p *resumeEntryProbe) ResumeRecoverableAutonomous(ctx context.Context, id, input string) (<-chan domain.RunEvent, <-chan error) {

@@ -73,7 +73,7 @@ Route presence alone does not prove full behavioral or nested-schema coverage.
 | --- | --- |
 | Chat | Creates a Run with frozen effective Agent(s), routes, Tools, context, and budget. Mode is `single`, `multi_agent`, or `autonomous`. |
 | Continue | Approves/edits a Multi plan; optional routing requirements restrict frozen candidates without granting authority. |
-| Resume | Continues the same Run from a human/recovery checkpoint using its Snapshot. Stale/non-recoverable requests or unresolved Tool Effects return 409. |
+| Resume | Continues the same Run from a recovery checkpoint or bound Clarification using its Snapshot. Stale/non-recoverable requests, unbound legacy waits or unresolved Tool Effects return 409. |
 | Cancel | Explicit backend cancellation; browser disconnect alone does not cancel an admitted Run. |
 | Verify | Retries the frozen contract against the latest persisted candidate within its attempt cap; ordinary uncontracted Runs return 409. |
 | Collaboration steps | Persisted Stage records; each `CollaborationStep.id` is its event `stage_id`. Workers have no separate Child Run API. |

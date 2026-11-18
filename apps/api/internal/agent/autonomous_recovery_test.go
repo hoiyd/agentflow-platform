@@ -9,65 +9,6 @@ import (
 	"time"
 )
 
-func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
-	fixtureStore := fixturestore.New()
-
-	conversation, err := fixtureStore.CreateConversation("HITL test")
-	if err != nil {
-		t.Fatalf("create conversation: %v", err)
-	}
-	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
-		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-	}}, newHTTPFixtureClientForTest())
-	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
-	if err != nil {
-		t.Fatalf("prepare autonomous run: %v", err)
-	}
-	checkpoint, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
-		RunID:          prepared.Run.ID,
-		ConversationID: conversation.ID,
-		Role:           "human_input",
-		AgentID:        prepared.WorkerAgent.ID,
-		Status:         domain.CollaborationStepRunning,
-		Iteration:      1,
-		Input:          "missing project",
-		Output:         "Which project?",
-	})
-	if err != nil {
-		t.Fatalf("create checkpoint: %v", err)
-	}
-	if _, err := fixtureStore.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, ""); err != nil {
-		t.Fatalf("mark waiting: %v", err)
-	}
-
-	events, errs := runtime.ResumeAutonomous(context.Background(), prepared.Run.ID, "AgentFlow")
-	for range events {
-	}
-	if err := <-errs; err != nil {
-		t.Fatalf("resume autonomous: %v", err)
-	}
-	updated, ok, err := fixtureStore.GetRun(prepared.Run.ID)
-	if err != nil || !ok {
-		t.Fatalf("get run after resume: %v", err)
-	}
-	if updated.Status == domain.RunWaitingForUser {
-		t.Fatalf("expected run to leave waiting_for_user")
-	}
-	steps, err := fixtureStore.ListCollaborationSteps(prepared.Run.ID)
-	if err != nil {
-		t.Fatalf("list steps: %v", err)
-	}
-	foundCompletedCheckpoint := false
-	for _, step := range steps {
-		if step.ID == checkpoint.ID && step.Status == domain.CollaborationStepCompleted && step.Output == "AgentFlow" {
-			foundCompletedCheckpoint = true
-		}
-	}
-	if !foundCompletedCheckpoint {
-		t.Fatal("expected completed human input checkpoint")
-	}
-}
-
 func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 	fixtureStore := fixturestore.New()
 

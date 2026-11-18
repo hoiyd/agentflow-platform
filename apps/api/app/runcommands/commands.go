@@ -24,7 +24,6 @@ type Runtime interface {
 	RunCollaboration(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
 	ContinueCollaboration(context.Context, string, string, domain.AgentRoutingRequirements) (<-chan domain.RunEvent, <-chan error)
 	RunAutonomous(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
-	ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeRecoverableCollaboration(context.Context, string) (<-chan domain.RunEvent, <-chan error)
 }

@@ -3,12 +3,62 @@ package agent
 import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestAutonomousInputRequiresClarificationStore(t *testing.T) {
+	const completion = `{"choices":[{"message":{"role":"assistant","content":"{\"decision\":\"ask_user\",\"reason\":\"missing project\",\"question\":\"Which project?\"}"},"finish_reason":"stop"}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct{ Stream bool }
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		body := completion
+		if request.Stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			body, _ = modelstream.Completion(completion)
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	defer server.Close()
+	storage := fixturestore.New()
+	conversation, err := storage.CreateConversation("Missing clarification store")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-only", server.URL, server.URL, "fixture-model", "local_hash_embedding", 1536, time.Second)
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage}, client)
+	prepared, err := runtime.PrepareAutonomousRunWithContract(t.Context(), "agent_planner", conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, failures := runtime.RunAutonomous(t.Context(), prepared, "Prepare the project report")
+	for range events {
+	}
+	if err := <-failures; err == nil || !strings.Contains(err.Error(), "clarification store") {
+		t.Fatalf("missing dependency created an unbound pause: %v", err)
+	}
+	run, _, _ := storage.GetRun(prepared.Run.ID)
+	steps, _ := storage.ListCollaborationSteps(run.ID)
+	if run.Status == domain.RunWaitingForUser {
+		t.Fatal("Run paused without a durable clarification")
+	}
+	for _, step := range steps {
+		if step.Role == "human_input" {
+			t.Fatal("unbound human-input Stage was created")
+		}
+	}
+}
 
 func TestParseAutonomousDecision(t *testing.T) {
 	decision := parseAutonomousDecision(`{"decision":"stop","reason":"done","final_answer":"Complete."}`)

@@ -17,7 +17,7 @@ type Options = {
 export function useConversationHistory({ workspace, session, onModeRestored: handleChatModeChange }: Options) {
   const { activeId, setActiveId, setConversations, setMessages, setError } = workspace;
   const { setRunState } = session;
-  const { setCollaborationSteps, setPlanDraft, setHumanInputDraft } = session.trace;
+  const { setCollaborationSteps, setPlanDraft } = session.trace;
   const [taskState, setTaskState] = useState<TaskState | null>(null);
   const [taskStateError, setTaskStateError] = useState("");
   const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
@@ -201,8 +201,6 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
       handleChatModeChange("single", true);
     }
     setPlanDraft(steps.find((step) => step.role === "planner")?.output ?? "");
-    const humanInput = steps.some((step) => step.role === "human_input" && step.status === "running");
-    setHumanInputDraft((current) => humanInput ? current : "");
   }
 
   return { conversationRequests, activateConversation, refreshConversations, loadConversation, refreshTaskState,

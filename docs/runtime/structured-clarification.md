@@ -64,6 +64,13 @@ does not lose the saved answer. Wrong version, canceled/expired questions, an ol
 question or repeated successful Resume are rejected. Once SSE starts, execution
 errors use its error frame rather than changing the HTTP status.
 
+Unbound legacy Autonomous waits remain readable but cannot be resumed. The ordinary `/resume` endpoint
+rejects them with 409 and directs the user to start a new Conversation; records
+and Replay remain available, with no automatic conversion or deletion. Decide
+`ask_user` still creates a durable Clarification and uses its bound resume path.
+Without a Clarification Store, asking for input fails instead of creating an
+unrecoverable pause. Production composition supplies this Store.
+
 After a crash following claim, stale-run repair can mark the Run recoverable;
 Chat and Replay resume its latest applied receipt. Finished stages/output are
 reused. Uncertain effects or newer committed writes without a finished recovery
@@ -104,8 +111,8 @@ The [functional gate](../operations/functional-regression-testing.md) includes
 `clarification.spec.ts`: browser → production Go → disposable Postgres for all
 three modes, reload, free text and Replay receipts, with retained JSON evidence.
 Production integration additionally tests application restart, claimed-answer
-recovery, Stop/withdrawal, exhausted budgets, corrupted checkpoints and legacy
-Autonomous input; store tests cover owner/revocation, rollback and transaction
+recovery, Stop/withdrawal, exhausted budgets, corrupted checkpoints and the Decide
+text-to-Clarification bridge; store tests cover owner/revocation, rollback and transaction
 races. Strict provider fixtures verify actual resumed message pairs and context
 manifests/captures. These are protocol checks, not live-model quality measurements.
 

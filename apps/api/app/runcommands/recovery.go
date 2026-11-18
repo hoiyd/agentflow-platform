@@ -54,7 +54,7 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 		return err
 	}
 	if resume {
-		if _, err := c.resumeRoute(ctx, scope, run, input); err != nil {
+		if _, err := c.resumeRoute(ctx, scope, run); err != nil {
 			return err
 		}
 		effects, err := scoped.ListToolEffects(id)
@@ -89,7 +89,7 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 		return err
 	}
 	if resume {
-		questionID, err := c.resumeRoute(ctx, scope, run, input)
+		questionID, err := c.resumeRoute(ctx, scope, run)
 		if err != nil {
 			return err
 		}
@@ -105,8 +105,6 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	var errs <-chan error
 	if !resume {
 		events, errs = c.Runtime.ContinueCollaboration(ctx, id, plan, routing)
-	} else if run.Status != domain.RunFailedRecoverable {
-		events, errs = c.Runtime.ResumeAutonomous(ctx, id, input)
 	} else if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.Mode == agent.ChatModeMultiAgent {
 		events, errs = c.Runtime.ResumeRecoverableCollaboration(ctx, id)
 	} else {
@@ -165,7 +163,7 @@ func (c Commands) rejectUnboundToolApproval(ctx context.Context, scope Scope, ru
 	return nil
 }
 
-func (c Commands) resumeRoute(ctx context.Context, scope Scope, run domain.Run, input string) (string, error) {
+func (c Commands) resumeRoute(ctx context.Context, scope Scope, run domain.Run) (string, error) {
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
 		return "", commandError(Conflict, errors.New("run is not resumable in its current state"))
 	}
@@ -198,8 +196,8 @@ func (c Commands) resumeRoute(ctx context.Context, scope Scope, run domain.Run, 
 	if mode != agent.ChatModeAutonomous && (mode != agent.ChatModeMultiAgent || run.Status != domain.RunFailedRecoverable) {
 		return "", commandError(Conflict, errors.New("run mode does not support ordinary resume; use its bound continuation"))
 	}
-	if run.Status == domain.RunWaitingForUser && input == "" {
-		return "", commandError(Invalid, errors.New("user input is required"))
+	if run.Status == domain.RunWaitingForUser {
+		return "", commandError(Conflict, errors.New("legacy unbound human-input resume is retired; start a new conversation"))
 	}
 	return "", nil
 }
