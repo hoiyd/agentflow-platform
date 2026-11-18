@@ -29,16 +29,16 @@ func CompleteResumedTurn(ctx context.Context, scoped store.WorkspaceStore, depen
 	}()
 	bound, err := boundCandidate(scoped, run)
 	if err == nil {
-		if bound.output != answer {
+		if bound.Message.Content != answer {
 			return domain.ChatChunk{}, errInvalidCandidate
 		}
-		completed, err := Resolve(ctx, scoped, dependencies, run.ID, bound.question, answer)
+		completed, err := Resolve(ctx, scoped, dependencies, run.ID, bound.Question, answer)
 		if err != nil {
 			return domain.ChatChunk{}, err
 		}
 		var invalidCitationIDs, invalidWebCitationIDs []string
 		for _, item := range bound.events {
-			if item.Sequence < bound.binding.Sequence || item.Type != domain.EventCitationResolved || item.Payload["message_id"] != bound.message.ID {
+			if item.Sequence < bound.binding.Sequence || item.Type != domain.EventCitationResolved || item.Payload["message_id"] != bound.Message.ID {
 				continue
 			}
 			switch item.Payload["protocol_version"] {
@@ -48,7 +48,7 @@ func CompleteResumedTurn(ctx context.Context, scoped store.WorkspaceStore, depen
 				decodePayloadField(item.Payload, "invalid_source_ids", &invalidWebCitationIDs)
 			}
 		}
-		return completionChunk(completed, bound.message, "", invalidCitationIDs, invalidWebCitationIDs), nil
+		return completionChunk(completed, bound.Message, "", invalidCitationIDs, invalidWebCitationIDs), nil
 	}
 	// Invalid bindings wrap ErrNoCandidate; only an absent receipt may save anew.
 	if err != ErrNoCandidate {

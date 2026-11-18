@@ -68,6 +68,8 @@ func DefaultAgents(now time.Time) []domain.Agent {
 		},
 	}
 	for index := range agents {
+		agents[index].MemoryEnabled = true
+		agents[index].RetrievalEnabled = true
 		agents[index] = domain.NormalizeAgentConfig(agents[index])
 	}
 	return agents

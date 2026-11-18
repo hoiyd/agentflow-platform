@@ -32,7 +32,7 @@ func browserToolApprovalConfig(t *testing.T, cfg *config.Config) {
 }
 
 func (f *browserProvider) toolApprovalResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "tool-approval-gate") {
+	if !strings.Contains(input.currentTask(), "tool-approval-gate") {
 		return false
 	}
 	available, search := false, false
@@ -48,7 +48,7 @@ func (f *browserProvider) toolApprovalResponse(w http.ResponseWriter, input brow
 	} else if available && input.Stream {
 		path := "approval-report.md"
 		for _, suffix := range []string{"single", "multi-agent", "bounded", "reject"} {
-			if strings.Contains(task, "tool-approval-gate-"+suffix) {
+			if strings.Contains(input.currentTask(), "tool-approval-gate-"+suffix) {
 				path = "approval-report-" + suffix + ".md"
 			}
 		}
@@ -67,7 +67,7 @@ func (f *browserProvider) toolApprovalResponse(w http.ResponseWriter, input brow
 					return true
 				}
 				if result.Error != nil {
-					if call.Function.Name == "file_patch" && string(result.Error.Code) == "filesystem_write_conflict" && strings.Contains(task, "prewrite-correction") {
+					if call.Function.Name == "file_patch" && string(result.Error.Code) == "filesystem_write_conflict" && strings.Contains(input.currentTask(), "prewrite-correction") {
 						next = "file_read"
 						args = map[string]any{"root": "output", "path": path}
 						continue
@@ -100,7 +100,7 @@ func (f *browserProvider) toolApprovalResponse(w http.ResponseWriter, input brow
 			content, finish = "", "tool_calls"
 			encoded, _ := json.Marshal(args)
 			calls = []any{map[string]any{"id": "approval-provider-call", "type": "function", "function": map[string]string{"name": next, "arguments": string(encoded)}}}
-			if next == "file_patch" && strings.Contains(task, "mixed-approval-batch") {
+			if next == "file_patch" && strings.Contains(input.currentTask(), "mixed-approval-batch") {
 				calls = append(calls, map[string]any{"id": "unreviewed-write", "type": "function", "function": map[string]string{"name": "file_write", "arguments": `{"root":"output","path":"unreviewed.md","content":"must not execute"}`}})
 			}
 		} else {

@@ -83,8 +83,8 @@ func browserMCPConfig(t *testing.T, cfg *config.Config, root string, required bo
 	})
 }
 
-func (f *browserProvider) mcpResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "mcp-gate") {
+func (f *browserProvider) mcpResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "mcp-gate") {
 		return false
 	}
 	content, reason := "MCP evidence confirmed.", "stop"

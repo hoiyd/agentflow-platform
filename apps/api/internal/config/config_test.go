@@ -49,6 +49,36 @@ func TestLoadRunBudgetConfiguration(t *testing.T) {
 	}
 }
 
+// Failure inventory: malformed, negative, non-finite and overflowing money must
+// stay invalid, never turn an explicit cap into unlimited zero.
+func TestLoadRejectsInvalidMoney(t *testing.T) {
+	for _, key := range []string{"RUN_MAX_ESTIMATED_COST_USD", "MODEL_INPUT_COST_PER_MILLION_TOKENS_USD", "MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD"} {
+		for _, value := range []string{"0.25USD", "-1", "NaN", "Inf", "-Inf", "1e100", "9223372036854.776"} {
+			t.Run(key+"/"+value, func(t *testing.T) {
+				t.Setenv(key, value)
+				cfg := Load()
+				if cfg.RunMaxEstimatedCostMicros >= 0 && cfg.ModelInputCostPerMillionMicros >= 0 && cfg.ModelOutputCostPerMillionMicros >= 0 {
+					t.Fatal("explicit invalid money was replaced with a valid value")
+				}
+			})
+		}
+	}
+}
+
+func TestMoneyRoundingAndZero(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  int64
+	}{{"", 0}, {"0", 0}, {"-0", 0}, {" 0.25 ", 250000}, {"0.0000015", 2}, {"1000000000000", 1000000000000000000}} {
+		t.Run(test.value, func(t *testing.T) {
+			t.Setenv("RUN_MAX_ESTIMATED_COST_USD", test.value)
+			if got := Load().RunMaxEstimatedCostMicros; got != test.want {
+				t.Fatalf("got %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadModelRouteConfigPath(t *testing.T) {
 	t.Setenv("MODEL_ROUTE_CONFIG_PATH", ".data/model-routes.json")
 	t.Setenv("EMBEDDING_REQUEST_TIMEOUT", "45s")

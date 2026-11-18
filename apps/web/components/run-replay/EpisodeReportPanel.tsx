@@ -1,6 +1,47 @@
-import type { EpisodeReport } from "../../lib/api";
+import { useEffect, useState } from "react";
+import { ChevronDown, Download, RefreshCw } from "lucide-react";
+import { getEpisodeReport, type EpisodeReport } from "../../lib/api";
+import { createLatestRequestController } from "../../lib/latest-request";
 
-export function EpisodeReportPanel({ report }: { report: EpisodeReport }) {
+export function EpisodeReportPanel({ runId }: { runId: string }) {
+  const [report, setReport] = useState<EpisodeReport | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [requests] = useState(createLatestRequestController);
+  useEffect(() => () => requests.cancel(), [requests]);
+
+  async function load() {
+    const request = requests.begin();
+    setLoading(true);
+    setError("");
+    try {
+      const value = await getEpisodeReport(runId, request.signal);
+      if (!request.isCurrent()) return;
+      if (value.run.id !== runId) throw new Error("Episode report belongs to another Run");
+      setReport(value);
+    } catch (error) {
+      if (request.isCurrent()) setError(error instanceof Error ? error.message : "Failed to load episode report");
+    } finally {
+      if (request.isCurrent()) setLoading(false);
+    }
+  }
+
+  return <details className="episode-report" id="run-verification-evidence" onToggle={event => {
+    if (event.currentTarget.open && !report && !loading && !error) void load();
+  }}>
+    <summary className="episode-report-toggle">Episode report <ChevronDown aria-hidden="true" size={16} /></summary>
+    <div className="episode-report-body">
+      {loading ? <div role="status">Loading report...</div> : null}
+      {error ? <div role="alert" className="error">Episode report unavailable: {error}</div> : null}
+      {!report && error ? <button className="run-link" type="button" disabled={loading} onClick={() => void load()}>
+        <RefreshCw aria-hidden="true" size={14} /> Retry report
+      </button> : null}
+      {report ? <ReportContent report={report} onRefresh={() => void load()} loading={loading} /> : null}
+    </div>
+  </details>;
+}
+
+function ReportContent({ report, onRefresh, loading }: { report: EpisodeReport; onRefresh: () => void; loading: boolean }) {
   const verificationTone =
     report.verification.status === "passed"
       ? "passed"
@@ -8,18 +49,18 @@ export function EpisodeReportPanel({ report }: { report: EpisodeReport }) {
         ? "failed"
         : "needs-review";
   return (
-    <section className="episode-report" id="run-verification-evidence">
+    <>
       <div className="episode-report-header">
         <div>
-          <div className="panel-title inline">Episode report</div>
           <p>
             {report.agent.name} captured {report.steps.length} steps, {report.llm_calls.length} LLM calls,{" "}
             {report.tool_calls.length} tool calls.
           </p>
         </div>
-        <button className="run-link" onClick={() => exportEpisodeJSON(report)} type="button">
-          Export JSON
-        </button>
+        <div className="episode-report-actions">
+          <button className="run-link" onClick={onRefresh} disabled={loading} type="button"><RefreshCw aria-hidden="true" size={14} /> Refresh report</button>
+          <button className="run-link" onClick={() => exportEpisodeJSON(report)} type="button"><Download aria-hidden="true" size={14} /> Export JSON</button>
+        </div>
       </div>
 
       <div className="episode-report-grid">
@@ -81,7 +122,7 @@ export function EpisodeReportPanel({ report }: { report: EpisodeReport }) {
           )}
         </div>
       </div>
-    </section>
+    </>
   );
 }
 

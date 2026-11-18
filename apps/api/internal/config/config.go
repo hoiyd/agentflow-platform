@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -266,9 +267,9 @@ func Load() Config {
 		RunMaxTotalTokens:                 getNonNegativeIntEnv("RUN_MAX_TOTAL_TOKENS", 250000),
 		RunMaxToolCalls:                   getNonNegativeIntEnv("RUN_MAX_TOOL_CALLS", 50),
 		RunMaxRuntime:                     getDurationEnv("RUN_MAX_RUNTIME", 15*time.Minute),
-		RunMaxEstimatedCostMicros:         getUSDAsMicrosEnv("RUN_MAX_ESTIMATED_COST_USD", 0),
-		ModelInputCostPerMillionMicros:    getUSDAsMicrosEnv("MODEL_INPUT_COST_PER_MILLION_TOKENS_USD", 0),
-		ModelOutputCostPerMillionMicros:   getUSDAsMicrosEnv("MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD", 0),
+		RunMaxEstimatedCostMicros:         getUSDAsMicrosEnv("RUN_MAX_ESTIMATED_COST_USD"),
+		ModelInputCostPerMillionMicros:    getUSDAsMicrosEnv("MODEL_INPUT_COST_PER_MILLION_TOKENS_USD"),
+		ModelOutputCostPerMillionMicros:   getUSDAsMicrosEnv("MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD"),
 		ModelContextWindowTokens:          getIntEnv("MODEL_CONTEXT_WINDOW_TOKENS", 128000),
 		ModelOutputReserveTokens:          getIntEnv("MODEL_OUTPUT_RESERVE_TOKENS", 8192),
 		ContextSafetyMarginTokens:         getIntEnv("CONTEXT_SAFETY_MARGIN_TOKENS", 4096),
@@ -420,16 +421,34 @@ func getNonNegativeIntEnv(key string, fallback int) int {
 	return parsed
 }
 
-func getUSDAsMicrosEnv(key string, fallback float64) int64 {
+// Preserve invalid explicit money as -1 so startup can reject it before I/O.
+func getUSDAsMicrosEnv(key string) int64 {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
-		return int64(math.Round(fallback * 1_000_000))
+		return 0
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil || parsed < 0 {
-		parsed = fallback
+	micros := math.Round(parsed * 1_000_000)
+	if err != nil || parsed < 0 || math.IsNaN(micros) || math.IsInf(micros, 0) || micros >= 0x1p63 {
+		return -1
 	}
-	return int64(math.Round(parsed * 1_000_000))
+	return int64(micros)
+}
+
+func (c Config) ValidateRunCosts() error {
+	for _, setting := range []struct {
+		name  string
+		value int64
+	}{
+		{"RUN_MAX_ESTIMATED_COST_USD", c.RunMaxEstimatedCostMicros},
+		{"MODEL_INPUT_COST_PER_MILLION_TOKENS_USD", c.ModelInputCostPerMillionMicros},
+		{"MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD", c.ModelOutputCostPerMillionMicros},
+	} {
+		if setting.value < 0 {
+			return fmt.Errorf("%s must be a finite non-negative USD amount within int64 microdollars", setting.name)
+		}
+	}
+	return nil
 }
 
 func getFloatEnv(key string, fallback float64) float64 {

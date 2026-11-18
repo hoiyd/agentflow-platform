@@ -17,20 +17,38 @@ func candidateBindingHash(runID, messageID, question, output string) string {
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data))
 }
 
-type candidate struct {
-	question, output string
-	message          domain.Message
-	binding          domain.RunEvent
-	events           []domain.RunEvent
+// Candidate is identified by a Run-local receipt, never by Conversation position.
+type Candidate struct {
+	Question string
+	Message  domain.Message
+	binding  domain.RunEvent
+	events   []domain.RunEvent
 }
 
 var errInvalidCandidate = fmt.Errorf("%w: invalid candidate binding", ErrNoCandidate)
 
-func boundCandidate(scoped store.WorkspaceStore, run domain.Run) (candidate, error) {
+func boundCandidate(scoped store.WorkspaceStore, run domain.Run) (Candidate, error) {
 	items, err := scoped.ListRunEvents(run.ID)
 	if err != nil {
-		return candidate{}, err
+		return Candidate{}, err
 	}
+	messages, err := scoped.ListMessages(run.ConversationID)
+	if err != nil {
+		return Candidate{}, err
+	}
+	bound, err := ReadCandidate(run, messages, items)
+	if err == nil {
+		if _, present := bound.binding.Payload["verification_question"]; !present {
+			// Only legacy execution recovery retains the timestamp-based input fallback.
+			bound.Question, err = questionFromHistory(run, "", messages, items)
+		}
+	}
+	return bound, err
+}
+
+// ReadCandidate validates persisted evidence already loaded by a read model.
+// Older receipts without an input binding leave Question empty.
+func ReadCandidate(run domain.Run, messages []domain.Message, items []domain.RunEvent) (Candidate, error) {
 	// Earlier Run-local revisions remain in history. Only the last primary
 	// receipt and its following web receipt may identify the current candidate.
 	bindingIndex := -1
@@ -45,9 +63,9 @@ func boundCandidate(scoped store.WorkspaceStore, run domain.Run) (candidate, err
 	}
 	if bindingIndex < 0 {
 		if hasReceipt {
-			return candidate{}, errInvalidCandidate
+			return Candidate{}, errInvalidCandidate
 		}
-		return candidate{}, ErrNoCandidate
+		return Candidate{}, ErrNoCandidate
 	}
 	binding := items[bindingIndex]
 	messageID, _ := binding.Payload["message_id"].(string)
@@ -57,7 +75,7 @@ func boundCandidate(scoped store.WorkspaceStore, run domain.Run) (candidate, err
 		}
 		id, _ := item.Payload["message_id"].(string)
 		if id == "" || item.RunID != run.ID || item.ConversationID != run.ConversationID || messageID != id {
-			return candidate{}, errInvalidCandidate
+			return Candidate{}, errInvalidCandidate
 		}
 	}
 	question, hasQuestion := binding.Payload["verification_question"].(string)
@@ -67,31 +85,21 @@ func boundCandidate(scoped store.WorkspaceStore, run domain.Run) (candidate, err
 	if (run.CompletionContract != nil || questionPresent || hashPresent) && (!hasQuestion || hash == "") {
 		// Contracted candidates require exact input binding. Older uncontracted
 		// receipts omitted both fields, but partial/malformed bindings never pass.
-		return candidate{}, errInvalidCandidate
-	}
-	messages, err := scoped.ListMessages(run.ConversationID)
-	if err != nil {
-		return candidate{}, err
+		return Candidate{}, errInvalidCandidate
 	}
 	for _, message := range messages {
 		if message.ID != messageID {
 			continue
 		}
 		if message.Role != "assistant" || message.ConversationID != run.ConversationID || message.WorkspaceID != run.WorkspaceID || strings.TrimSpace(message.Content) == "" || hashPresent && candidateBindingHash(run.ID, message.ID, question, message.Content) != hash {
-			return candidate{}, errInvalidCandidate
+			return Candidate{}, errInvalidCandidate
 		}
-		if !questionPresent {
-			question, err = questionFromHistory(run, "", messages, items)
-			if err != nil {
-				return candidate{}, err
-			}
-		}
-		return candidate{question: question, output: message.Content, message: message, binding: binding, events: items}, nil
+		return Candidate{Question: question, Message: message, binding: binding, events: items}, nil
 	}
-	return candidate{}, errInvalidCandidate
+	return Candidate{}, errInvalidCandidate
 }
 
-func validateSubjectEvidence(scoped store.WorkspaceStore, run domain.Run, subject verification.Subject, bound candidate) error {
+func validateSubjectEvidence(scoped store.WorkspaceStore, run domain.Run, subject verification.Subject, bound Candidate) error {
 	evidence, err := scoped.ListVerificationEvidence(run.ID)
 	if err != nil {
 		return err

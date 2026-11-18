@@ -57,6 +57,29 @@ async function identity(page: Page) {
   return href!.split("/").at(-1)!;
 }
 
+test("a previous Provider failure does not poison the next Conversation turn", async ({ page, request }, info) => {
+  const workspace = await defaultWorkspaceID(page);
+  await createWorkspaceChatAgent(page, workspace, "Scenario isolation reader");
+  await submit(page, "provider-failure: synthetic first-turn outage");
+  await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
+  const failedID = await identity(page);
+  await submit(page, "Summarize the current synthetic release.");
+  await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+  await expect(page.locator(".message.assistant").last()).toContainText("Evidence saved.");
+  const completedID = await identity(page);
+  const failed = await read(request, `/api/runs/${failedID}/replay`);
+  const completed = await read(request, `/api/runs/${completedID}/replay`);
+  expect(failedID).not.toBe(completedID);
+  expect(failed.run.status).toBe("failed");
+  expect(completed.run.status).toBe("completed");
+  expect(failed.run.conversation_id).toBe(completed.run.conversation_id);
+  await info.attach("scenario-isolation-evidence.json", { body: JSON.stringify({ schema: "fixture-scenario-v1", workspace,
+    failed_run: failed.run, completed_run: completed.run,
+    outcomes: ["current fault still rejects", "following turn succeeds in same Conversation"],
+    limitations: ["controlled Provider, production application and disposable Postgres; not live provider availability"]
+  }, null, 2), contentType: "application/json" });
+});
+
 async function retainRun(request: APIRequestContext, runId: string, prompt: string) {
   const replay = await read(request, `/api/runs/${runId}/replay`);
   const effects = await read(request, `/api/runs/${runId}/tool-effects`);
@@ -237,5 +260,6 @@ test("Verification UI sends a real contract and a failed verifier blocks complet
   const { replay } = await retainRun(request, runId, prompt);
   expect(replay.run.verification_status).toBe("failed");
   await page.getByRole("link", { name: "View trace" }).click();
+  await page.locator("#run-verification-evidence > summary").click();
   await expect(page.locator("#run-verification-evidence")).toContainText("failed");
 });

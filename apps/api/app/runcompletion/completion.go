@@ -82,15 +82,13 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 		return domain.ChatChunk{}, err
 	}
 	payload := map[string]any{
-		"protocol_version":     domain.RAGCitationProtocolVersion,
-		"available_source_ids": citationSourceIDs(sources),
-		"cited_source_ids":     citationSourceIDs(citations),
-		"invalid_source_ids":   invalidCitationIDs,
-		"message_id":           message.ID,
-	}
-	if run.CompletionContract != nil {
-		payload["verification_question"] = question
-		payload["verification_subject_hash"] = candidateBindingHash(run.ID, message.ID, question, request.Assistant)
+		"protocol_version":          domain.RAGCitationProtocolVersion,
+		"available_source_ids":      citationSourceIDs(sources),
+		"cited_source_ids":          citationSourceIDs(citations),
+		"invalid_source_ids":        invalidCitationIDs,
+		"message_id":                message.ID,
+		"verification_question":     question,
+		"verification_subject_hash": candidateBindingHash(run.ID, message.ID, question, request.Assistant),
 	}
 	_, err = scoped.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
@@ -197,8 +195,7 @@ func resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Depe
 }
 
 func completionQuestion(scoped store.WorkspaceStore, run domain.Run, question string) (string, error) {
-	planOnly := run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly
-	if strings.TrimSpace(question) != "" || run.CompletionContract == nil && !planOnly {
+	if strings.TrimSpace(question) != "" {
 		return question, nil
 	}
 	return storedCompletionQuestion(scoped, run, question)
@@ -242,11 +239,11 @@ func Reverify(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 	}
 	if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
 		plan := planning.Read(bound.events)
-		if plan == nil || plan.RunID != run.ID || plan.Version != planning.Version || plan.Input != bound.question || plan.Proposal != bound.output {
+		if plan == nil || plan.RunID != run.ID || plan.Version != planning.Version || plan.Input != bound.Question || plan.Proposal != bound.Message.Content {
 			return VerificationResult{}, ErrNoCandidate
 		}
 	}
-	subject := verificationSubjectForRun(scoped, run, bound.question, bound.output)
+	subject := verificationSubjectForRun(scoped, run, bound.Question, bound.Message.Content)
 	if err := validateSubjectEvidence(scoped, run, subject, bound); err != nil {
 		return VerificationResult{}, err
 	}

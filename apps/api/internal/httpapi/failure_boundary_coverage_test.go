@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/app/runcommands"
@@ -198,7 +199,11 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
 	workspace.getRunReplayErr = nil
 	httpStore.getAgentErr = want
-	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
+	response := httptest.NewRecorder()
+	episodeHandler.getEpisodeReport(response, request())
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Plan carefully.") {
+		t.Fatalf("frozen Agent must not depend on live Agent reads: %d %s", response.Code, response.Body.String())
+	}
 }
 
 func TestChatCommandProjectsCompletionFailures(t *testing.T) {

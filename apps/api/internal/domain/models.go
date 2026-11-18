@@ -103,13 +103,8 @@ func IsDefaultAgentID(id string) bool {
 }
 
 func NormalizeAgentConfig(agent Agent) Agent {
-	missingConfig := !agent.MemoryEnabled && !agent.RetrievalEnabled && strings.TrimSpace(agent.Executor) == ""
 	if strings.TrimSpace(agent.Executor) == "" {
 		agent.Executor = DefaultAgentExecutor
-	}
-	if missingConfig {
-		agent.MemoryEnabled = true
-		agent.RetrievalEnabled = true
 	}
 	agent.RoutingHints = NormalizeAgentRoutingHints(agent.RoutingHints)
 	agent.Skills = normalizeUniqueStrings(agent.Skills)

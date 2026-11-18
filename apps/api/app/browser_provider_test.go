@@ -23,6 +23,23 @@ type browserProvider struct {
 
 func newBrowserProvider() *browserProvider { return &browserProvider{gate: make(chan struct{})} }
 
+// Scenario selection ignores old turns and the assembler's recalled prefix.
+// Validators still inspect the full wire messages passed to each fixture.
+func (input browserModelRequest) currentTask() string {
+	for i := len(input.Messages) - 1; i >= 0; i-- {
+		if input.Messages[i].Role != "user" {
+			continue
+		}
+		text := input.Messages[i].Content
+		const boundary = "\n\nUser request:\n"
+		if index := strings.LastIndex(text, boundary); index >= 0 {
+			text = text[index+len(boundary):]
+		}
+		return text
+	}
+	return ""
+}
+
 func TestBrowserProviderReleaseDoesNotReleaseLaterRequests(t *testing.T) {
 	fixture := newBrowserProvider()
 	first := fixture.gate
@@ -36,6 +53,58 @@ func TestBrowserProviderReleaseDoesNotReleaseLaterRequests(t *testing.T) {
 	case <-fixture.gate:
 		t.Fatal("later request inherited a previous test's release")
 	default:
+	}
+}
+
+// Failure inventory: a marker in older turns or a recalled prefix must not
+// select a scenario. Actual current failures must still reach the fixture.
+func TestBrowserProviderIgnoresHistoricalScenarioMarkers(t *testing.T) {
+	for _, marker := range []string{"provider-failure", "clarification-gate", "skill-policy-gate", "structured-output-gate-invalid", "planning-gate", "rag-filter-gate", "mcp-gate", "web-fetch-boundary", "tool-approval-gate", "filesystem-gate", "filesystem-write-gate", "reasoning-display", "tool-discovery", "inbox-budget", "security-gate", "sandbox-gate", "state-protocol", "usage-breakdown"} {
+		for _, prefix := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/prefix=%t", marker, prefix), func(t *testing.T) {
+				current := "Normal current request"
+				if prefix {
+					current = "Recalled evidence: " + marker + "\n\nUser request:\n" + current
+				}
+				body, _ := json.Marshal(map[string]any{"stream": true, "messages": []map[string]string{
+					{"role": "system", "content": "Assistant"}, {"role": "user", "content": marker}, {"role": "assistant", "content": "Previous answer"}, {"role": "user", "content": current},
+				}, "tools": []any{map[string]any{"function": map[string]any{"name": "calculator"}}}})
+				fixture, response := newBrowserProvider(), httptest.NewRecorder()
+				fixture.respond(response, httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(string(body))))
+				if response.Code != 200 || !strings.Contains(response.Body.String(), "Evidence saved.") || strings.Contains(response.Body.String(), "tool_calls") || strings.Contains(response.Body.String(), "prompt_tokens_details") || len(fixture.failures) > 0 {
+					t.Fatalf("old scenario leaked into current request: %d %s failures=%v", response.Code, response.Body.String(), fixture.failures)
+				}
+			})
+		}
+	}
+	body := `{"messages":[{"role":"system","content":"Assistant"},{"role":"user","content":"provider-failure"}]}`
+	response := httptest.NewRecorder()
+	newBrowserProvider().respond(response, httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatal("current failure scenario was disabled")
+	}
+}
+
+func TestBrowserProviderKeepsToolPairingChecksAfterSteering(t *testing.T) {
+	for _, steering := range []bool{false, true} {
+		for _, toolCallID := range []string{"expected", "wrong-id"} {
+			t.Run(fmt.Sprintf("steering=%t/result=%s", steering, toolCallID), func(t *testing.T) {
+				suffix := ""
+				if steering {
+					suffix = `,{"role":"user","content":"STEERING_CANARY: use concise wording"}`
+				}
+				body := `{"stream":true,"messages":[{"role":"system","content":"Assistant"},{"role":"user","content":"inbox-steer"},{"role":"assistant","content":"","tool_calls":[{"id":"expected","type":"function","function":{"name":"calculator","arguments":"{}"}}]},{"role":"tool","tool_call_id":"` + toolCallID + `","content":"2"}` + suffix + `]}`
+				fixture, response := newBrowserProvider(), httptest.NewRecorder()
+				fixture.respond(response, httptest.NewRequest(http.MethodPost, "/chat/completions", strings.NewReader(body)))
+				if toolCallID == "expected" {
+					if response.Code != http.StatusOK || len(fixture.failures) != 0 {
+						t.Fatalf("valid pairing rejected: %d %s", response.Code, response.Body.String())
+					}
+				} else if len(fixture.failures) != 1 || !strings.Contains(fixture.failures[0], "pairing") {
+					t.Fatalf("invalid pairing accepted: %d %s", response.Code, response.Body.String())
+				}
+			})
+		}
 	}
 }
 
@@ -137,23 +206,36 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(browserCompletion("## Source Evidence\n[]\n\n## Established Facts\nHistorical fixture fact.", "stop", nil, nil))
 		return
 	}
-	task, latestTask, observations := "", "", 0
+	task, observations := "", 0
+	currentTask := input.currentTask()
 	for _, message := range input.Messages {
 		if message.Role == "user" {
 			task += message.Content
-			latestTask = message.Content
 		}
 		if message.Role == "tool" {
 			observations++
 		}
 	}
+	for index, message := range input.Messages {
+		if message.Role == "system" && strings.Contains(message.Content, "Worker collaboration role") && strings.Contains(task, "STEERING_CANARY") {
+			f.reject(w, "orchestration steering leaked into isolated Worker")
+			return
+		}
+		for offset, call := range message.ToolCalls {
+			position := index + offset + 1
+			if position >= len(input.Messages) || input.Messages[position].Role != "tool" || input.Messages[position].ToolCallID != call.ID {
+				f.reject(w, "assistant/Tool observation pairing is invalid")
+				return
+			}
+		}
+	}
 	if f.clarificationResponse(w, input, task) {
 		return
 	}
-	if f.skillPolicyResponse(w, input, task) {
+	if f.skillPolicyResponse(w, input) {
 		return
 	}
-	if f.structuredOutputResponse(w, input, task) {
+	if f.structuredOutputResponse(w, input) {
 		return
 	}
 	if f.planningResponse(w, input, task) {
@@ -162,18 +244,13 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.knowledgeFilterResponse(w, input, task) {
 		return
 	}
-	if f.mcpResponse(w, input, task) {
+	if f.mcpResponse(w, input) {
 		return
 	}
-	if f.webFetchResponse(w, input, task) {
+	if f.webFetchResponse(w, input) {
 		return
 	}
-	// Historical requests may be retained after the user clears project selection.
-	guidanceTask := latestTask
-	if index := strings.LastIndex(guidanceTask, "\n\nUser request:\n"); index >= 0 {
-		guidanceTask = guidanceTask[index+len("\n\nUser request:\n"):]
-	}
-	if strings.Contains(guidanceTask, "project-guidance-gate") && !strings.Contains(task, "BROWSER_PROJECT_GUIDANCE") {
+	if strings.Contains(currentTask, "project-guidance-gate") && !strings.Contains(task, "BROWSER_PROJECT_GUIDANCE") {
 		f.reject(w, "selected project guidance was not delivered to the model")
 		return
 	}
@@ -183,10 +260,10 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.toolApprovalResponse(w, input, task) {
 		return
 	}
-	if f.filesystemResponse(w, input, task) {
+	if f.filesystemResponse(w, input) {
 		return
 	}
-	if f.filesystemWriteResponse(w, input, task) {
+	if f.filesystemWriteResponse(w, input) {
 		return
 	}
 	// A planner owns only the clarification capability, never a worker fixture task.
@@ -196,12 +273,12 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, stream)
 		return
 	}
-	if strings.Contains(task, "provider-failure") {
+	if strings.Contains(currentTask, "provider-failure") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": "Fixture rejected the model request", "code": "invalid_request_error"}})
 		return
 	}
-	if input.Stream && strings.Contains(task, "reasoning-") {
+	if input.Stream && strings.Contains(currentTask, "reasoning-") {
 		previous := 0
 		for _, message := range input.Messages {
 			if message.Role != "assistant" || len(message.ToolCalls) == 0 {
@@ -217,16 +294,10 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			f.reject(w, "reasoning round identity lost")
 			return
 		}
-		f.respondReasoning(w, r, task, observations)
+		f.respondReasoning(w, r, currentTask, observations)
 		return
 	}
-	// Assembler can prefix the latest request with recalled historical evidence.
-	// A gate mentioned in that evidence must not block an unrelated new task.
-	latestRequest := latestTask
-	if index := strings.LastIndex(latestRequest, "\n\nUser request:\n"); index >= 0 {
-		latestRequest = latestRequest[index+len("\n\nUser request:\n"):]
-	}
-	if strings.Contains(latestRequest, "stream-gate") {
+	if strings.Contains(currentTask, "stream-gate") {
 		if !input.Stream {
 			f.reject(w, "answer must use streaming")
 			return
@@ -249,7 +320,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
-	if input.Stream && strings.Contains(task, "tool-discovery") {
+	if input.Stream && strings.Contains(currentTask, "tool-discovery") {
 		hasCalculator, hasSearch := false, false
 		for _, definition := range input.Tools {
 			hasCalculator = hasCalculator || definition.Function.Name == "calculator"
@@ -261,7 +332,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		}
 		last := input.Messages[len(input.Messages)-1].Content
 		name, args := "tool_search", `{"query":"calculator expression"}`
-		if strings.Contains(task, "tool-discovery-unloaded") && observations == 0 {
+		if strings.Contains(currentTask, "tool-discovery-unloaded") && observations == 0 {
 			if hasCalculator {
 				f.reject(w, "deferred calculator loaded eagerly")
 				return
@@ -281,11 +352,11 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			calls = []any{map[string]any{"id": fmt.Sprintf("discovery-%d", observations), "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
 		}
 	}
-	if input.Stream && strings.Contains(task, "inbox-budget") {
+	if input.Stream && strings.Contains(currentTask, "inbox-budget") {
 		content, reason = "One more calculation.", "tool_calls"
 		calls = []any{map[string]any{"id": fmt.Sprintf("budget-call-%d", observations), "type": "function", "function": map[string]string{"name": "calculator", "arguments": fmt.Sprintf(`{"expression":"%d + 1"}`, observations)}}}
 	}
-	if input.Stream && strings.Contains(task, "security-gate") {
+	if input.Stream && strings.Contains(currentTask, "security-gate") {
 		platformMessages := 0
 		for _, message := range input.Messages {
 			if message.Role == "system" && strings.HasPrefix(message.Content, "AgentFlow platform rules:") {
@@ -333,24 +404,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			content = "Private data stayed local. Calculation: 2."
 		}
 	}
-	if strings.Contains(task, "inbox-steer") {
-		for index, message := range input.Messages {
-			if message.Role == "system" && strings.Contains(message.Content, "Worker collaboration role") && strings.Contains(task, "STEERING_CANARY") {
-				f.reject(w, "orchestration steering leaked into isolated Worker")
-				return
-			}
-			if len(message.ToolCalls) > 0 {
-				for offset, call := range message.ToolCalls {
-					position := index + offset + 1
-					if position >= len(input.Messages) || input.Messages[position].Role != "tool" || input.Messages[position].ToolCallID != call.ID {
-						f.reject(w, "steering interrupted assistant/Tool observation pairing")
-						return
-					}
-				}
-			}
-		}
-	}
-	if input.Stream && strings.Contains(task, "sandbox-gate") && (strings.Contains(latestRequest, "sandbox-gate") || observations > 0) {
+	if input.Stream && strings.Contains(currentTask, "sandbox-gate") {
 		lastObservation := ""
 		for _, message := range input.Messages {
 			if message.Role == "tool" {
@@ -388,7 +442,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			}
 			content, reason = "Correcting the executable path.", "tool_calls"
 			calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print(sum(range(10)))"]}`}}}
-			if strings.Contains(task, "progress-wait") {
+			if strings.Contains(currentTask, "progress-wait") {
 				calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print('progress-wait')"]}`}}}
 			}
 		} else {
@@ -400,7 +454,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			content = "Sandbox receipt saved."
 		}
 	}
-	if input.Stream && strings.Contains(task, "owner-tools") && observations < 4 {
+	if input.Stream && strings.Contains(currentTask, "owner-tools") && observations < 4 {
 		for _, definition := range input.Tools {
 			if definition.Function.Name != "get_current_time" {
 				continue
@@ -412,7 +466,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if len(input.Tools) > 0 && strings.Contains(task, "state-protocol") {
+	if len(input.Tools) > 0 && strings.Contains(currentTask, "state-protocol") {
 		worker := strings.Contains(input.Messages[0].Content, "Worker collaboration role")
 		if !input.Stream {
 			f.reject(w, "tool request must use streaming")
@@ -511,14 +565,14 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		content = `{"decision":"stop","reason":"evidence saved","final_answer":"Evidence saved."}`
 	}
 	response := browserCompletion(content, reason, calls, reasoning)
-	if strings.Contains(task, "usage-breakdown") {
+	if strings.Contains(currentTask, "usage-breakdown") {
 		usage := map[string]any{"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}
-		if !strings.Contains(task, "usage-unknown") {
+		if !strings.Contains(currentTask, "usage-unknown") {
 			cached := 30
-			if strings.Contains(task, "usage-zero") {
+			if strings.Contains(currentTask, "usage-zero") {
 				cached = 0
 			}
-			if strings.Contains(task, "usage-invalid") {
+			if strings.Contains(currentTask, "usage-invalid") {
 				cached = 51
 			}
 			usage["prompt_tokens_details"] = map[string]any{"cached_tokens": cached}

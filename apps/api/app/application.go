@@ -42,6 +42,9 @@ type Application struct {
 }
 
 func New(cfg config.Config, options ...Option) (*Application, error) {
+	if err := cfg.ValidateRunCosts(); err != nil {
+		return nil, err
+	}
 	var settings applicationOptions
 	for _, option := range options {
 		option(&settings)

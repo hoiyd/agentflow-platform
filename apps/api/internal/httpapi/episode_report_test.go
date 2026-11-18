@@ -9,8 +9,107 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcompletion"
+	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"context"
 )
+
+// Failure inventory: later turns and Agent edits must not rewrite Run evidence;
+// missing or invalid receipts must not borrow a neighboring answer or Stage.
+func TestEpisodeReportKeepsRunFactsAcrossConversationTurns(t *testing.T) {
+	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
+		t.Run(mode, func(t *testing.T) {
+			dependencies := completeHandlerDependencies(t)
+			storage := fullStoreForTest(t, dependencies)
+			agent, err := storage.CreateAgent(domain.Agent{Name: "Frozen persona", SystemPrompt: "Original instructions", Executor: domain.DefaultAgentExecutor,
+				RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"task", "first", "second"}, TaskExamples: []string{"First task", "Second task"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler, err := NewHandler(dependencies)
+			if err != nil {
+				t.Fatal(err)
+			}
+			routes := handler.Routes()
+			conversation := ""
+			var runs []domain.Run
+			for _, question := range []string{"First task", "Second task"} {
+				body, _ := json.Marshal(domain.ChatRequest{Message: question, AgentID: agent.ID, ConversationID: conversation, Mode: mode})
+				response := performJSONRequest(t, routes, http.MethodPost, "/api/chat", string(body))
+				if response.Code != 200 {
+					t.Fatalf("chat: %d %s", response.Code, response.Body.String())
+				}
+				items, err := storage.ListRunsByWorkspace(domain.DefaultWorkspaceID)
+				if err != nil || len(items) == 0 {
+					t.Fatalf("runs: %v %v", items, err)
+				}
+				run := items[0]
+				conversation = run.ConversationID
+				if mode == "multi_agent" {
+					response = performJSONRequest(t, routes, http.MethodPost, "/api/runs/"+run.ID+"/continue", `{"plan":"Execute the task."}`)
+					if response.Code != 200 || !strings.Contains(response.Body.String(), `"status":"completed"`) {
+						t.Fatalf("continue: %s", response.Body.String())
+					}
+				}
+				current, found, err := storage.GetRun(run.ID)
+				if err != nil || !found || current.Status != domain.RunCompleted {
+					t.Fatalf("Run did not complete: %+v %v; %s", current, err, response.Body.String())
+				}
+				runs = append(runs, run)
+			}
+			for _, role := range []string{"user", "assistant"} {
+				if _, err := storage.AddMessage(conversation, role, "UNRELATED_LATER_MESSAGE"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			agent.Name, agent.SystemPrompt = "Edited persona", "EDITED_INSTRUCTIONS"
+			if _, err := storage.UpdateAgent(agent); err != nil {
+				t.Fatal(err)
+			}
+			for index, run := range runs {
+				response := performJSONRequest(t, routes, http.MethodGet, "/api/runs/"+run.ID+"/episode", "")
+				var report domain.EpisodeReport
+				if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &report) != nil {
+					t.Fatalf("episode: %s", response.Body.String())
+				}
+				want := []string{"First task", "Second task"}[index]
+				if report.Task != want || report.FinalOutput == "" || len(report.Messages) != 1 || report.Messages[0].Content != report.FinalOutput || report.Agent.Name != "Frozen persona" || report.Agent.SystemPrompt != "Original instructions" || strings.Contains(response.Body.String(), "UNRELATED_LATER_MESSAGE") {
+					t.Fatalf("Run facts changed: task=%q output=%q Agent=%+v messages=%+v", report.Task, report.FinalOutput, report.Agent, report.Messages)
+				}
+			}
+			if err := storage.ArchiveAgent(agent.ID); err != nil {
+				t.Fatal(err)
+			}
+			response := performJSONRequest(t, routes, http.MethodGet, "/api/runs/"+runs[0].ID+"/episode", "")
+			if response.Code != 200 || !strings.Contains(response.Body.String(), "Frozen persona") {
+				t.Fatalf("archived Agent: %s", response.Body.String())
+			}
+			if _, err := storage.CreateRunEvent(domain.RunEvent{RunID: runs[0].ID, ConversationID: conversation, Type: domain.EventCitationResolved,
+				Payload: map[string]any{"protocol_version": domain.RAGCitationProtocolVersion, "message_id": "missing-candidate"}}); err != nil {
+				t.Fatal(err)
+			}
+			response = performJSONRequest(t, routes, http.MethodGet, "/api/runs/"+runs[0].ID+"/episode", "")
+			var missing domain.EpisodeReport
+			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &missing) != nil || missing.FinalOutput != "" || missing.Task != "" || len(missing.Messages) != 0 || len(missing.Verification.Warnings) == 0 {
+				t.Fatalf("invalid receipt borrowed old evidence: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestEpisodeReportDoesNotGuessUnboundAnswers(t *testing.T) {
+	for _, role := range []string{"", "worker", "final", "finalizer"} {
+		replay := domain.RunReplay{Run: domain.Run{ID: "run", Status: domain.RunFailed}, Messages: []domain.Message{{ID: "other", Role: "assistant", Content: "Other Run answer"}}}
+		if role != "" {
+			replay.Steps = []domain.CollaborationStep{{Role: role, Status: domain.CollaborationStepCompleted, Output: "Unbound Stage output"}}
+		}
+		report := buildEpisodeReport(replay, domain.Agent{})
+		if report.Task != "" || report.FinalOutput != "" || len(report.Messages) != 0 {
+			t.Fatalf("invented Run facts: %+v", report)
+		}
+	}
+}
 
 func TestEpisodeReportDoesNotExposeAnAgentMovedToAnotherWorkspace(t *testing.T) {
 	storage := fixturestore.New()
@@ -146,8 +245,11 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create tool trace: %v", err)
 	}
-	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunCompleted, ""); err != nil {
-		t.Fatalf("mark completed: %v", err)
+	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newHTTPFixtureClientForTest())
+	if _, err := runcompletion.Complete(context.Background(), fixtureStore.ForWorkspace(domain.NewWorkspaceScope(run.WorkspaceID)), runcompletion.Dependencies{Runtime: runtime}, runcompletion.Request{
+		RunID: run.ID, ConversationID: conversation.ID, UserInput: "Summarize my backend experience", Assistant: step.Output,
+	}); err != nil {
+		t.Fatalf("complete Run with bound answer: %v", err)
 	}
 
 	handler := &Handler{store: fixtureStore}

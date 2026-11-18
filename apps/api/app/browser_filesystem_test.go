@@ -69,8 +69,8 @@ func browserFilesystemConfig(t *testing.T, cfg *config.Config, root string) {
 
 // Accept only real Tool observations paired with their originating model call.
 // Failure results must reach the model without revealing protected bytes.
-func (f *browserProvider) filesystemResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "filesystem-gate") {
+func (f *browserProvider) filesystemResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "filesystem-gate") {
 		return false
 	}
 	available := map[string]bool{}

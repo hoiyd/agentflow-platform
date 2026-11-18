@@ -36,7 +36,7 @@ type browserModelRequest struct {
 }
 
 func (f *browserProvider) clarificationResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "clarification-gate") {
+	if !strings.Contains(input.currentTask(), "clarification-gate") {
 		return false
 	}
 	control := false
@@ -67,7 +67,7 @@ func (f *browserProvider) clarificationResponse(w http.ResponseWriter, input bro
 	reason := "stop"
 	var calls []any
 	var thinking *string
-	legacy := strings.Contains(task, "clarification-gate-legacy")
+	legacy := strings.Contains(input.currentTask(), "clarification-gate-legacy")
 	if input.Stream && control && !answerSeen && !legacy {
 		content = ""
 		reason = "tool_calls"
@@ -95,7 +95,7 @@ func (f *browserProvider) clarificationResponse(w http.ResponseWriter, input bro
 			content = "Report for Engineering leads."
 		}
 	}
-	if strings.Contains(task, "rejected-credential-question") {
+	if strings.Contains(input.currentTask(), "rejected-credential-question") {
 		content = strings.ReplaceAll(content, "Who is the audience?", "What is your password?")
 	}
 	completion := browserCompletion(content, reason, calls, thinking)

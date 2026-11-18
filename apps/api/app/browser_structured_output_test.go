@@ -9,8 +9,8 @@ import (
 	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 )
 
-func (f *browserProvider) structuredOutputResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "structured-output-gate") {
+func (f *browserProvider) structuredOutputResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "structured-output-gate") {
 		return false
 	}
 	system := ""
@@ -51,17 +51,17 @@ func (f *browserProvider) structuredOutputResponse(w http.ResponseWriter, input 
 	} else if constrained {
 		content = `{"summary":"Project Alpha","facts":["Uses Go","5 deployments"]}`
 		switch {
-		case strings.Contains(task, "-invalid"):
+		case strings.Contains(input.currentTask(), "-invalid"):
 			content = `{"summary":`
-		case strings.Contains(task, "-mismatch"):
+		case strings.Contains(input.currentTask(), "-mismatch"):
 			content = `{"summary":"Alpha"}`
-		case strings.Contains(task, "-cutoff"):
+		case strings.Contains(input.currentTask(), "-cutoff"):
 			content = `{"summary":`
 			reason = "length"
-		case strings.Contains(task, "-refusal"):
+		case strings.Contains(input.currentTask(), "-refusal"):
 			content = ""
 			reason = "content_filter"
-		case strings.Contains(task, "-partial"):
+		case strings.Contains(input.currentTask(), "-partial"):
 			fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"{\"}}]}\n\n")
 			return true
 		}
@@ -69,7 +69,7 @@ func (f *browserProvider) structuredOutputResponse(w http.ResponseWriter, input 
 		content = `{"decision":"stop","reason":"ready","final_answer":"structured-output-gate candidate from authorized material."}`
 	}
 	response := browserCompletion(content, reason, calls, nil)
-	if constrained && strings.Contains(task, "-refusal") {
+	if constrained && strings.Contains(input.currentTask(), "-refusal") {
 		response["choices"].([]any)[0].(map[string]any)["message"].(map[string]any)["refusal"] = "Request refused by fixture policy"
 	}
 	if input.Stream {

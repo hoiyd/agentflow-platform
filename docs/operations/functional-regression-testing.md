@@ -56,6 +56,8 @@ not in a second cross-project checklist.
 - Stub external transport, not Tool descriptors, authorization, Store or business behavior.
 - Give each case its own Conversation, owned Agent and explicit Tools/routing signals.
   Do not depend on earlier cases, shared names or global templates.
+- Select Provider scenarios from the current request, excluding recalled prefixes;
+  inspect full wire history for protocol assertions, not for choosing a fault.
 - Control races with a request/response handshake, not fixed sleeps, retries or
   larger timeouts. Delay real API responses rather than fabricate successful writes.
 - Assert pre-write rejection and durable failure state, not returned errors alone.

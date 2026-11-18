@@ -9,15 +9,15 @@ import (
 	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 )
 
-func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input browserModelRequest, task string) bool {
-	if !strings.Contains(task, "filesystem-write-") {
+func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input browserModelRequest) bool {
+	if !strings.Contains(input.currentTask(), "filesystem-write-") {
 		return false
 	}
 	available := map[string]bool{}
 	for _, definition := range input.Tools {
 		available[definition.Function.Name] = true
 	}
-	denied := strings.Contains(task, "filesystem-write-denied-gate")
+	denied := strings.Contains(input.currentTask(), "filesystem-write-denied-gate")
 	if denied && available["file_write"] {
 		f.reject(w, "Skill unexpectedly granted write authority")
 		return true
@@ -30,7 +30,7 @@ func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input b
 	if input.Stream && available["file_read"] {
 		path := "report.md"
 		for i := range 3 {
-			if strings.Contains(task, fmt.Sprintf("filesystem-write-gate-%d", i)) {
+			if strings.Contains(input.currentTask(), fmt.Sprintf("filesystem-write-gate-%d", i)) {
 				path = fmt.Sprintf("report-%d.md", i)
 			}
 		}
@@ -62,17 +62,17 @@ func (f *browserProvider) filesystemWriteResponse(w http.ResponseWriter, input b
 			{"file_patch", fmt.Sprintf(`{"root":"output","path":%q,"expected_hash":%q,"old_text":"Original","new_text":"Verified"}`, path, hash), `"operation":"patch"`},
 			{"file_read", fmt.Sprintf(`{"root":"output","path":%q}`, path), "Verified report evidence."},
 		}
-		if strings.Contains(task, "filesystem-write-undo-verify-") {
+		if strings.Contains(input.currentTask(), "filesystem-write-undo-verify-") {
 			path = "report-0.md"
 			for i := range 3 {
-				if strings.Contains(task, fmt.Sprintf("filesystem-write-undo-verify-%d", i)) {
+				if strings.Contains(input.currentTask(), fmt.Sprintf("filesystem-write-undo-verify-%d", i)) {
 					path = fmt.Sprintf("report-%d.md", i)
 				}
 			}
 			sequence = []struct{ name, args, want string }{{"file_read", fmt.Sprintf(`{"root":"output","path":%q}`, path), "Original report evidence."}}
 			content = "Original report verified after undo."
 		}
-		if strings.Contains(task, "filesystem-write-later-change") {
+		if strings.Contains(input.currentTask(), "filesystem-write-later-change") {
 			sequence = []struct{ name, args, want string }{
 				{"file_read", `{"root":"output","path":"report.md"}`, "Verified report evidence."},
 				{"file_patch", fmt.Sprintf(`{"root":"output","path":"report.md","expected_hash":%q,"old_text":"Verified","new_text":"Later"}`, hash), `"operation":"patch"`},
