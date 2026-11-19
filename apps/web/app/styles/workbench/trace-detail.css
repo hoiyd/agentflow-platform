@@ -163,6 +163,21 @@
   font-size: 11px;
 }
 
+.retrieved-memory-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.retrieved-memory-footer .secondary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
 .raw-json-panel {
   display: grid;
   gap: 8px;

@@ -8,17 +8,17 @@ import { getMemory, mutateMemory, type MemoryDetail, type MemoryInfo, type Memor
 
 export type MemoryDialogMode = "replace" | "delete" | "history";
 
-export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }: {
-  memory: Pick<MemoryInfo, "id" | "content">;
+export function MemoryMutationDialog({ memoryId, initialMode, onClose, onUpdated }: {
+  memoryId: string;
   initialMode: MemoryDialogMode;
   onClose: () => void;
-  onUpdated: (memory: MemoryInfo) => void;
+  onUpdated?: (memory: MemoryInfo) => void;
 }) {
   const readOnly = useWorkspaceReadOnly();
   const dialog = useRef<HTMLDialogElement>(null);
   const [detail, setDetail] = useState<MemoryDetail | null>(null);
   const [mode, setMode] = useState(initialMode);
-  const [content, setContent] = useState(memory.content);
+  const [content, setContent] = useState("");
   const [actor, setActor] = useState("local-user");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
@@ -31,20 +31,22 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
     const element = dialog.current!;
     element.showModal();
     let active = true;
-    void getMemory(memory.id).then((value) => {
+    void getMemory(memoryId).then((value) => {
       if (!active) return;
       setDetail(value);
       setContent(value.memory.content);
     }).catch((err: unknown) => { if (active) setError(message(err)); });
     return () => { active = false; element.close(); };
-  }, [memory.id]);
+  }, [memoryId]);
 
   async function refresh() {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     try {
-      setDetail(await getMemory(memory.id));
+      const fresh = await getMemory(memoryId);
+      setDetail(fresh);
+      if (!detail) setContent(fresh.memory.content);
       setConflict(false);
       setError("");
       previous.current = null;
@@ -67,11 +69,11 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
     setBusy(true);
     setError("");
     try {
-      const result = await mutateMemory(memory.id, draft);
+      const result = await mutateMemory(memoryId, draft);
       setDetail({ memory: result.memory, changes: [result.change, ...detail.changes.filter((c) => c.operation_id !== result.change.operation_id)].sort((a, b) => b.version - a.version).slice(0, 100) });
       setMode("history");
-      onUpdated(result.memory);
-      try { setDetail(await getMemory(memory.id)); }
+      onUpdated?.(result.memory);
+      try { setDetail(await getMemory(memoryId)); }
       catch { setError("Change saved. History could not be refreshed."); }
     } catch (err) {
       setConflict(err instanceof APIError && err.status === 409);
@@ -86,10 +88,10 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
       <h2 id="memory-dialog-title">{title}</h2>
       <button className="secondary-action" type="button" aria-label="Close memory dialog" title="Close" disabled={busy} onClick={onClose}><X size={18} /></button>
     </header>
-    <div className="memory-dialog-meta"><code>{memory.id}</code>{current ? <span>Version {current.version} · {current.deleted_at ? "Deleted" : "Active"}</span> : null}</div>
+    <div className="memory-dialog-meta"><code>{memoryId}</code>{current ? <span>Version {current.version} · {current.deleted_at ? "Deleted" : "Active"}</span> : null}</div>
     {error ? <div className="error" role="alert">{error}</div> : null}
     {conflict ? <p role="status">This memory changed. Refresh its current version before applying your correction again. Your draft is preserved.</p> : null}
-    {!detail || conflict || (error && mode === "history") ? <button className="secondary-action" type="button" disabled={busy} onClick={() => void refresh()}><RefreshCw size={15} /> Refresh current version</button> : null}
+    {conflict || (error && (!detail || mode === "history")) ? <button className="secondary-action" type="button" disabled={busy} onClick={() => void refresh()}><RefreshCw size={15} /> Refresh current version</button> : null}
     {current ? <>
       {mode === "history" ? <>
         {current.deleted_at ? <p>Deleted from recall. Content and embedding have been removed.</p> : <p className="memory-current-content">{current.content}</p>}

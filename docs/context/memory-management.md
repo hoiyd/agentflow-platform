@@ -144,6 +144,10 @@ User/Project metadata is not an authenticated principal or a sharing grant. See
 
 ## Versioned Corrections and Deletions
 
+In Run Replay, open a retrieval event and use **Correct memory** on its Memory
+entry. The dialog loads the current record by ID, not the historical preview.
+Saving affects future recall; the original Run evidence stays unchanged.
+
 A Memory keeps its stable `id`. New records start at `version=1`; each successful
 `replace` or `delete` advances the version exactly once. A correction replaces the
 content and embedding together. `previous_version -> version` records the
