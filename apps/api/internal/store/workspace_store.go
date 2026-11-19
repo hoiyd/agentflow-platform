@@ -124,6 +124,13 @@ func (s workspaceStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, 
 	return s.backend.GetRunUsageLedger(runID)
 }
 
+func (s workspaceStore) GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error) {
+	if err := s.requireConversation(conversationID); err != nil {
+		return domain.ContextCompaction{}, false, err
+	}
+	return s.backend.GetLatestContextCompaction(conversationID)
+}
+
 func (s workspaceStore) GetTaskState(conversationID string) (domain.TaskState, bool, error) {
 	if err := s.requireConversation(conversationID); err != nil {
 		return domain.TaskState{}, false, err

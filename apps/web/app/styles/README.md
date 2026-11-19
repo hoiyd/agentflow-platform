@@ -17,6 +17,7 @@ legacy stylesheet underneath a second override file.
 | `workbench/composer.css`, `agent-toolbar.css`, `agent-dialog.css` | Composer, Agent/Skill selection, Agent creation/configuration |
 | `workbench/verification.css` | Completion-policy dialog |
 | `workbench/project-guidance.css` | Project instructions selection, bounded file browser and frozen Replay instructions |
+| `workbench/conversation-handoff.css` | Workbench handoff action and review dialog |
 | `workbench/tools.css`, `memory.css` | Tool availability and curated memory workspace |
 | `workbench/mcp-connections.css` | Workspace MCP connection list and management dialogs |
 | `workbench/replay.css`, `run-report.css`, `trace-detail.css` | Replay layout, report, timeline and event detail |

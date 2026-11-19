@@ -11,6 +11,19 @@ The Context Manifest explains selected/excluded sources, transformations and
 estimates without copying raw dynamic content. Compaction creates an immutable
 summary of older Messages; originals remain authoritative and recoverable.
 
+## Start a New Conversation with a Handoff
+
+Use **Start with handoff** in the conversation header. The draft includes the
+current Task State goal, constraints, unfinished work, and open blockers, plus
+references to the source conversation and its latest accessible compaction.
+It does not copy the summary text or transcript. Without those sources, write
+the handoff manually. The workbench limits the draft to 4,000 Unicode code points.
+
+Preview and cancel are read-only. Confirming sends the edited draft as the first
+user message through ordinary Chat with the current settings. A new Run starts
+without the old Task State, approvals, checkpoints, or authorizations.
+Source references do not grant access. The original conversation stays unchanged.
+
 ## Selection Contract
 
 | Source | Treatment |

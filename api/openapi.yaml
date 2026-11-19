@@ -1160,6 +1160,21 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/conversations/{id}/handoff:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      operationId: getConversationHandoff
+      tags: [Conversations]
+      responses:
+        '200':
+          description: Editable draft for a new Conversation; reading it does not mutate the source.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationHandoff' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /api/conversations/{id}/task-state:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -2794,6 +2809,14 @@ components:
       properties:
         user_input:
           type: string
+
+    ConversationHandoff:
+      type: object
+      required: [draft, max_characters, truncated]
+      properties:
+        draft: { type: string }
+        max_characters: { type: integer, description: Maximum number of Unicode code points in the reviewed draft. }
+        truncated: { type: boolean }
 
     CreateConversationRequest:
       type: object

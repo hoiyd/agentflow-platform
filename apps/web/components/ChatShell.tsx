@@ -14,6 +14,7 @@ import { ChatComposer } from "./chat/ChatComposer";
 import { RunInbox } from "./chat/RunInbox";
 import type { Clarification } from "../lib/clarification-api";
 import { ChatDialogs } from "./chat/ChatDialogs";
+import { ConversationHandoffDialog } from "./chat/ConversationHandoffDialog";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
 import { isTerminalRunStatus } from "./chat/runEventProjection";
 import { useAgentManagement } from "./chat/useAgentManagement";
@@ -31,6 +32,7 @@ import { useMemoryWorkbench } from "./memory/useMemoryWorkbench";
 import { OperatorAttentionPanel } from "./attention/OperatorAttentionPanel";
 import { ProjectGuidanceControl } from "./project-guidance/ProjectGuidanceControl";
 import { useProjectContext } from "./project-guidance/useProjectContext";
+import { useWorkspaceReadOnly } from "./identity/WorkspaceContext";
 
 type ChatShellProps = {
   initialConversationId?: string;
@@ -55,6 +57,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
   const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const [handoffSource, setHandoffSource] = useState("");
+  const readOnly = useWorkspaceReadOnly();
   const conversationCreationPending = useRef(false);
   const messagesRef = useRef<HTMLElement | null>(null);
   const knowledge = useKnowledgeWorkbench();
@@ -138,6 +142,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     isResumingRun ||
     runState?.status === "running" ||
     runState?.status === "canceling";
+  const canStartHandoff = !readOnly && !isCreatingConversation && !isRunStreaming &&
+    runState?.status !== "queued" && (chatMode !== "single" || !!activeAgent);
   const visibleCollaborationRole =
     selectedCollaborationRole === "planner" ||
     collaborationSteps.some((step) => step.role === selectedCollaborationRole)
@@ -286,6 +292,10 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     event.preventDefault();
     const content = input.trim();
     if (!content || conversationCreationPending.current || isStreaming || isAwaitingToolApproval || isAwaitingClarification || isAwaitingPlanApproval || (chatMode === "single" && !activeAgent)) return;
+    await submitChat(content);
+  }
+
+  async function submitChat(content: string, onNewConversation?: () => void) {
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
@@ -293,7 +303,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setError(error instanceof Error ? error.message : "Invalid verification policy");
       return;
     }
-    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined, knowledgeFilter: knowledge.scope.filter, projectContext: project.value });
+    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined, knowledgeFilter: knowledge.scope.filter, projectContext: project.value, onNewConversation });
   }
 
   return (
@@ -333,6 +343,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
           onCancelRun={() => void handleCancelRun()}
           onConversationTitleDraftChange={setConversationTitleDraft}
           onOpenNavigation={() => setIsSidebarOpen(true)}
+          onOpenHandoff={!readOnly ? () => setHandoffSource(activeId) : undefined}
+          handoffDisabled={!canStartHandoff}
           onTaskStateToggle={() => setSidePanel((current) => current === "task_state" ? "closed" : "task_state")}
           onSaveTitle={() => void saveTitle()}
           onStartEdit={startEditingTitle}
@@ -445,6 +457,17 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
           />
         ) : null}
       </main>
+      {view === "chat" && activeConversation && handoffSource === activeId && !readOnly ? (
+        <ConversationHandoffDialog key={activeId} conversation={activeConversation} busy={isStreaming} error={error}
+          disabled={!canStartHandoff} onClose={() => setHandoffSource("")}
+          onStart={(content) => {
+            if (!canStartHandoff || conversationCreationPending.current) return;
+            void submitChat(content, () => {
+              setHandoffSource("");
+              clearTaskState();
+            });
+          }} />
+      ) : null}
       <ChatDialogs
         agentTemplates={agentTemplates}
         newAgentTemplateId={newAgentTemplateId}

@@ -198,6 +198,7 @@ type WorkspaceStore interface {
 	ListToolEffects(runID string) ([]domain.ToolEffectRecord, error)
 	CommitToolEffectReconciliation(domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error)
 	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
+	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
 	GetTaskState(conversationID string) (domain.TaskState, bool, error)
 	GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error)
 	ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error)

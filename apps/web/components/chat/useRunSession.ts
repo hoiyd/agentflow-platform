@@ -18,10 +18,16 @@ import type { ReasoningEntry } from "./ReasoningDisclosure";
 import type { PartialOutput, RunProjectionSnapshot, ToolProgress } from "../../lib/api-types";
 import type { KnowledgeFilter } from "../knowledge/useKnowledgeScope";
 import { applyToolProgress, restoreToolProgress } from "../../lib/tool-progress";
+import { formatChatError } from "../../lib/run-stream";
 import type { ProjectContext } from "../../lib/project-guidance";
 
+type SubmissionSettings = {
+  mode: ChatMode; agentId: string; completionContract?: CompletionContractInput;
+  executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext;
+  onNewConversation?: () => void;
+};
 type Command =
-  | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }
+  | ({ kind: "submitting"; content: string } & SubmissionSettings)
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
   | { kind: "resuming"; questionId?:string; answer?:ClarificationAnswerRequest; approvalId?:string; approvalDecision?:ToolApprovalDecision };
 type Activity = "idle" | Command["kind"];
@@ -223,11 +229,12 @@ export function useRunSession(options: SessionOptions) {
     onHistoryHandoff();
     const previousTrace = latest.current.trace;
     const runId = previousRun?.id ?? "";
-    let conversationId = workspace.activeId;
+    const onNewConversation = command.kind === "submitting" ? command.onNewConversation : undefined;
+    let conversationId = onNewConversation ? "" : workspace.activeId;
     let rollbackLayout: (() => void) | undefined;
     workspace.setError("");
     if (command.kind === "submitting") {
-      workspace.setInput("");
+      if (!onNewConversation) workspace.setInput("");
       clearRun();
       rollbackLayout = onSubmissionStart(command.mode);
     } else if (command.kind === "continuing") {
@@ -241,7 +248,7 @@ export function useRunSession(options: SessionOptions) {
     const drafts: DraftMessage[] = command.kind === "submitting"
       ? [{ ...assistant, id: `local-user-${crypto.randomUUID()}`, role: "user", content: command.content }, assistant]
       : command.kind === "resuming" && command.approvalDecision && command.approvalDecision.decision !== "approve" ? [] : [assistant];
-    workspace.setMessages((items) => [...items, ...drafts]);
+    if (!onNewConversation) workspace.setMessages((items) => [...items, ...drafts]);
     let accepted = false;
     const handle = createHandler({
       defaultExecutionConstraint: command.kind === "submitting" ? command.executionConstraint : previousRun?.executionConstraint,
@@ -251,18 +258,29 @@ export function useRunSession(options: SessionOptions) {
         : previousRun?.verificationStatus ?? "not_required",
       fallbackAgentId: command.kind === "submitting" ? command.agentId : previousRun?.agentId ?? "",
       fallbackRunId: command.kind === "submitting" ? "" : runId,
-      onEvent: () => { accepted = true; },
+      onEvent: () => { if (!onNewConversation) accepted = true; },
       onConversation: (event) => {
         conversationId = event.conversation_id;
+        if (onNewConversation && !accepted) {
+          workspace.setMessages(drafts.map((draft) => ({ ...draft, conversation_id: conversationId })));
+          workspace.setInput("");
+          accepted = true;
+          onNewConversation();
+        }
         workspace.setActiveId(conversationId);
       },
       onDone: (event) => workspace.applyTitle(event.conversation_id, event.title)
     });
-    const onEvent: Parameters<typeof streamChat>[1] = (event) => { if (request.isCurrent()) handle(event); };
+    const onEvent: Parameters<typeof streamChat>[1] = (event) => {
+      if (!request.isCurrent()) return;
+      if (onNewConversation && !conversationId && event.type === "error") throw new Error(formatChatError(event));
+      handle(event);
+    };
     try {
       if (command.kind === "submitting") {
         await streamChat({ conversation_id: conversationId || undefined, agent_id: command.agentId || undefined,
           mode: command.mode, message: command.content, completion_contract: command.completionContract, execution_constraint: command.executionConstraint, knowledge_filter: command.knowledgeFilter, project_context: command.projectContext }, onEvent, request.signal);
+        if (onNewConversation && request.isCurrent() && !conversationId) throw new Error("The new conversation was not acknowledged.");
       } else if (command.kind === "continuing") {
         await continueRun({ run_id: runId, plan: command.plan, routing_requirements: command.requirements }, onEvent, request.signal);
       } else {
@@ -280,7 +298,7 @@ export function useRunSession(options: SessionOptions) {
       if (!accepted) {
         workspace.setMessages((items) => removePendingMessages(items, drafts.map((draft) => draft.id)));
         if (command.kind === "submitting") {
-          workspace.setInput(command.content);
+          if (!onNewConversation) workspace.setInput(command.content);
           setRunState(previousRun);
           setReasoning(previousReasoning);
           setPartialOutputs(previousPartialOutputs);
@@ -291,7 +309,7 @@ export function useRunSession(options: SessionOptions) {
         } else if (command.kind === "resuming") {
           setRunState(previousRun);
         }
-        try { await latest.current.options.onReload(conversationId, "rejected"); }
+        try { if (!onNewConversation) await latest.current.options.onReload(conversationId, "rejected"); }
         catch { /* Keep the restored input/history and original command error. */ }
         if (!request.isCurrent()) return;
       }
@@ -340,7 +358,7 @@ export function useRunSession(options: SessionOptions) {
   return {
     runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel, clarification, toolApprovals,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
-    submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }) =>
+    submit: (content: string, settings: SubmissionSettings) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),
     continuePlan: (plan?: string, requirements?: AgentRoutingRequirements) => {
       const current = latest.current.trace;

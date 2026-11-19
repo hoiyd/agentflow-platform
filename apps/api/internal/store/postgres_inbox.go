@@ -45,6 +45,7 @@ const inboxSchema = `CREATE TABLE IF NOT EXISTS conversation_inputs (
 const inputColumns = `id,conversation_id,run_id,request,CASE WHEN status='queued' AND expires_at<=NOW() THEN 'expired' ELSE status END,COALESCE(applied_run_id,''),stage_id,turn_id,created_at,expires_at,applied_at`
 
 // Conversation row locking serializes queue bounds, withdrawal and consumption.
+// Allow foreign-key checks from model-request capture while Inbox locks the Run.
 // The Workspace SHARE lock serializes lifecycle changes against every mutation.
 func lockInbox(ctx context.Context, tx *sql.Tx, owner, workspace, conversation string) error {
 	return lockInboxScope(ctx, tx, owner, workspace, conversation, true)
@@ -55,7 +56,7 @@ func lockInboxScope(ctx context.Context, tx *sql.Tx, owner, workspace, conversat
 	err := tx.QueryRowContext(ctx, `SELECT c.id FROM conversations c JOIN workspaces w ON w.id=c.workspace_id
  WHERE c.id=$1 AND w.id=$2 AND w.owner_user_id=$3 AND (NOT $4::boolean OR w.status='active') AND w.deleted_at IS NULL
  AND EXISTS(SELECT 1 FROM auth_memberships WHERE user_id=$3 AND workspace_id=w.id)
- FOR UPDATE OF c FOR SHARE OF w`, conversation, workspace, owner, writable).Scan(&id)
+ FOR NO KEY UPDATE OF c FOR SHARE OF w`, conversation, workspace, owner, writable).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound("active conversation")
 	}
