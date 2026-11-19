@@ -410,6 +410,7 @@ type RetrievalPayload struct {
 	QuerySkipped    bool   `json:"query_skipped,omitempty"`
 	QuerySkipReason string `json:"query_skip_reason,omitempty"`
 	MemoryCount     int    `json:"memory_count"`
+	MemoryNoMatch   bool   `json:"memory_no_match,omitempty"`
 	ChunkCount      int    `json:"chunk_count"`
 	Error           string `json:"error,omitempty"`
 }

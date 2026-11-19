@@ -61,7 +61,7 @@ type ProviderStore interface {
 
 // Recaller is the only Memory capability needed by Agent Runtime.
 type Recaller interface {
-	Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
+	RecallForContext(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
 // Operations is the transport-facing explicit Memory surface.
@@ -78,6 +78,7 @@ type TurnSyncer interface {
 // Provider is the replaceable Memory lifecycle boundary. Callers depend on
 // narrower capabilities when they do not own the complete lifecycle.
 type Provider interface {
+	Recaller
 	Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
 	Propose(context.Context, ProposalRequest) (ProposalResult, error)
 	Commit(context.Context, domain.Memory) (domain.Memory, error)
@@ -94,6 +95,7 @@ type ProviderOptions struct {
 	Extractor      CandidateExtractor
 	Policy         CandidatePolicy
 	AdaptiveMode   string
+	RecallProfiles RecallProfiles
 }
 
 type providerState uint8
@@ -183,6 +185,14 @@ func (p *BuiltinProvider) Initialize(ctx context.Context) error {
 }
 
 func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return p.recall(ctx, search, false)
+}
+
+func (p *BuiltinProvider) RecallForContext(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return p.recall(ctx, search, true)
+}
+
+func (p *BuiltinProvider) recall(ctx context.Context, search domain.MemorySearch, forContext bool) ([]domain.RetrievedMemory, error) {
 	if err := p.requireRunning(false); err != nil {
 		return nil, err
 	}
@@ -204,6 +214,9 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 		search.Embedding = embedding.Vector
 		search.EmbeddingProvider = embedding.Provider
 		search.EmbeddingModel = embedding.Model
+	}
+	if forContext {
+		p.options.RecallProfiles.apply(&search)
 	}
 	var items []domain.RetrievedMemory
 	if err := p.retryStore(ctx, "recall.search", func() error {

@@ -29,7 +29,7 @@ flowchart LR
     class Operations focus;
 ```
 
-Agent Runtime depends only on `Recall`; explicit Memory APIs depend on
+Agent Runtime depends only on `RecallForContext`; explicit Memory APIs depend on
 `Recall`, `Commit`, and the separate `Administration` capability
 (`GetMemory` / `MutateMemory`); the post-response path submits `SyncTurn`. Provider
 construction, initialization, and shutdown remain in the application
@@ -109,6 +109,29 @@ to an empty Memory set and emits `memory.recall.failed`; ordinary Chat can
 therefore continue without silently hiding the auxiliary failure.
 
 ## Recall Trust Boundary
+
+Set `MEMORY_RECALL_CONFIG_PATH` to a JSON file to opt into the automatic recall
+gate. Start with the [example profiles](../../apps/api/config/memory-recall.example.json),
+which use `0.60` for Ollama `qwen3-embedding` with 1536-dimensional vectors.
+This threshold was checked on a small local synthetic set. Calibrate other
+profiles independently before enabling them.
+
+Each entry in `profiles` matches the actual embedding `provider`, `model`, and
+`dimensions`, and sets `min_similarity` in `(0, 1]`. For profile matching,
+Ollama's omitted tag and `:latest` are equivalent. Relative paths resolve from
+the API working directory. Missing or invalid files and duplicate combinations
+fail startup when a path is configured. Restart after editing the file.
+Leave the path blank or use `{"profiles":[]}` to disable the gate. Unlisted
+profiles and manual Memory Search retain their previous ranking behavior.
+
+Candidates must meet the configured raw cosine similarity threshold. If the
+request names ticket-style IDs such as `PAY-742`, a candidate must contain at
+least one of those exact IDs. PostgreSQL applies both checks before ranking and
+limiting, so recency cannot make an ineligible candidate qualify.
+
+An empty successful recall injects no Memory; Chat continues and Replay records
+`memory_no_match=true` on `retrieval.completed`, distinct from a recall error.
+Changing the gate does not rewrite stored Memory or historical Run evidence.
 
 Accepted Memory is curated, but recall does not grant it instruction or
 authorization authority. Before a selected Memory reaches a model request, the

@@ -203,6 +203,14 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 		args = append(args, search.EmbeddingModel)
 		conditions = append(conditions, fmt.Sprintf("e.model = $%d", len(args)))
 	}
+	if search.MinSimilarity > 0 {
+		args = append(args, 1-search.MinSimilarity)
+		conditions = append(conditions, fmt.Sprintf("(e.embedding <=> $1::vector) <= $%d", len(args)))
+	}
+	if search.RequiredContentPattern != "" {
+		args = append(args, search.RequiredContentPattern)
+		conditions = append(conditions, fmt.Sprintf("lower(m.content) ~ $%d", len(args)))
+	}
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("m.metadata ->> $%d = $%d", len(args)-1, len(args)))

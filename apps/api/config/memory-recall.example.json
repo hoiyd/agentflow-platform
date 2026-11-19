@@ -1,0 +1,10 @@
+{
+  "profiles": [
+    {
+      "provider": "ollama",
+      "model": "qwen3-embedding",
+      "dimensions": 1536,
+      "min_similarity": 0.60
+    }
+  ]
+}

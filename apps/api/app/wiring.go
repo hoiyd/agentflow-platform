@@ -55,6 +55,10 @@ type applicationDependencies struct {
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
+	recallProfiles, err := memorypkg.LoadRecallProfiles(cfg.MemoryRecallConfigPath)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("load memory recall config: %w", err)
+	}
 	// Production owner admission is mandatory. Zero-valued Go configurations use
 	// defaults; explicit equal/larger caps would leave no shared process headroom.
 	global := cfg.MaxConcurrentModelRequests
@@ -248,7 +252,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		log.Printf("trusted Skills loaded=%d roots=%q", len(skills.List()), cfg.TrustedSkillDirectories)
 	}
 	var agentRuntime *agent.Runtime
-	memoryProvider := newMemoryProvider(cfg, appStore, embeddingClient, modelRoutes.HasConfiguredClient(), func(runID string) (memorypkg.CandidateCompletionModel, error) {
+	memoryProvider := newMemoryProvider(cfg, recallProfiles, appStore, embeddingClient, modelRoutes.HasConfiguredClient(), func(runID string) (memorypkg.CandidateCompletionModel, error) {
 		if agentRuntime == nil {
 			return nil, errors.New("agent runtime is not initialized")
 		}
@@ -377,7 +381,7 @@ func newAnswerRelevanceEmbedder(client answerRelevanceEmbeddingClient) verificat
 	}
 }
 
-func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient *openai.Client, modelConfigured bool, modelForRun func(string) (memorypkg.CandidateCompletionModel, error)) *memorypkg.BuiltinProvider {
+func newMemoryProvider(cfg config.Config, recallProfiles memorypkg.RecallProfiles, appStore store.Store, embeddingClient *openai.Client, modelConfigured bool, modelForRun func(string) (memorypkg.CandidateCompletionModel, error)) *memorypkg.BuiltinProvider {
 	var fallback memorypkg.CandidateExtractor
 	adaptiveEnabled := cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeShadow || cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeAuto
 	if modelConfigured && adaptiveEnabled {
@@ -389,8 +393,9 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient 
 		Extractor: memorypkg.CompositeCandidateExtractor{
 			Primary: memorypkg.RuleBasedCandidateExtractor{}, Fallback: fallback,
 		},
-		Policy:       memorypkg.ConservativeCandidatePolicy{MinConfidence: cfg.MemoryAdaptiveMinConfidence},
-		AdaptiveMode: cfg.MemoryAdaptiveExtractionMode,
+		Policy:         memorypkg.ConservativeCandidatePolicy{MinConfidence: cfg.MemoryAdaptiveMinConfidence},
+		AdaptiveMode:   cfg.MemoryAdaptiveExtractionMode,
+		RecallProfiles: recallProfiles,
 	})
 }
 
