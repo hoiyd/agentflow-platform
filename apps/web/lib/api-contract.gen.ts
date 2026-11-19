@@ -849,6 +849,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{id}/handoff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getConversationHandoff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{id}/task-state": {
         parameters: {
             query?: never;
@@ -2089,6 +2107,12 @@ export interface components {
         };
         ResumeRunRequest: {
             user_input: string;
+        };
+        ConversationHandoff: {
+            draft: string;
+            /** @description Maximum number of Unicode code points in the reviewed draft. */
+            max_characters: number;
+            truncated: boolean;
         };
         CreateConversationRequest: {
             title: string;
@@ -4716,6 +4740,30 @@ export interface operations {
                     "application/json": components["schemas"]["StructuredRunResult"];
                 };
             };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getConversationHandoff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Editable draft for a new Conversation; reading it does not mutate the source. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationHandoff"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

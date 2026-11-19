@@ -99,6 +99,15 @@ export async function getTaskState(conversationId: string, signal?: AbortSignal)
   );
 }
 
+export function getConversationHandoff(conversationId: string, signal?: AbortSignal) {
+  return apiObject<ContractSchemas["ConversationHandoff"]>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/handoff`,
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load handoff draft" },
+    "conversation handoff"
+  );
+}
+
 export async function patchTaskState(conversationId: string, patch: TaskStatePatch): Promise<TaskStateRevision> {
   return apiObject<TaskStateRevision>(
     `/api/conversations/${conversationId}/task-state`,

@@ -1,0 +1,51 @@
+.conversation-handoff-toggle,
+.handoff-secondary {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.conversation-handoff-toggle:hover:not(:disabled),
+.handoff-secondary:hover:not(:disabled) { background: var(--surface-soft); }
+.conversation-handoff-dialog {
+  width: min(680px, calc(100% - 48px));
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.conversation-handoff-dialog::backdrop { background: #171b2166; }
+.conversation-handoff-dialog header,
+.conversation-handoff-dialog footer,
+.handoff-body { padding: 16px 22px; }
+.conversation-handoff-dialog header { border-bottom: 1px solid var(--border); }
+.conversation-handoff-dialog h2 { margin: 0; font-size: 20px; }
+.conversation-handoff-dialog p { margin: 6px 0 0; color: var(--muted-strong); overflow-wrap: anywhere; }
+.handoff-body label { display: grid; gap: 6px; font-size: 13px; }
+.handoff-body textarea {
+  width: 100%;
+  min-height: 234px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+.handoff-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--muted-strong); font-size: 12px; }
+.handoff-meta span:last-child { font-family: var(--font-mono); }
+.handoff-meta .over-limit, .conversation-handoff-dialog .handoff-error { color: var(--danger); }
+.conversation-handoff-dialog footer { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--border); }
+.conversation-handoff-dialog footer button { width: auto; min-height: 40px; height: 40px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; }
+.conversation-handoff-dialog button:disabled, .conversation-handoff-toggle:disabled { opacity: .5; cursor: not-allowed; }

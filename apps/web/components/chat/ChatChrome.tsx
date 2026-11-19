@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
   Activity,
+  ArrowUpRight,
   BrainCircuit,
   CircleAlert,
   ClipboardList,
@@ -193,6 +194,8 @@ type TopbarProps = {
   onCancelRun: () => void;
   onConversationTitleDraftChange: (value: string) => void;
   onOpenNavigation: () => void;
+  onOpenHandoff?: () => void;
+  handoffDisabled?: boolean;
   onTaskStateToggle: () => void;
   onSaveTitle: () => void;
   onStartEdit: (conversation: Conversation) => void;
@@ -217,6 +220,8 @@ export function Topbar({
   onCancelRun,
   onConversationTitleDraftChange,
   onOpenNavigation,
+  onOpenHandoff,
+  handoffDisabled,
   onTaskStateToggle,
   onSaveTitle,
   onStartEdit,
@@ -266,6 +271,11 @@ export function Topbar({
         </div>
       )}
       <div className="topbar-actions">
+        {view === "chat" && activeConversation && onOpenHandoff ? (
+          <button className="conversation-handoff-toggle" disabled={handoffDisabled} onClick={onOpenHandoff} type="button">
+            <ArrowUpRight size={14} /> Start with handoff
+          </button>
+        ) : null}
         {view === "chat" && activeConversation ? (
           <button
             aria-expanded={taskStateOpen}

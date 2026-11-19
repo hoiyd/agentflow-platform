@@ -1568,6 +1568,15 @@ type Conversation struct {
 	WorkspaceId string    `json:"workspace_id"`
 }
 
+// ConversationHandoff defines model for ConversationHandoff.
+type ConversationHandoff struct {
+	Draft string `json:"draft"`
+
+	// MaxCharacters Maximum number of Unicode code points in the reviewed draft.
+	MaxCharacters int  `json:"max_characters"`
+	Truncated     bool `json:"truncated"`
+}
+
 // CreateConversationRequest defines model for CreateConversationRequest.
 type CreateConversationRequest struct {
 	Title string `json:"title"`
