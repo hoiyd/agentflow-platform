@@ -84,6 +84,7 @@ func TestProductionBoundedLoopContextPolicy(t *testing.T) {
 	}))
 	t.Cleanup(provider.Close)
 	cfg := durableTestConfig(t, root, database, routing.RouteConfig{ID: "loop-context", BaseURL: provider.URL, RequestTimeoutSeconds: 10})
+	cfg.AutonomousMaxIterations = 2 // Recovery after a completed Stage starts the next iteration.
 	application, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -129,19 +130,13 @@ func TestProductionBoundedLoopContextPolicy(t *testing.T) {
 				start, embedStart := len(inputs), embeddings
 				mu.Unlock()
 				stream := durableTestRequest(t, server, "POST", path, body, 200, nil)
-				runs, err := s.ListRunsByWorkspace(workspace)
+				runID, _ := durableTestDone(t, stream)["run_id"].(string)
+				run, found, err := scoped.GetRun(runID)
 				if err != nil {
 					t.Fatal(err)
 				}
-				var run domain.Run
-				for _, item := range runs {
-					if item.ConversationID == conversationID {
-						run = item
-						break
-					}
-				}
-				if strings.Contains(stream, "event: error") || run.Status != domain.RunCompleted || run.RuntimeSnapshot == nil {
-					t.Fatalf("Loop did not complete: status=%s stream=%s", run.Status, stream)
+				if !found || run.ConversationID != conversationID || run.Status != domain.RunCompleted || run.RuntimeSnapshot == nil || strings.Contains(stream, "event: error") {
+					t.Fatalf("Loop did not complete: run=%q status=%s stream=%s", runID, run.Status, stream)
 				}
 				frozen := run.RuntimeSnapshot.Agent
 				if frozen.MemoryEnabled != tc.memory || frozen.RetrievalEnabled != tc.knowledge {
@@ -188,7 +183,7 @@ func TestProductionBoundedLoopContextPolicy(t *testing.T) {
 				}
 				// Seed a durable observation at the crash boundary; the HTTP Resume
 				// runs a fresh iteration using the persisted snapshot.
-				step, err := s.CreateCollaborationStep(domain.CollaborationStep{RunID: run.ID, ConversationID: conv.ID, AgentID: agent.ID, Role: "observe", Status: domain.CollaborationStepCompleted, Input: "User task:\n" + task + "\n\nCurrent state: none", Output: "Saved observation."})
+				step, err := s.CreateCollaborationStep(domain.CollaborationStep{RunID: run.ID, ConversationID: conv.ID, AgentID: agent.ID, Role: "observe", Iteration: 1, Status: domain.CollaborationStepCompleted, Input: "User task:\n" + task + "\n\nCurrent state: none", Output: "Saved observation."})
 				if err != nil {
 					t.Fatal(err)
 				}

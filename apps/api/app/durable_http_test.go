@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +74,25 @@ func durableTestRequest(t *testing.T, server *httptest.Server, method, path stri
 		}
 	}
 	return string(body)
+}
+
+func durableTestDone(t *testing.T, payload string) map[string]any {
+	t.Helper()
+	var done map[string]any
+	count := 0
+	for _, frame := range strings.Split(payload, "\n\n") {
+		if !strings.HasPrefix(frame, "event: done\n") {
+			continue
+		}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.SplitN(frame, "\n", 2)[1], "data: ")), &done); err != nil {
+			t.Fatalf("done JSON: %v %s", err, frame)
+		}
+		count++
+	}
+	if count != 1 || done["type"] != "done" {
+		t.Fatalf("expected exactly one completion: %s", payload)
+	}
+	return done
 }
 
 func closeDurableTestApplication(application *Application) error {
