@@ -66,10 +66,11 @@ type Options struct {
 }
 
 type Spec struct {
-	Material       string
-	Agent          domain.Agent
-	SkillDirectory string
-	WritableOutput bool
+	Material           string
+	Agent              domain.Agent
+	SkillDirectory     string
+	WritableOutput     bool
+	KnowledgeMatchTerm string
 }
 
 type Host struct {
@@ -166,6 +167,23 @@ func New(ctx context.Context, spec Spec, opts Options) (_ *Host, err error) {
 	// They never send the synthetic task to a separate external embedding service.
 	h.embedding = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if spec.KnowledgeMatchTerm != "" {
+			var request struct{ Input string }
+			if json.NewDecoder(r.Body).Decode(&request) != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			// Postgres requires vector(1536). Separate the known synthetic
+			// document from unrelated queries, without grading embedder quality.
+			vector := make([]float64, 1536)
+			if strings.Contains(strings.ToUpper(request.Input), spec.KnowledgeMatchTerm) {
+				vector[0] = 1
+			} else {
+				vector[1] = 1
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": [][]float64{vector}})
+			return
+		}
 		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"empty-corpus-fixture"}`))
 	}))
 	cfg := config.Config{
@@ -195,6 +213,11 @@ func New(ctx context.Context, spec Spec, opts Options) (_ *Host, err error) {
 		ToolSchemaMode:               "eager", ToolProgressGuardEnabled: true,
 		ToolProgressWarnAfter: 2, ToolProgressBlockAfter: 3, ToolProgressHaltAfter: 3,
 		RerankerMode: "heuristic",
+	}
+	if spec.KnowledgeMatchTerm != "" {
+		cfg.EmbeddingBaseURL = h.embedding.URL + "/api/embed"
+		cfg.EmbeddingModel = "knowledge-evaluation-fixture-v1"
+		cfg.EmbeddingDimensions = 1536
 	}
 	h.application, err = app.New(cfg, app.WithModelRequestGuard(h.guard))
 	if err != nil {

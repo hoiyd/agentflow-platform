@@ -12,15 +12,15 @@ import (
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
 
-type fileSkillCLI struct {
+type toolTaskCLI struct {
 	database, dataset, skills, credential, evidence *string
 	sampleCalls, sampleTokens, extraRequests        *int
 	suiteTimeout                                    *time.Duration
 	tokenRatio                                      *float64
 }
 
-func fileSkillFlags(f *flag.FlagSet) fileSkillCLI {
-	return fileSkillCLI{
+func toolTaskFlags(f *flag.FlagSet) toolTaskCLI {
+	return toolTaskCLI{
 		database:      f.String("database-url", "", "dedicated Postgres test database URL with CREATEDB privileges"),
 		dataset:       f.String("dataset", "", "versioned file-skill-task-v1 JSON dataset"),
 		skills:        f.String("skill-dir", "", "trusted directory containing the synthetic method package"),
@@ -29,12 +29,12 @@ func fileSkillFlags(f *flag.FlagSet) fileSkillCLI {
 		sampleCalls:   f.Int("sample-max-model-calls", 12, "per-Run logical model-call ceiling"),
 		sampleTokens:  f.Int("sample-max-tokens", 60000, "per-Run reserved and consumed token ceiling"),
 		extraRequests: f.Int("max-extra-model-requests", 3, "candidate allowed physical requests above its baseline"),
-		suiteTimeout:  f.Duration("suite-timeout", 5*time.Minute, "total file/Skill evaluation deadline, at most 10m"),
+		suiteTimeout:  f.Duration("suite-timeout", 5*time.Minute, "total profile deadline, at most 10m"),
 		tokenRatio:    f.Float64("max-token-ratio", 2, "candidate/baseline token ratio allowed by rollout gate"),
 	}
 }
 
-func runFileSkill(ctx context.Context, out, stderr io.Writer, f fileSkillCLI, live bool, model, base string, trials, calls, tokens int, timeout time.Duration, enforce bool, positional int) int {
+func runFileSkill(ctx context.Context, out, stderr io.Writer, f toolTaskCLI, live bool, model, base string, trials, calls, tokens int, timeout time.Duration, enforce bool, positional int) int {
 	if !live || positional != 0 {
 		fmt.Fprintln(stderr, "file_skill requires --live and explicit target, database, dataset, Skill directory and positive suite budgets")
 		return 2

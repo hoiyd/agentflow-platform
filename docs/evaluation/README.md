@@ -12,6 +12,7 @@ comparisons across Runs or code revisions.
 | Generated summary fidelity and task continuation | [`eval context-live`](live-compaction.md) | Shared-budget full-history/compaction experiment; fixed typed facts, source-backed outcome and separate compaction costs. |
 | Single/Multi/Loop task trade-offs | [`eval modes`](orchestration-ablation.md) | Same sourced task, real Runtime/Tool/Postgres, shared budgets and independent outcome sensors. |
 | File/Skill task rollout | [`eval tool --profile file_skill`](file-skill-tasks.md) | Independent method/no-method Runs, actual file and read-back evidence, selection/safety/cost gates. |
+| Knowledge Tool rollout | [`eval tool --profile knowledge`](tool-task-evaluations.md#knowledge-tool-gate) | Search/read/citation provenance, unnecessary Tool use, and no-match abstention. |
 | Current Knowledge index | `/evaluations/retrieval`, [RAG dataset](rag-golden-dataset.md) | On-demand Golden Dataset check against the indexed corpus and configured retrieval pipeline. |
 | RAG corpus and Tool tasks | [RAG datasets](rag-golden-dataset.md), [Tool tasks](tool-task-evaluations.md) | Canonical and metadata-scoped regressions, Context leakage and source-backed outcomes. |
 | Local model protocol and token counts | [llama.cpp compatibility](local-inference-compatibility.md), [tokenization calibration](tokenization-calibration.md) | Live target evidence; neither changes production routing or Context limits. |
