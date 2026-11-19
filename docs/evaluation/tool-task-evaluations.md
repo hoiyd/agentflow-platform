@@ -9,6 +9,42 @@ The default `artifact` profile below is unchanged. The additional
 real file outcomes through production Runtime and disposable Postgres, with an
 explicit quality/safety/cost rollout gate.
 
+## Knowledge Tool Gate
+
+The `knowledge` profile runs Single Agent through production Chat and disposable
+Postgres. Three [synthetic cases](../../apps/api/internal/evaluation/tooleval/testdata/knowledge_tasks.json)
+require search → read → cite, a reply without Tools, and abstention after a
+verified no-match. A correct-looking answer without the required persisted read
+and citation fails. Automatic RAG is off so it cannot provide substitute evidence.
+
+From `apps/api`, point `TEST_DATABASE_URL` at a disposable pgvector database with
+`CREATEDB`:
+
+```bash
+EVALUATION_REPORT_DIR=/tmp/evaluation-reports \
+  go test ./cmd/eval -run '^TestKnowledgeTool' -count=1
+```
+
+For explicitly authorized model evaluation, export the named credential and run:
+
+```bash
+go run ./cmd/eval tool --profile knowledge --live --enforce \
+  --database-url "$TEST_DATABASE_URL" --base-url "$MODEL_BASE_URL" \
+  --model "$MODEL_ID" --credential-env MODEL_API_KEY --trials 3 \
+  --max-model-calls 24 --max-total-tokens 150000 --sample-max-tokens 12000 \
+  > /tmp/knowledge-tool-live.json
+```
+
+With `--enforce`, any failed, canceled or unevaluated case blocks (exit 1);
+setup/infrastructure errors exit 2. Reports keep source/event identities,
+findings, request counts, tokens and latency without copying model text or Tool
+payloads. Model cost per verified success includes failed attempts with usage,
+and is `null` without pricing or settled usage. Both modes use local fixture
+embeddings, so neither measures retrieval quality. Default CI uses a scripted
+local model and proves the gate, not live model quality.
+
+## Artifact Profile
+
 The separate [filesystem write task slice](../tools/scoped-filesystem-writes.md#validation-and-rollback)
 retains `filesystem-write-evidence.json` from the production browser/Go gate:
 report creation/read-back, hash patch, conflict rejection and Skill authority

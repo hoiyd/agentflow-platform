@@ -1,0 +1,30 @@
+{
+  "id": "knowledge-tool-tasks",
+  "version": "1.0.0",
+  "title": "HARBOUR-742 transfer record",
+  "match_term": "HARBOUR-742",
+  "document": "HARBOUR-742 transfer record. Archive note: cargo labels and arrival windows are tracked independently. The inspection register records dates, assigned bays, review dates, shift numbers, sample counts, packing methods, inventory names, and route labels. This note is an administrative index; it does not specify the allowed quantity for this transfer. Final disposition follows the paperwork review and is recorded below for the active transfer. The verified transfer limit is 37 crates.",
+  "tasks": [
+    {
+      "id": "read_and_cite",
+      "input": "For HARBOUR-742, what is the transfer limit in the Workspace Knowledge? Search for the record and read the source before answering. Use exactly: The transfer limit is <number> crates [<source ID>]. If no evidence exists, reply NOT FOUND.",
+      "target": "HARBOUR-742",
+      "outcome": "cite",
+      "answer": "The transfer limit is 37 crates [%s].",
+      "evidence": "The verified transfer limit is 37 crates."
+    },
+    {
+      "id": "no_tool",
+      "input": "This is a readiness acknowledgment, not a Knowledge task. Reply with exactly READY.",
+      "outcome": "direct",
+      "answer": "READY"
+    },
+    {
+      "id": "no_match",
+      "input": "Look up the transfer limit for MIRAGE-913 in Workspace Knowledge. If there is no evidence for this record, reply with exactly NOT FOUND. Never substitute a different record.",
+      "target": "MIRAGE-913",
+      "outcome": "abstain",
+      "answer": "NOT FOUND"
+    }
+  ]
+}

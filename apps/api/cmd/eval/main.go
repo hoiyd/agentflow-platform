@@ -318,8 +318,8 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	flags := flag.NewFlagSet("eval tool", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	profile := flags.String("profile", "artifact", "task profile: artifact or file_skill")
-	fileOptions := fileSkillFlags(flags)
+	profile := flags.String("profile", "artifact", "task profile: artifact, file_skill or knowledge")
+	taskOptions := toolTaskFlags(flags)
 	live := flags.Bool("live", false, "explicitly authorize model API requests")
 	model := flags.String("model", "", "required model ID")
 	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL")
@@ -327,12 +327,15 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	calls := flags.Int("max-model-calls", 0, "required total suite model-call budget")
 	tokens := flags.Int("max-total-tokens", 0, "required total suite token budget")
 	timeout := flags.Duration("timeout", 60*time.Second, "deadline per sample, at most 5m")
-	enforce := flags.Bool("enforce", false, "exit 1 if any Tool-arm task fails verification")
+	enforce := flags.Bool("enforce", false, "exit 1 if the selected profile's rollout gate fails")
 	if flags.Parse(args) != nil {
 		return 2
 	}
 	if *profile == "file_skill" {
-		return runFileSkill(ctx, out, stderr, fileOptions, *live, *model, *base, *trials, *calls, *tokens, *timeout, *enforce, flags.NArg())
+		return runFileSkill(ctx, out, stderr, taskOptions, *live, *model, *base, *trials, *calls, *tokens, *timeout, *enforce, flags.NArg())
+	}
+	if *profile == "knowledge" {
+		return runKnowledgeTool(ctx, out, stderr, flags, taskOptions, *live, *model, *base, *trials, *calls, *tokens, *timeout, *enforce)
 	}
 	if *profile != "artifact" {
 		fmt.Fprintln(stderr, "unknown Tool task profile")
