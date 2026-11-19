@@ -439,7 +439,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", errRunCanceled
 	}
 	query.StageID = step.ID
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, true, true, map[string]any{
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, prepared.WorkerAgent.MemoryEnabled, prepared.WorkerAgent.RetrievalEnabled, map[string]any{
 		"executor":   domain.DefaultAgentExecutor,
 		"framework":  "agentflow-native",
 		"stage_role": role,

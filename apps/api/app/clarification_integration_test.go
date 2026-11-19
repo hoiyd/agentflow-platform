@@ -131,7 +131,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				}
 				payload := call("POST", "/api/chat", request, 200, nil)
 				if ordinary {
-					done := clarificationDoneJSON(t, payload)
+					done := durableTestDone(t, payload)
 					if done["status"] != "completed" || done["verification_status"] != "passed" || done["result_url"] != "/api/runs/"+done["run_id"].(string)+"/result" || done["title"] != "Fixture conversation" {
 						t.Fatalf("ordinary completion protocol: %s", payload)
 					}
@@ -482,7 +482,7 @@ CREATE TRIGGER reject_fixture_completion BEFORE UPDATE ON runs FOR EACH ROW EXEC
 				if err != nil || final.Status != wantStatus {
 					t.Fatalf("not completed: %+v %v", final, err)
 				}
-				done := clarificationDoneJSON(t, payload)
+				done := durableTestDone(t, payload)
 				if done["run_id"] != run.ID || done["conversation_id"] != run.ConversationID || done["agent_id"] != final.AgentID || done["status"] != string(final.Status) || done["message_id"] == nil || done["title"] != nil {
 					t.Fatalf("clarification completion protocol: %s", payload)
 				}
@@ -608,23 +608,4 @@ CREATE TRIGGER reject_fixture_completion BEFORE UPDATE ON runs FOR EACH ROW EXEC
 			})
 		}
 	}
-}
-
-func clarificationDoneJSON(t *testing.T, payload string) map[string]any {
-	t.Helper()
-	var done map[string]any
-	count := 0
-	for _, frame := range strings.Split(payload, "\n\n") {
-		if !strings.HasPrefix(frame, "event: done\n") {
-			continue
-		}
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.SplitN(frame, "\n", 2)[1], "data: ")), &done); err != nil {
-			t.Fatalf("done JSON: %v %s", err, frame)
-		}
-		count++
-	}
-	if count != 1 || done["type"] != "done" {
-		t.Fatalf("expected exactly one completion: %s", payload)
-	}
-	return done
 }
