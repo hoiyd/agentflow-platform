@@ -47,6 +47,14 @@ estimated tokens and a stable prefix hash. The separate
 physical request and governs optional content retention. The Manifest does not
 authorize retaining prompts or reasoning.
 
+## Bounded Loop Recall
+
+Loop Stages use the Run's frozen Agent settings: `memory_enabled` controls
+automatic Memory recall and `retrieval_enabled` controls automatic Knowledge
+retrieval. When both are off, Stages skip query embedding. Editing the Agent
+affects new Runs, not Resume. These settings do not change explicit Knowledge
+Tool grants or session history retrieval.
+
 ## Session History Retrieval
 
 At non-isolated Turn entry, bounded keyword retrieval searches durable Messages
