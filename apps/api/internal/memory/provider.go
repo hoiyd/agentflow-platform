@@ -88,14 +88,14 @@ type Provider interface {
 }
 
 type ProviderOptions struct {
-	QueueSize              int
-	JobTimeout             time.Duration
-	MaxAttempts            int // Storage attempts only; model clients own their retry policy.
-	RetryBaseDelay         time.Duration
-	Extractor              CandidateExtractor
-	Policy                 CandidatePolicy
-	AdaptiveMode           string
-	Qwen3RecallGateEnabled bool
+	QueueSize      int
+	JobTimeout     time.Duration
+	MaxAttempts    int // Storage attempts only; model clients own their retry policy.
+	RetryBaseDelay time.Duration
+	Extractor      CandidateExtractor
+	Policy         CandidatePolicy
+	AdaptiveMode   string
+	RecallProfiles RecallProfiles
 }
 
 type providerState uint8
@@ -215,8 +215,8 @@ func (p *BuiltinProvider) recall(ctx context.Context, search domain.MemorySearch
 		search.EmbeddingProvider = embedding.Provider
 		search.EmbeddingModel = embedding.Model
 	}
-	if forContext && p.options.Qwen3RecallGateEnabled {
-		applyQwen3RecallGate(&search)
+	if forContext {
+		p.options.RecallProfiles.apply(&search)
 	}
 	var items []domain.RetrievedMemory
 	if err := p.retryStore(ctx, "recall.search", func() error {

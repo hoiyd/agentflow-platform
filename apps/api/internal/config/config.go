@@ -138,8 +138,8 @@ type Config struct {
 	MemoryAdaptiveExtractionMode string
 	// MemoryAdaptiveMinConfidence is the commit threshold for model-proposed candidates.
 	MemoryAdaptiveMinConfidence float64
-	// MemoryRecallQwen3GateEnabled opts automatic context recall into the Ollama Qwen3 profile.
-	MemoryRecallQwen3GateEnabled bool
+	// MemoryRecallConfigPath optionally selects embedding-specific automatic recall profiles.
+	MemoryRecallConfigPath string
 	// MemorySyncQueueSize bounds accepted post-response turn synchronization work.
 	MemorySyncQueueSize int
 	// MemorySyncJobTimeout bounds proposal and commit work for one accepted turn.
@@ -291,7 +291,7 @@ func Load() Config {
 		ContextCompactionTimeout:          getDurationEnv("CONTEXT_COMPACTION_TIMEOUT", 45*time.Second),
 		MemoryAdaptiveExtractionMode:      normalizeAdaptiveMemoryMode(getEnv("MEMORY_ADAPTIVE_EXTRACTION_MODE", "shadow")),
 		MemoryAdaptiveMinConfidence:       getUnitFloatEnv("MEMORY_ADAPTIVE_MIN_CONFIDENCE", 0.85),
-		MemoryRecallQwen3GateEnabled:      getBoolEnv("MEMORY_RECALL_QWEN3_GATE_ENABLED", false),
+		MemoryRecallConfigPath:            getEnv("MEMORY_RECALL_CONFIG_PATH", ""),
 		MemorySyncQueueSize:               getIntEnv("MEMORY_SYNC_QUEUE_SIZE", 256),
 		MemorySyncJobTimeout:              getDurationEnv("MEMORY_SYNC_JOB_TIMEOUT", 30*time.Second),
 		MemoryProviderMaxAttempts:         getIntEnv("MEMORY_PROVIDER_MAX_ATTEMPTS", 3),

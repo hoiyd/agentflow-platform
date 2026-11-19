@@ -6,6 +6,8 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -23,15 +25,24 @@ func TestProductionMemoryRecallNoMatch(t *testing.T) {
 	database := pgfixture.DatabaseURL(t)
 	root := t.TempDir()
 	t.Chdir(root)
-	t.Setenv("MEMORY_RECALL_QWEN3_GATE_ENABLED", "true")
+	recallConfig := filepath.Join(root, "memory-recall.json")
+	if err := os.WriteFile(recallConfig, []byte(`{"profiles":[
+		{"provider":"ollama","model":"qwen3-embedding:latest","dimensions":1536,"min_similarity":0.65},
+		{"provider":"ollama","model":"strict-embedding","dimensions":1536,"min_similarity":0.85}
+	]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MEMORY_RECALL_CONFIG_PATH", recallConfig)
 	const (
 		modelID       = "qwen3-embedding"
 		supportedFact = "PAY-742 settled by restoring the prior build."
 		wrongFact     = "PAY-7420 settled by restarting the cache."
 		otherModel    = "other-embedding"
+		strictModel   = "strict-embedding"
 		paraphrase    = "What was the recovery step for the payments incident?"
 		unrelated     = "What's the weather in Shanghai?"
 		otherQuery    = "How much rain is forecast in Beijing?"
+		strictQuery   = "What's the rain forecast for Tokyo?"
 	)
 	vector := func(score float64) []float64 {
 		v := make([]float64, 1536)
@@ -53,10 +64,13 @@ func TestProductionMemoryRecallNoMatch(t *testing.T) {
 				v[0], v[2] = 0, 1
 			}
 			if req.Input == unrelated || req.Input == otherQuery {
-				v = vector(0.58)
+				v = vector(0.63)
 			}
 			if req.Input == otherQuery {
 				model = otherModel
+			}
+			if req.Input == strictQuery {
+				v, model = vector(0.72), strictModel
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"model": model, "embeddings": [][]float64{v}})
 			return
@@ -126,6 +140,7 @@ func TestProductionMemoryRecallNoMatch(t *testing.T) {
 		seed(fmt.Sprintf("%s Example %d.", wrongFact, i), modelID, vector(1), now)
 	}
 	seed("Other profile keeps its existing recall behavior.", otherModel, vector(1), now)
+	seed("The strict profile has a candidate below its own threshold.", strictModel, vector(1), now)
 
 	agent, err := s.ForWorkspace(domain.NewWorkspaceScope(workspace)).CreateAgent(domain.Agent{
 		Name: "Memory recall fixture", SystemPrompt: "Answer the question.", MemoryEnabled: true,
@@ -141,6 +156,7 @@ func TestProductionMemoryRecallNoMatch(t *testing.T) {
 		{"wrong_identifier", "How do we recover PAY-743?", ""},
 		{"unrelated_with_recency_boost", unrelated, ""},
 		{"another_profile_unchanged", otherQuery, "Other profile keeps its existing recall behavior."},
+		{"second_configured_profile", strictQuery, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			conv, err := s.CreateConversationInWorkspace(workspace, "Memory recall evidence")
@@ -192,7 +208,7 @@ func TestProductionMemoryRecallNoMatch(t *testing.T) {
 	var results []domain.RetrievedMemory
 	durableTestRequest(t, server, http.MethodPost, "/api/memories/search",
 		domain.MemorySearch{Query: unrelated}, http.StatusOK, &results)
-	if len(results) != 5 || results[0].Similarity >= 0.60 || results[0].Score <= 0.60 || !strings.Contains(results[0].Memory.Content, wrongFact) {
+	if len(results) != 5 || results[0].Similarity >= 0.65 || results[0].Score <= 0.65 || !strings.Contains(results[0].Memory.Content, wrongFact) {
 		t.Fatalf("manual search should still return ranked, below-gate candidates: %+v", results)
 	}
 }

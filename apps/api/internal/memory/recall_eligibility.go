@@ -9,12 +9,13 @@ import (
 
 var ticketID = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*-[0-9]+$`)
 
-func applyQwen3RecallGate(search *domain.MemorySearch) {
-	if search.EmbeddingProvider != "ollama" || strings.TrimSuffix(search.EmbeddingModel, ":latest") != "qwen3-embedding" || len(search.Embedding) != 1536 {
+func (profiles RecallProfiles) apply(search *domain.MemorySearch) {
+	key := recallProfileKey{Provider: search.EmbeddingProvider, Model: search.EmbeddingModel, Dimensions: len(search.Embedding)}
+	minSimilarity, ok := profiles[key.normalized()]
+	if !ok {
 		return
 	}
-	// Calibrated on the local Qwen3 profile, not on recency-adjusted scores.
-	search.MinSimilarity = 0.60
+	search.MinSimilarity = minSimilarity
 	var ids []string
 	for _, token := range strings.FieldsFunc(strings.ToLower(search.Query), func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_')
