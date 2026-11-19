@@ -110,6 +110,22 @@ therefore continue without silently hiding the auxiliary failure.
 
 ## Recall Trust Boundary
 
+Automatic Context recall can opt into the no-match gate with
+`MEMORY_RECALL_QWEN3_GATE_ENABLED=true`. It applies only to Ollama
+`qwen3-embedding` (including `:latest`) with 1536-dimensional vectors.
+Candidates need raw cosine similarity of at least `0.60`. If the request names
+a ticket-style ID such as `PAY-742`, a candidate must contain at least one of
+those exact IDs. PostgreSQL applies both checks before ranking and limiting;
+recency cannot make an ineligible candidate qualify.
+
+An empty successful recall injects no Memory; Chat continues and Replay records
+`memory_no_match=true` on `retrieval.completed`, distinct from a recall error.
+Existing deployments, other embedding profiles, and manual Memory Search keep
+their ranking behavior. The gate defaults to off: the threshold was checked on
+a small synthetic set with the local Qwen3 model, not calibrated for production
+traffic or other model versions. Set the flag back to `false` and restart to
+roll it back; stored Memory and historical Run evidence do not change.
+
 Accepted Memory is curated, but recall does not grant it instruction or
 authorization authority. Before a selected Memory reaches a model request, the
 Context Assembler JSON-encodes it inside the versioned

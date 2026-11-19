@@ -14,7 +14,7 @@ import (
 
 type memoryRecallFunc func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
 
-func (fn memoryRecallFunc) Recall(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+func (fn memoryRecallFunc) RecallForContext(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	return fn(ctx, search)
 }
 

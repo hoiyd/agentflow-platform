@@ -1,14 +1,14 @@
 package fixturestore
 
 import (
-	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
-
 	"errors"
-
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func (s *Store) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
@@ -76,6 +76,14 @@ func (s *Store) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMe
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
+	var requiredContent *regexp.Regexp
+	if search.RequiredContentPattern != "" {
+		var err error
+		requiredContent, err = regexp.Compile(search.RequiredContentPattern)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -106,6 +114,9 @@ func (s *Store) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMe
 			continue
 		}
 		similarity := CosineSimilarity(search.Embedding, embedding.Embedding)
+		if search.MinSimilarity > 0 && !(similarity >= search.MinSimilarity) || requiredContent != nil && !requiredContent.MatchString(strings.ToLower(memory.Content)) {
+			continue
+		}
 		recencyBoost := MemoryRecencyBoost(now, memory.CreatedAt)
 		items = append(items, domain.RetrievedMemory{
 			Memory:       memory,

@@ -389,8 +389,9 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient 
 		Extractor: memorypkg.CompositeCandidateExtractor{
 			Primary: memorypkg.RuleBasedCandidateExtractor{}, Fallback: fallback,
 		},
-		Policy:       memorypkg.ConservativeCandidatePolicy{MinConfidence: cfg.MemoryAdaptiveMinConfidence},
-		AdaptiveMode: cfg.MemoryAdaptiveExtractionMode,
+		Policy:                 memorypkg.ConservativeCandidatePolicy{MinConfidence: cfg.MemoryAdaptiveMinConfidence},
+		AdaptiveMode:           cfg.MemoryAdaptiveExtractionMode,
+		Qwen3RecallGateEnabled: cfg.MemoryRecallQwen3GateEnabled,
 	})
 }
 

@@ -129,7 +129,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 		if r.memoryRecall == nil {
 			recallErr = memorypkg.ErrProviderNotInitialized
 		} else {
-			memories, recallErr = r.memoryRecall.Recall(ctx, domain.MemorySearch{
+			memories, recallErr = r.memoryRecall.RecallForContext(ctx, domain.MemorySearch{
 				WorkspaceID:       workspaceID,
 				Query:             query.Text,
 				Embedding:         embedding.Vector,
@@ -154,6 +154,8 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 				StageID:        query.StageID,
 				Payload:        failure.Merge(memoryPayload, recallErr),
 			})
+		} else if len(memories) == 0 {
+			payload["memory_no_match"] = true
 		}
 	}
 	var chunks []domain.RetrievedDocumentChunk

@@ -101,6 +101,9 @@ type MemorySearch struct {
 	ProjectID         string            `json:"project_id,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
 	Limit             int               `json:"limit,omitempty"`
+	// Context recall may narrow candidates before the store ranks them.
+	MinSimilarity          float64 `json:"-"`
+	RequiredContentPattern string  `json:"-"` // Matches lowercased content.
 }
 
 type RetrievedMemory struct {
