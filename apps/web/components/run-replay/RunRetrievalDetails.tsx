@@ -1,3 +1,7 @@
+import { useState } from "react";
+import { Pencil } from "lucide-react";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
+import { MemoryMutationDialog } from "../memory/MemoryMutationDialog";
 import type { RunEvent } from "../../lib/api";
 import type {
   ContextSelectionInfo,
@@ -148,6 +152,8 @@ export function RetrievalOverview({ summary }: { summary: ReturnType<typeof buil
 }
 
 export function RetrievedContext({ payload }: { payload: Record<string, unknown> }) {
+  const readOnly = useWorkspaceReadOnly();
+  const [memoryId, setMemoryId] = useState<string | null>(null);
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
   if (memories.length === 0 && chunks.length === 0) return null;
@@ -157,19 +163,26 @@ export function RetrievedContext({ payload }: { payload: Record<string, unknown>
         <div>
           <div className="retrieved-context-title">Retrieved memories</div>
           <div className="retrieved-list">
-            {memories.map((memory, index) => (
-              <article className="retrieved-item" key={`${memory.id ?? "memory"}-${index}`}>
-                <div className="retrieved-item-header">
-                  <strong>{memory.kind || "memory"}</strong>
-                  <span>{formatScore(memory.score ?? memory.similarity)}</span>
-                </div>
-                <p>{memory.content}</p>
-                <small>{memory.id}</small>
-              </article>
-            ))}
+            {memories.map((memory, index) => {
+              const id = typeof memory.id === "string" ? memory.id : "";
+              return (
+                <article className="retrieved-item" key={`${id}-${index}`}>
+                  <div className="retrieved-item-header">
+                    <strong>{memory.kind || "memory"}</strong>
+                    <span>{formatScore(memory.score ?? memory.similarity)}</span>
+                  </div>
+                  <p>{memory.content}</p>
+                  <div className="retrieved-memory-footer">
+                    <small>{id}</small>
+                    {id ? <button className="secondary-action" type="button" disabled={readOnly} onClick={() => setMemoryId(id)}><Pencil size={14} aria-hidden="true" /> Correct memory</button> : null}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       ) : null}
+      {memoryId ? <MemoryMutationDialog key={memoryId} memoryId={memoryId} initialMode="replace" onClose={() => setMemoryId(null)} /> : null}
       {chunks.length > 0 ? (
         <div>
           <div className="retrieved-context-title">Retrieved knowledge chunks</div>

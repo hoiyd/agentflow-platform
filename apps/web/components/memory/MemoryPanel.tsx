@@ -18,9 +18,9 @@ const MEMORY_KINDS = [
 
 export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
   const readOnly = useWorkspaceReadOnly();
-  const [selection, setSelection] = useState<{ memory: Pick<MemoryInfo, "id" | "content">; mode: MemoryDialogMode } | null>(null);
+  const [selection, setSelection] = useState<{ id: string; mode: MemoryDialogMode } | null>(null);
   const [lookupID, setLookupID] = useState("");
-  const open = (memory: MemoryInfo, mode: MemoryDialogMode) => setSelection({ memory, mode });
+  const open = (memory: MemoryInfo, mode: MemoryDialogMode) => setSelection({ id: memory.id, mode });
   return (
     <section className="memory-panel">
       <div className="memory-workbench">
@@ -89,7 +89,7 @@ export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
                 <Search size={15} /> {model.isSearching ? "Searching..." : "Search"}
               </button>
             </form>
-            <form className="memory-search" onSubmit={(event) => { event.preventDefault(); if (lookupID.trim()) setSelection({ memory: { id: lookupID.trim(), content: "" }, mode: "history" }); }}>
+            <form className="memory-search" onSubmit={(event) => { event.preventDefault(); if (lookupID.trim()) setSelection({ id: lookupID.trim(), mode: "history" }); }}>
               <input aria-label="Memory ID" placeholder="Memory ID" value={lookupID} onChange={(event) => setLookupID(event.target.value)} />
               <button className="secondary-action" type="submit" disabled={!lookupID.trim()}><History size={15} /> History</button>
             </form>
@@ -97,7 +97,7 @@ export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
           </section>
         </div>
       </div>
-      {selection ? <MemoryMutationDialog key={`${selection.memory.id}:${selection.mode}`} memory={selection.memory} initialMode={selection.mode} onClose={() => setSelection(null)} onUpdated={model.applyMemoryChange} /> : null}
+      {selection ? <MemoryMutationDialog key={`${selection.id}:${selection.mode}`} memoryId={selection.id} initialMode={selection.mode} onClose={() => setSelection(null)} onUpdated={model.applyMemoryChange} /> : null}
     </section>
   );
 }
