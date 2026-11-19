@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
@@ -18,6 +20,40 @@ func TestInboxSchema(t *testing.T) {
 		if !strings.Contains(strings.Join(postgresMigrations, "\n"), required) {
 			t.Fatalf("missing durable inbox migration: %s", required)
 		}
+	}
+}
+
+func TestPostgresInboxLockAllowsForeignKeyChecks(t *testing.T) {
+	s, err := NewPostgresStore(pgfixture.DatabaseURL(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := t.Context()
+	conversation, err := s.CreateConversation("Inbox lock compatibility")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if err := lockInbox(ctx, tx, identity.SuperUserID, conversation.WorkspaceID, conversation.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	var id string
+	// Capture inserts take KEY SHARE on referenced rows. NOWAIT makes the
+	// lock-mode regression fail without depending on which transaction loses a deadlock.
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 FOR KEY SHARE NOWAIT`, conversation.ID).Scan(&id)
+	if err != nil || id != conversation.ID {
+		t.Fatalf("inbox lock blocks a model-request foreign key check: id=%q err=%v", id, err)
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 FOR NO KEY UPDATE NOWAIT`, conversation.ID).Scan(&id)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
+		t.Fatalf("inbox lock must still exclude concurrent writers: %v", err)
 	}
 }
 
