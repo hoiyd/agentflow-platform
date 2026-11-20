@@ -71,7 +71,6 @@ func TestAuthenticatedResourceObjectBoundaries(t *testing.T) {
 		"/api/runs/" + run.ID + "/artifacts/" + artifact.ID,
 		"/api/runs/" + run.ID + "/artifacts/" + artifact.ID + "/search?q=needle",
 		"/api/runs/" + run.ID + "/tool-effects",
-		"/api/runs/" + run.ID + "/episode",
 		"/api/runs/" + run.ID + "/collaboration_steps",
 	} {
 		t.Run(path, func(t *testing.T) {

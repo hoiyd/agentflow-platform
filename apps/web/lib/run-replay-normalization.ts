@@ -1,22 +1,8 @@
 import { expectObject, isObject, numberValue, stringValue } from "./api-client.ts";
 import type {
-  ContractSchemas, Conversation, EpisodeReport, RecoverySummary, RunInfo, RunProjectionSnapshot, RunReplay, RunTraceSummary,
+  ContractSchemas, Conversation, RecoverySummary, RunInfo, RunProjectionSnapshot, RunReplay, RunTraceSummary,
   RuntimeInvariantFailure, RunUsageLedger, RunUsageTotals, ToolArtifact, ToolEffect, SkillEvidence
 } from "./api-types.ts";
-
-export function normalizeEpisodeReport(value: unknown): EpisodeReport {
-  const report = expectObject<ContractSchemas["EpisodeReport"]>(value, "episode report");
-  const retrievals = expectObject<ContractSchemas["EpisodeRetrievals"]>(report.retrievals, "episode retrievals");
-  const verification = expectObject<ContractSchemas["EpisodeVerification"]>(report.verification, "episode verification");
-  return {
-    ...report,
-    messages: report.messages ?? [], steps: report.steps ?? [],
-    llm_calls: report.llm_calls ?? [], tool_calls: report.tool_calls ?? [], errors: report.errors ?? [],
-    retrievals: { ...retrievals, memories: retrievals.memories ?? [], chunks: retrievals.chunks ?? [] },
-    verification: { ...verification, evidence: verification.evidence ?? [], warnings: verification.warnings ?? [],
-      records: verification.records ?? [], artifacts: verification.artifacts ?? [] }
-  };
-}
 
 export function normalizeRunReplay(data: unknown): RunReplay {
   const replay = expectObject<Record<string, unknown>>(data, "run replay");
@@ -30,6 +16,8 @@ export function normalizeRunReplay(data: unknown): RunReplay {
     conversation: expectConversation(replay.conversation),
     summary: expectRunTraceSummary(replay.summary),
     messages: Array.isArray(replay.messages) ? replay.messages : [],
+    candidate: isObject(replay.candidate) && typeof replay.candidate.message_id === "string" && typeof replay.candidate.question === "string"
+      ? { message_id: replay.candidate.message_id, question: replay.candidate.question } : undefined,
     steps: Array.isArray(replay.steps) ? replay.steps : [],
     usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
     run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
@@ -41,6 +29,10 @@ export function normalizeRunReplay(data: unknown): RunReplay {
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : [],
     recovery_summary: normalizeRecoverySummary(replay.recovery_summary)
   };
+}
+
+export function replayCandidateMessage(replay: RunReplay) {
+  return replay.candidate && replay.messages.find(message => message.id === replay.candidate?.message_id);
 }
 
 function normalizeRecoverySummary(value: unknown): RecoverySummary | undefined {

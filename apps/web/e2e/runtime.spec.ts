@@ -240,7 +240,7 @@ test("Provider failure is visible, persisted, and never mistaken for completion"
   await expect(page.locator("body")).toContainText("Fixture rejected");
 });
 
-test("Verification UI sends a real contract and a failed verifier blocks completion", async ({ page, request }) => {
+test("Verification UI sends a real contract and a failed verifier blocks completion", async ({ page, request }, testInfo) => {
   await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Verification fixture");
   await page.getByRole("button", { name: /^Verification/ }).click();
   const dialog = page.getByRole("dialog", { name: "Verification" });
@@ -259,7 +259,19 @@ test("Verification UI sends a real contract and a failed verifier blocks complet
   const runId = await identity(page);
   const { replay } = await retainRun(request, runId, prompt);
   expect(replay.run.verification_status).toBe("failed");
+  const episodeReads: string[] = [];
+  page.on("request", req => { if (req.url().endsWith(`/runs/${runId}/episode`)) episodeReads.push(req.url()); });
   await page.getByRole("link", { name: "View trace" }).click();
-  await page.locator("#run-verification-evidence > summary").click();
-  await expect(page.locator("#run-verification-evidence")).toContainText("failed");
+  const evidence = page.locator("#run-verification-evidence");
+  await expect(evidence.locator("summary")).toBeVisible();
+  await expect(evidence).not.toHaveAttribute("open");
+  await page.getByRole("button", { name: "Review verification" }).click();
+  await expect(evidence.locator("li")).toContainText(replay.verification_evidence[0].summary);
+  expect(episodeReads).toEqual([]);
+  await evidence.screenshot({ path: testInfo.outputPath("replay-verification.png") });
+  await testInfo.attach("replay-verification.json", { contentType: "application/json", body: JSON.stringify({
+    run_id: runId, prompt, snapshot: replay.runtime_snapshot, contract: replay.run.completion_contract,
+    verification: replay.verification_evidence, episode_requests: episodeReads.length,
+    limitations: ["synthetic Provider response; not live-model quality evidence"]
+  }) });
 });

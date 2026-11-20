@@ -101,7 +101,7 @@ const CurrentRunEventSchemaVersion = 1
 
 // RunEvent is the typed execution-event contract. Durable sinks persist
 // lifecycle events but may omit stream-only events such as model.delta. Trace,
-// Replay, and Episode Report views do not maintain another event history.
+// and Replay views do not maintain another event history.
 type RunEvent struct {
 	ID             string         `json:"id"`
 	Type           RunEventType   `json:"type"`

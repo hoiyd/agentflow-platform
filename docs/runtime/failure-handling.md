@@ -2,7 +2,7 @@
 
 AgentFlow preserves subsystem-specific error types while projecting failures
 through one transport-neutral contract. This keeps recovery policy close to the
-owner and gives Run Events, Replay, and Episode Reports a stable vocabulary.
+owner and gives Run Events and Replay a stable vocabulary.
 
 ## Common Contract
 
@@ -58,9 +58,8 @@ Provider-safe details such as status code, retry delay, and attempt count may
 also be present. Raw provider bodies, credentials, prompts, and secrets must
 not be placed in structured failure details.
 
-Episode Report projects these fields into each trace-derived error as `kind`,
-`source`, `category`, and `retryable`. Legacy persisted events remain readable;
-their new fields are simply empty.
+Replay and Run JSON carry the original Event fields. Legacy persisted events may
+omit those fields.
 
 ## HTTP Projection
 

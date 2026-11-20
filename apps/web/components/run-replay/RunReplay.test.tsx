@@ -34,6 +34,29 @@ afterEach(() => {
   approvals.mockReset().mockResolvedValue([]);
 });
 
+it("reviews persisted verification evidence directly from Replay", async () => {
+  const data = replayFixture();
+  data.run.verification_status = "failed";
+  data.verification_evidence = [{
+    id: "evidence-1", run_id: data.run.id, verifier_id: "required-text", status: "failed",
+    summary: "Required text is missing"
+  }];
+  data.recovery_summary = {
+    reason: "verification_failed", title: "Verification failed", message: "Check the recorded evidence.",
+    evidence: [], artifact_refs: [],
+    actions: [{ kind: "review_verification", label: "Review verification", enabled: true }]
+  };
+  getRunReplay.mockResolvedValue(data);
+  render(<RunReplay runId={data.run.id} />);
+  const button = await screen.findByRole("button", { name: "Review verification" });
+  const panel = screen.getByText("Required text is missing").closest("details")!;
+  panel.scrollIntoView = vi.fn();
+  expect(panel.open).toBe(false);
+  fireEvent.click(button);
+  expect(panel.open).toBe(true);
+  expect(panel.scrollIntoView).toHaveBeenCalledOnce();
+});
+
 // Read-side failure inventory: historical approvals remain evidence but must not
 // offer recovery for a newer clarification pause or hide that pause's recovery.
 it("does not offer approval recovery over a newer clarification", async () => {

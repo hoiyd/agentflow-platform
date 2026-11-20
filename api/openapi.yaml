@@ -1333,21 +1333,6 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /api/runs/{id}/episode:
-    parameters:
-      - $ref: '#/components/parameters/RunId'
-    get:
-      operationId: getEpisodeReport
-      tags: [Runs]
-      responses:
-        '200':
-          description: Derived episode report; not an independent source of Run state.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/EpisodeReport' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
   /api/runs/{id}/tool-effects:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -3812,78 +3797,13 @@ components:
         reconstructability_status: { type: string, enum: [valid, invalid] }
         invariant_error: { type: string }
         records: { type: array, items: { $ref: '#/components/schemas/ModelRequestDebugRecord' } }
-    EpisodeRetrievals:
+    RunReplayCandidate:
       type: object
-      required: [event_count, memories, chunks]
+      description: Candidate bound to this Run; omitted for missing or invalid receipts.
+      required: [question, message_id]
       properties:
-        event_count: { type: integer }
-        memories: { type: [array, 'null'], items: { type: object, additionalProperties: true } }
-        chunks: { type: [array, 'null'], items: { type: object, additionalProperties: true } }
-    EpisodeLLMCall:
-      type: object
-      required: [event_id]
-      properties:
-        event_id: { type: string }
-        step_id: { type: string }
-        role: { type: string }
-        agent_id: { type: string }
-        model: { type: string }
-        framework: { type: string }
-        prompt_tokens: { type: integer }
-        completion_tokens: { type: integer }
-        total_tokens: { type: integer }
-        token_usage_estimated: { type: boolean }
-        output_chars: { type: integer }
-        duration_ms: { type: integer, format: int64 }
-    EpisodeToolCall:
-      type: object
-      required: [event_id]
-      properties:
-        event_id: { type: string }
-        step_id: { type: string }
-        tool_name: { type: string }
-        tool_call_id: { type: string }
-        error: { type: string }
-        duration_ms: { type: integer, format: int64 }
-    EpisodeError:
-      type: object
-      required: [source, message]
-      properties:
-        source: { type: string }
-        event_id: { type: string }
-        step_id: { type: string }
-        kind: { type: string }
-        category: { type: string }
-        retryable: { type: boolean }
-        message: { type: string }
-    EpisodeVerification:
-      type: object
-      required: [status, evidence, warnings, records, artifacts]
-      properties:
-        status: { type: string }
-        subject_hash: { type: string }
-        contract: { type: object, additionalProperties: true }
-        evidence: { type: [array, 'null'], items: { type: string } }
-        warnings: { type: [array, 'null'], items: { type: string } }
-        records: { type: [array, 'null'], items: { $ref: '#/components/schemas/VerificationEvidence' } }
-        artifacts: { type: [array, 'null'], items: { $ref: '#/components/schemas/VerificationArtifact' } }
-    EpisodeReport:
-      type: object
-      required: [run, conversation, agent, task, final_output, messages, steps, trace_summary, retrievals, llm_calls, tool_calls, errors, verification]
-      properties:
-        run: { $ref: '#/components/schemas/Run' }
-        conversation: { $ref: '#/components/schemas/Conversation' }
-        agent: { $ref: '#/components/schemas/Agent' }
-        task: { type: string }
-        final_output: { type: string }
-        messages: { type: [array, 'null'], items: { $ref: '#/components/schemas/Message' } }
-        steps: { type: [array, 'null'], items: { $ref: '#/components/schemas/CollaborationStep' } }
-        trace_summary: { $ref: '#/components/schemas/RunTraceSummary' }
-        retrievals: { $ref: '#/components/schemas/EpisodeRetrievals' }
-        llm_calls: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeLLMCall' } }
-        tool_calls: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeToolCall' } }
-        errors: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeError' } }
-        verification: { $ref: '#/components/schemas/EpisodeVerification' }
+        question: { type: string, description: Empty if the legacy receipt did not bind the input. }
+        message_id: { type: string, description: Identifies the bound assistant Message in Replay. }
     RunReplay:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
@@ -3901,6 +3821,8 @@ components:
             knowledge_scope: { $ref: '#/components/schemas/KnowledgeScope' }
         conversation:
           $ref: '#/components/schemas/Conversation'
+        candidate:
+          $ref: '#/components/schemas/RunReplayCandidate'
         messages:
           type: [array, 'null']
           items:

@@ -101,7 +101,7 @@ still counts as admitted work. Retry does not add a logical model call.
 
 Estimated input reservations settle against provider usage. Remaining completion
 capacity caps output; cost enforcement needs configured frozen prices. The
-[Ledger contract](run-budget.md), not Trace/Episode totals, owns exact settlement,
+[Ledger contract](run-budget.md), not Trace Summary totals, owns exact settlement,
 auxiliary purposes, estimates and observed overages.
 
 ## 5. Context Assembly and Compaction

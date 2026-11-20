@@ -21,7 +21,6 @@ func TestConsumedReadContracts(t *testing.T) {
 		{"/api/runs/" + run.ID + "/projection", "GET", "", "RunProjectionSnapshot"},
 		{"/api/runs/" + run.ID + "/replay", "GET", "", "RunReplay"},
 		{"/api/runs/" + run.ID + "/model_requests", "GET", "", "ModelRequestDebugResponse"},
-		{"/api/runs/" + run.ID + "/episode", "GET", "", "EpisodeReport"},
 	} {
 		t.Run(c.schema, func(t *testing.T) {
 			response := httptest.NewRecorder()

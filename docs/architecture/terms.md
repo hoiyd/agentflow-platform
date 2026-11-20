@@ -162,7 +162,7 @@ successful Turn.
 | Trace | Human-readable event/payload view, not a second event history |
 | Projection | Deterministic event/record-derived read model at a sequence watermark, not a new truth store or Resume checkpoint |
 | Replay | Detailed aggregate of Snapshot, Messages, Stages, summary, Ledger, Events, Task State revisions, Verification, and other persisted evidence |
-| Episode Report | Compact export derived from Replay; no new execution facts |
+| Run JSON export | Run-scoped download from Replay, without the Conversation transcript |
 | Context Manifest | Source-selection/transform/token metadata, not raw prompt content |
 | Model Request Envelope / Capture | Exact physical request identity/hash and policy-controlled optional content, not just reconstructed prompt guesses |
 | Operator attention | Derived cross-Run queue of actionable Evidence/Recovery Actions, not another persisted Run status |

@@ -67,6 +67,29 @@
   opacity: 0.6;
 }
 
+.replay-report-section {
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  padding: 14px;
+}
+
+.replay-report-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.replay-report-section > summary::-webkit-details-marker { display: none; }
+.replay-report-section[open] > summary > svg { transform: rotate(180deg); }
+.verification-evidence ul { margin: 12px 0 0; padding-left: 18px; }
+.verification-evidence li + li { margin-top: 8px; }
+.verification-evidence p { margin: 4px 0 0; overflow-wrap: anywhere; }
+
 .recoverable-banner {
   margin-bottom: 20px;
   border: 1px solid rgba(180, 95, 60, 0.24);
@@ -177,7 +200,6 @@
   }
 
   .replay-header,
-.episode-report-header,
 .replay-header-actions,
 .retrieval-overview,
 .step-row {
@@ -190,8 +212,6 @@
   }
 
   .replay-summary,
-.episode-report-grid,
-.episode-sections,
 .replay-grid,
 .token-strip {
     grid-template-columns: 1fr;

@@ -9,7 +9,7 @@ import { resumeRun } from "../../lib/api";
 import type { ChatEvent } from "../../lib/api-types";
 import { createLatestRequestController } from "../../lib/latest-request";
 import { useReplayData } from "./useReplayData";
-import { EpisodeReportPanel } from "./EpisodeReportPanel";
+import { RunReplayExport } from "./RunReplayExport";
 import { RunUsagePanel } from "./RunUsagePanel";
 import {
   EventDetail,
@@ -130,9 +130,12 @@ function RunReplayView({ runId, initialEventId }: Props) {
 				router.push(`/workspace?conversation=${encodeURIComponent(action.target_id ?? replay?.run.conversation_id ?? "")}`);
 				return;
 			case "review_verification": {
-				const report = document.getElementById("run-verification-evidence");
-				if (report instanceof HTMLDetailsElement) report.open = true;
-				report?.scrollIntoView({ behavior: "smooth", block: "start" });
+				const evidence = document.getElementById("run-verification-evidence");
+				if (evidence instanceof HTMLDetailsElement) {
+					evidence.open = true;
+					evidence.querySelector("summary")?.focus({ preventScroll: true });
+					evidence.scrollIntoView({ behavior: "smooth", block: "start" });
+				}
 				return;
 			}
 			case "review_task_state":
@@ -177,6 +180,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
         </div>
         <div className="replay-header-actions">
           <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+          <RunReplayExport replay={replay} />
           <details className="replay-evaluation-menu">
             <summary>
               Evaluation
@@ -234,7 +238,26 @@ function RunReplayView({ runId, initialEventId }: Props) {
         ledger={replay.usage_ledger}
       />
 
-      <EpisodeReportPanel key={`${runId}:${replay.run.updated_at}:${replay.projection.as_of_sequence}`} runId={runId} />
+      {replay.verification_evidence.length > 0 || replay.run.completion_contract ? (
+        <details className="replay-report-section" id="run-verification-evidence">
+          <summary>
+            Verification evidence · {replay.run.verification_status ?? "pending"}
+            <ChevronDown aria-hidden="true" size={16} />
+          </summary>
+          <div className="verification-evidence">
+            {replay.verification_evidence.length === 0 ? <p>No verification evidence recorded.</p> : (
+              <ul>
+                {replay.verification_evidence.map(item => (
+                  <li key={item.id}>
+                    <strong>{item.verifier_id} · {item.status}</strong>
+                    {typeof item.summary === "string" ? <p>{item.summary}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
+      ) : null}
       <StructuredResult result={replay.structured_result} />
       <PlanningPanel replay={replay} />
 
@@ -286,6 +309,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
                         {step.role}
                       </div>
                       <div className="step-agent">{step.agent_id || "system"}</div>
+                      {step.error ? <div className="step-agent">{step.error}</div> : null}
                     </div>
                     <div className="step-meta">
                       <span>{step.status}</span>

@@ -31,7 +31,7 @@ benchmark reports are described in [offline/live evaluation](../evaluation/offli
 | 0:30-1:30 | Submit the prompt below and approve the plan | Planner/Router/Worker/Reviewer Stages; frozen configuration and selected Agent |
 | 1:30-3:00 | Open **View trace** | Selected RAG chunks, model/Tool calls, usage, and Verification Evidence; distinguish Run status from verification status |
 | 3:00-4:15 | Inspect the prepared before/after recovery pair | Durable failure, eligible Resume action, resumed Stage and terminal result |
-| 4:15-5:00 | Export the **Episode report** and explain limits | One compact review artifact linking output, calls, sources, usage, and failure evidence |
+| 4:15-5:00 | Select **Export Run JSON** in Replay and explain limits | Bound output, calls, sources, usage, and failure evidence without exporting the full Conversation |
 
 ```text
 Use the authentication incident runbook to diagnose login failures after a

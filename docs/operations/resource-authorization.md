@@ -41,7 +41,7 @@ Tool call of a durable Run; it does not rewind a handler already executing.
 | --- | --- |
 | Workspace CRUD/default selection | Verified owner + current Membership; soft-deleted entities are inaccessible |
 | Conversation/messages, Chat, Task State/revisions | Conversation lookup in the authorized scope before reading or mutating |
-| Run, Continue/Resume/Cancel/Verify, Replay, projection, attention, usage, episode, Capture | Scoped Run lookup; derived lists inherit its scope |
+| Run, Continue/Resume/Cancel/Verify, Replay, projection, attention, usage, Capture | Scoped Run lookup; derived lists inherit its scope |
 | Artifact list/read/search and effect reconciliation | Scoped Run, then exact Run/artifact or Run/effect association |
 | Memory create/recall/detail/mutation | Bound Workspace; optional Run derives its Conversation, source Message must belong to that Conversation |
 | Knowledge ingest/upload/detail/delete, retrieval/evaluation/chunk expansion | Bound Workspace and scoped Document/chunk queries; Knowledge tools derive scope from the persisted Run, never model arguments |

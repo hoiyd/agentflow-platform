@@ -1709,78 +1709,6 @@ type DocumentUploadRequest struct {
 // EmbeddingInfo defines model for EmbeddingInfo.
 type EmbeddingInfo = domain.EmbeddingInfo
 
-// EpisodeError defines model for EpisodeError.
-type EpisodeError struct {
-	Category  *string `json:"category,omitempty"`
-	EventId   *string `json:"event_id,omitempty"`
-	Kind      *string `json:"kind,omitempty"`
-	Message   string  `json:"message"`
-	Retryable *bool   `json:"retryable,omitempty"`
-	Source    string  `json:"source"`
-	StepId    *string `json:"step_id,omitempty"`
-}
-
-// EpisodeLLMCall defines model for EpisodeLLMCall.
-type EpisodeLLMCall struct {
-	AgentId             *string `json:"agent_id,omitempty"`
-	CompletionTokens    *int    `json:"completion_tokens,omitempty"`
-	DurationMs          *int64  `json:"duration_ms,omitempty"`
-	EventId             string  `json:"event_id"`
-	Framework           *string `json:"framework,omitempty"`
-	Model               *string `json:"model,omitempty"`
-	OutputChars         *int    `json:"output_chars,omitempty"`
-	PromptTokens        *int    `json:"prompt_tokens,omitempty"`
-	Role                *string `json:"role,omitempty"`
-	StepId              *string `json:"step_id,omitempty"`
-	TokenUsageEstimated *bool   `json:"token_usage_estimated,omitempty"`
-	TotalTokens         *int    `json:"total_tokens,omitempty"`
-}
-
-// EpisodeReport defines model for EpisodeReport.
-type EpisodeReport struct {
-	Agent        Agent                `json:"agent"`
-	Conversation Conversation         `json:"conversation"`
-	Errors       *[]EpisodeError      `json:"errors"`
-	FinalOutput  string               `json:"final_output"`
-	LlmCalls     *[]EpisodeLLMCall    `json:"llm_calls"`
-	Messages     *[]Message           `json:"messages"`
-	Retrievals   EpisodeRetrievals    `json:"retrievals"`
-	Run          Run                  `json:"run"`
-	Steps        *[]CollaborationStep `json:"steps"`
-	Task         string               `json:"task"`
-	ToolCalls    *[]EpisodeToolCall   `json:"tool_calls"`
-	TraceSummary RunTraceSummary      `json:"trace_summary"`
-	Verification EpisodeVerification  `json:"verification"`
-}
-
-// EpisodeRetrievals defines model for EpisodeRetrievals.
-type EpisodeRetrievals struct {
-	Chunks     *[]map[string]interface{} `json:"chunks"`
-	EventCount int                       `json:"event_count"`
-	Memories   *[]map[string]interface{} `json:"memories"`
-}
-
-// EpisodeToolCall defines model for EpisodeToolCall.
-type EpisodeToolCall struct {
-	DurationMs *int64  `json:"duration_ms,omitempty"`
-	Error      *string `json:"error,omitempty"`
-	EventId    string  `json:"event_id"`
-	StepId     *string `json:"step_id,omitempty"`
-	ToolCallId *string `json:"tool_call_id,omitempty"`
-	ToolName   *string `json:"tool_name,omitempty"`
-}
-
-// EpisodeVerification defines model for EpisodeVerification.
-type EpisodeVerification struct {
-	Artifacts   *[]VerificationArtifact `json:"artifacts"`
-	Contract    *map[string]interface{} `json:"contract,omitempty"`
-	Evidence    *[]string               `json:"evidence"`
-	Records     *[]VerificationEvidence `json:"records"`
-	Status      string                  `json:"status"`
-	SubjectHash *string                 `json:"subject_hash,omitempty"`
-	Warnings    *[]string               `json:"warnings"`
-}
-
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Category  *string `json:"category,omitempty"`
@@ -2595,6 +2523,8 @@ type RunProjectionSnapshot struct {
 
 // RunReplay defines model for RunReplay.
 type RunReplay struct {
+	// Candidate Candidate bound to this Run; omitted for missing or invalid receipts.
+	Candidate             *RunReplayCandidate        `json:"candidate,omitempty"`
 	Conversation          Conversation               `json:"conversation"`
 	Messages              *[]Message                 `json:"messages"`
 	Plan                  *RunPlan                   `json:"plan,omitempty"`
@@ -2621,6 +2551,15 @@ type RunReplay_RuntimeSnapshot struct {
 	KnowledgeScope       *KnowledgeScope          `json:"knowledge_scope,omitempty"`
 	ProjectGuidance      *ProjectGuidanceSnapshot `json:"project_guidance,omitempty"`
 	AdditionalProperties map[string]interface{}   `json:"-"`
+}
+
+// RunReplayCandidate Candidate bound to this Run; omitted for missing or invalid receipts.
+type RunReplayCandidate struct {
+	// MessageId Identifies the bound assistant Message in Replay.
+	MessageId string `json:"message_id"`
+
+	// Question Empty if the legacy receipt did not bind the input.
+	Question string `json:"question"`
 }
 
 // RunStatus defines model for RunStatus.

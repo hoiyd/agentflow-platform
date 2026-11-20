@@ -97,13 +97,20 @@ gate (`agent_route_no_suitable_candidate`). They do not start a Worker;
 
 | Read surface | Contract / owner |
 | --- | --- |
-| Replay | Detailed aggregate: Snapshot, Messages, Stages, durable Events, Trace Summary, Usage, ordered Task State revisions, Verification, and Tool Artifact metadata. |
+| Replay | Snapshot, Conversation Messages, Stages, durable Events, Trace Summary, Usage, Task State revisions, Verification, and Tool Artifact metadata. The optional `candidate` binds this Run's input and assistant Message ID; no fallback to neighboring messages or Stage output. |
 | Projection | Deterministic Run/Usage/Verification read models at `as_of_sequence`, with report-only `invariant_failures`. Not a second truth store or checkpoint. Replay includes it and retains top-level `summary`/`usage_ledger`. |
 | Recovery summary | Present for stopped/actionable Runs; contains reason, Evidence, partial-output references, and actions with availability reasons. See [recovery](../runtime/durable-recovery.md). |
 | Usage | Immutable budget, effective totals, open reservations, and append-only entries. Settlement replaces the estimate for the same `operation_id`. See [Run Budget](../runtime/run-budget.md). |
 | Model requests | Physical-attempt Envelopes, Capture metadata, Manifest references, token-source diffs, and reconstruction invariants. Content requires `include_content=true` and valid retention. See [capture](../context/model-request-reconstruction.md). |
 | Artifacts | Lists/Replay expose metadata only. Bounded reads use `offset`/`limit`; search uses `q`/`max_matches`. Expired content returns 410. See [Tool Artifacts](../tools/tool-result-artifacts.md). |
-| Episode | Compact export derived from Replay; task/answer come from the Run-bound candidate receipt and Agent configuration from its frozen Snapshot. `messages` contains only that candidate. Missing/invalid bindings leave task/answer empty with a warning; old receipts may identify an answer without its question. No neighboring-message or Stage-output fallback, independent history or accounting source. |
+
+`GET /api/runs/{id}/episode` is retired and returns 404. API consumers should
+read `GET /api/runs/{id}/replay` and resolve `candidate.message_id` against its
+`messages`. Missing or invalid receipts omit `candidate`; older valid receipts
+may bind the answer but leave `question` empty. For portable evidence, **Export Run
+JSON** downloads the Run, frozen configuration and Run evidence; it contains at
+most the bound assistant Message, not the Conversation transcript. The old
+Episode JSON format is not emitted.
 
 `GET /api/runs/{id}/events` observes an admitted Run independently of its
 starting request. `Last-Event-ID` takes precedence over `after` as the durable
@@ -119,9 +126,8 @@ See [event projections](../runtime/event-projections-runtime-invariants.md).
 
 HTTP/SSE errors retain `error` and add stable `code`, `source`, `category`,
 `retryable`, optional `operation`, and `request_id`. Dynamic 5xx responses
-contain standard HTTP text, not internal exception details. Episode trace errors
-may include `kind`/`category`/`retryable`; historical events without those
-fields remain readable. See [failure handling](../runtime/failure-handling.md).
+contain standard HTTP text, not internal exception details. Replay retains
+the original Event failure fields. See [failure handling](../runtime/failure-handling.md).
 
 ## Tool Governance
 

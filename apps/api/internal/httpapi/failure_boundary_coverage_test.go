@@ -171,7 +171,7 @@ func TestChatProjectsContractAndConversationPersistenceFailures(t *testing.T) {
 	)), http.StatusInternalServerError)
 }
 
-func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
+func TestKnowledgeAndReplayHandlersProjectDependencyFailures(t *testing.T) {
 	want := errors.New("dependency failed")
 	knowledge := &boundaryKnowledgeOperations{err: want}
 	handler := &Handler{knowledge: knowledge}
@@ -182,7 +182,7 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	assertHandlerFailure(t, handler.uploadDocument, upload, http.StatusBadRequest)
 
 	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
-	conversation, err := fixtureStore.CreateConversation("episode")
+	conversation, err := fixtureStore.CreateConversation("Replay")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
@@ -190,17 +190,17 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	episodeHandler := &Handler{store: httpStore}
-	request := func() *http.Request { return httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/episode", nil) }
+	replayHandler := &Handler{store: httpStore}
+	request := func() *http.Request { return httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil) }
 	workspace.getRunErr = want
-	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
+	assertHandlerFailure(t, replayHandler.getRunReplay, request(), http.StatusInternalServerError)
 	workspace.getRunErr = nil
 	workspace.getRunReplayErr = want
-	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
+	assertHandlerFailure(t, replayHandler.getRunReplay, request(), http.StatusInternalServerError)
 	workspace.getRunReplayErr = nil
 	httpStore.getAgentErr = want
 	response := httptest.NewRecorder()
-	episodeHandler.getEpisodeReport(response, request())
+	replayHandler.getRunReplay(response, request())
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "Plan carefully.") {
 		t.Fatalf("frozen Agent must not depend on live Agent reads: %d %s", response.Code, response.Body.String())
 	}
