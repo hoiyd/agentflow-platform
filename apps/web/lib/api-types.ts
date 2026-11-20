@@ -72,8 +72,3 @@ export type RunReplay = Omit<ArrayDefaults<ContractSchemas["RunReplay"]>, "messa
   usage_ledger: RunUsageLedger;
   recovery_summary?: RecoverySummary;
 };
-export type EpisodeReport = Omit<ArrayDefaults<ContractSchemas["EpisodeReport"]>, "messages" | "retrievals" | "verification"> & {
-  messages: Message[];
-  retrievals: ArrayDefaults<ContractSchemas["EpisodeRetrievals"]>;
-  verification: ArrayDefaults<ContractSchemas["EpisodeVerification"]>;
-};

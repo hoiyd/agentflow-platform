@@ -1,8 +1,9 @@
-import type { EpisodeReport, ModelRequestDebugResponse, RunReplay } from "./api";
+import { isObject } from "./api-client.ts";
+import type { ModelRequestDebugResponse, RunReplay } from "./api";
+import { replayCandidateMessage } from "./run-replay-normalization.ts";
 
 export type EvidenceBundle = {
   replay: RunReplay;
-  report: EpisodeReport;
   modelRequests: ModelRequestDebugResponse;
 };
 
@@ -109,29 +110,30 @@ export function evidenceDelta(comparison: EvidenceComparison, metric: EvidenceMe
 }
 
 function evidenceSide(bundle: EvidenceBundle): EvidenceSide {
-  const { replay, report, modelRequests } = bundle;
+  const { replay, modelRequests } = bundle;
+  const answer = replayCandidateMessage(replay);
   return {
     runId: replay.run.id,
     status: stringOrNull(replay.run.status),
-    verification: stringOrNull(report.verification.status),
+    verification: stringOrNull(replay.run.verification_status) ?? "not_required",
     stopReason: stopReason(replay),
-    finalOutput: stringOrNull(report.final_output),
+    finalOutput: stringOrNull(answer?.content),
     identity: {
-      task: normalizedText(report.task),
-      materials: materialIdentity(report),
+      task: answer ? normalizedText(replay.candidate?.question) : null,
+      materials: materialIdentity(replay),
       mode: stringOrNull(replay.runtime_snapshot?.mode),
-      agent: agentIdentity(replay, report),
-      model: modelIdentity(replay, report),
+      agent: stringOrNull(replay.run.agent_id),
+      model: modelIdentity(replay),
       configHash: runtimeSnapshotHash(modelRequests),
       experimentId: null
     },
-    evidenceRefs: evidenceReferences(bundle),
+    evidenceRefs: evidenceReferences(bundle, answer),
     metrics: {
-      totalTokens: finiteNumber(report.trace_summary.total_tokens),
-      modelCalls: finiteNumber(report.trace_summary.llm_calls),
-      toolCalls: finiteNumber(report.trace_summary.tool_calls),
-      durationMS: finiteNumber(report.trace_summary.total_duration_ms),
-      errors: finiteNumber(report.trace_summary.error_count)
+      totalTokens: finiteNumber(replay.summary.total_tokens),
+      modelCalls: finiteNumber(replay.summary.llm_calls),
+      toolCalls: finiteNumber(replay.summary.tool_calls),
+      durationMS: finiteNumber(replay.summary.total_duration_ms),
+      errors: finiteNumber(replay.summary.error_count)
     }
   };
 }
@@ -144,11 +146,19 @@ function compareRequiredIdentity(label: string, current: unknown, baseline: unkn
   }
 }
 
-function materialIdentity(report: EpisodeReport): string[] | null {
-  const items = [...report.retrievals.memories, ...report.retrievals.chunks];
-  if (items.length === 0) return [];
-  const refs = items.map(materialReference);
-  return refs.some((item) => item === null) ? null : [...new Set(refs as string[])].sort();
+function materialIdentity(replay: RunReplay): string[] | null {
+  const refs = new Set<string>();
+  for (const { payload } of replay.run_events) {
+    for (const items of [payload.retrieved_memories, payload.retrieved_chunks]) {
+      if (!Array.isArray(items)) continue;
+      for (const item of items.filter(isObject)) {
+        const ref = materialReference(item);
+        if (ref === null) return null;
+        refs.add(ref);
+      }
+    }
+  }
+  return [...refs].sort();
 }
 
 function materialReference(item: Record<string, unknown>): string | null {
@@ -166,17 +176,13 @@ function materialReference(item: Record<string, unknown>): string | null {
   return sourceID ? `source_id:${sourceID}` : null;
 }
 
-function agentIdentity(replay: RunReplay, report: EpisodeReport): string | null {
-  const agent = recordOrNull(replay.runtime_snapshot?.agent);
-  return stringOrNull(agent?.id) ?? stringOrNull(report.agent.id);
-}
-
-function modelIdentity(replay: RunReplay, report: EpisodeReport): string | null {
+function modelIdentity(replay: RunReplay): string | null {
 	const decision = replay.run_events.find((event) =>
 		event.type === "model.route_decided" && stringOrNull(event.payload.outcome) === "selected"
 	);
 	const provider = stringOrNull(decision?.payload.provider);
-	const name = stringOrNull(decision?.payload.model) ?? report.llm_calls.map((call) => stringOrNull(call.model)).find(Boolean) ?? null;
+	const name = stringOrNull(decision?.payload.model) ?? replay.run_events
+		.filter(event => event.type === "model.completed").map(event => stringOrNull(event.payload.model)).find(Boolean);
 	return name ? [provider, name].filter(Boolean).join(" / ") : null;
 }
 
@@ -187,7 +193,7 @@ function runtimeSnapshotHash(requests: ModelRequestDebugResponse): string | null
   return hashes.length === 1 ? hashes[0] : null;
 }
 
-function evidenceReferences(bundle: EvidenceBundle): string[] {
+function evidenceReferences(bundle: EvidenceBundle, answer: ReturnType<typeof replayCandidateMessage>): string[] {
   const refs = new Set<string>();
   for (const record of bundle.modelRequests.records) {
     if (record.envelope.id) refs.add(`model-request:${record.envelope.id}`);
@@ -196,14 +202,11 @@ function evidenceReferences(bundle: EvidenceBundle): string[] {
   for (const artifact of bundle.replay.tool_artifacts) {
     if (artifact.id) refs.add(`tool-artifact:${artifact.id}`);
   }
-  for (const artifact of bundle.report.verification.artifacts) {
-    const id = stringOrNull(artifact.id);
-    if (id) refs.add(`verification-artifact:${id}`);
+  for (const artifact of bundle.replay.verification_artifacts) {
+    if (artifact.id) refs.add(`verification-artifact:${artifact.id}`);
   }
-  for (const message of bundle.report.messages) {
-    for (const citation of message.citations ?? []) {
-      if (citation.source_id) refs.add(`source:${citation.source_id}`);
-    }
+  for (const citation of answer?.citations ?? []) {
+    if (citation.source_id) refs.add(`source:${citation.source_id}`);
   }
   return [...refs].sort();
 }

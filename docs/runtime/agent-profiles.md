@@ -15,7 +15,7 @@ behavior and limitations.
 
 | Field | Runtime effect |
 | --- | --- |
-| `name` | Human-readable identity shown in the workbench, Replay, and Episode Report. |
+| `name` | Human-readable identity shown in the workbench and retained in the Run Snapshot. |
 | `description` | Declares the Agent's responsibility and supplies low-weight routing evidence in Multi mode. |
 | `system_prompt` | Defines the Agent persona and task-specific instructions used by its model calls. |
 | `routing_hints.capabilities` | Declares tasks the Agent is designed to perform; supplies strong deterministic routing evidence. |
@@ -129,8 +129,7 @@ DELETE /api/agents/{id}
 ```
 
 Archive is intentionally different from deleting historical execution data.
-Replay and Episode Reports continue to resolve the Agent configuration captured
-for previous Runs.
+Replay and Run JSON retain the Agent configuration captured for previous Runs.
 
 ## Tool-Control Layers
 

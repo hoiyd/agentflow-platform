@@ -1,8 +1,8 @@
 # Evidence Comparison View
 
 The dedicated **Evaluation > Run comparison** page compares two Runs from the
-same Workspace. The view is read-only and reuses the existing Replay, Episode
-Report, Model Request metadata, and Run-list endpoints. It does not persist a
+same Workspace. The view is read-only and reuses Replay, Model Request metadata,
+and Run-list endpoints. It does not persist a
 new report or create an online evaluation service.
 
 ## Use
@@ -20,7 +20,8 @@ The comparison shows both Run IDs, task and material identity, execution mode,
 Agent, model, frozen snapshot hash, outcome, Verification status, stop reason,
 tokens, model and Tool calls, duration, errors, final output, Context Manifest
 references, Model Request references, citations, and persisted Tool or
-Verification Artifact references. Missing values are shown as `Unknown`.
+Verification Artifact references. Task and final output come only from Replay's
+bound candidate. Missing values are shown as `Unknown`.
 
 ## Comparability
 

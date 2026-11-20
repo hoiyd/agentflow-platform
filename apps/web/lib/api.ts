@@ -4,10 +4,10 @@ import {
   apiArray, apiJSON, apiObject, apiRequest, apiVoid, expectObject, isObject, stringValue
 } from "./api-client.ts";
 import { readChatEventStream, runStatusValue } from "./run-stream.ts";
-import { normalizeEpisodeReport, normalizeRunProjection, normalizeRunReplay, normalizeRunUsageLedger } from "./run-replay-normalization.ts";
+import { normalizeRunProjection, normalizeRunReplay, normalizeRunUsageLedger } from "./run-replay-normalization.ts";
 import type {
   AgentConfigInput, AgentInfo, AgentRoutingRequirements, APIHealth, ChatEvent, ChatRequest,
-  CollaborationStepInfo, ContractSchemas, Conversation, EpisodeReport, Message,
+  CollaborationStepInfo, ContractSchemas, Conversation, Message,
   ModelRequestDebugResponse, OperatorAttentionItem, RunInfo, RunProjectionSnapshot,
   RunReplay, RunUsageLedger, TaskState, TaskStatePatch, TaskStateRevision, ToolEffect,
   ToolInfo, SkillInfo
@@ -15,7 +15,7 @@ import type {
 
 export type {
   AgentConfigInput, AgentInfo, AgentRoutingRequirements, APIHealth, ChatEvent, ChatMode, ChatRequest,
-  CollaborationStepInfo, Conversation, EpisodeReport, Message, ModelRequestCapture,
+  CollaborationStepInfo, Conversation, Message, ModelRequestCapture,
   ModelRequestDebugResponse, ModelRequestEnvelope, OperatorAttentionItem, RecoveryAction,
   RecoveryEvidence, RecoverySummary, RunEvent, RunInfo, RunProjectionSnapshot, RunReplay,
   RunTraceSummary, RunUsageEntry, RunUsageLedger, RunUsageTotals, RuntimeInvariantFailure,
@@ -381,15 +381,6 @@ export async function getRunModelRequests(runId: string, includeContent = false)
     "model request debug"
   );
   return { ...result, records: Array.isArray(result.records) ? result.records : [] };
-}
-
-export async function getEpisodeReport(runId: string, signal?: AbortSignal): Promise<EpisodeReport> {
-  const data = await apiJSON(
-    `/api/runs/${runId}/episode`,
-    { cache: "no-store", signal },
-    { errorMessage: "Failed to load episode report" }
-  );
-  return normalizeEpisodeReport(data);
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {

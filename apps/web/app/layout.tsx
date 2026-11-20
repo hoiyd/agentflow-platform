@@ -35,7 +35,6 @@ import "./styles/collaboration/autonomous.css";
 import "./styles/collaboration/dag.css";
 import "./styles/collaboration/plan-steps.css";
 import "./styles/workbench/replay.css";
-import "./styles/workbench/run-report.css";
 import "./styles/workbench/trace-detail.css";
 import "./styles/workbench/evidence-comparison.css";
 import "./styles/workbench/runtime-diagnostics.css";

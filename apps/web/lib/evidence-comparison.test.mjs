@@ -17,33 +17,28 @@ function bundle(overrides = {}) {
     tool_progress_guard: { enabled: true },
     created_at: overrides.createdAt ?? "2026-09-01T00:00:00Z"
   } : overrides.snapshot;
+  const answer = {
+    id: "bound-answer", role: "assistant",
+    content: overrides.output ?? "Refunds are available for 30 days.",
+    citations: [{ source_id: "bound-source" }]
+  };
   return {
     replay: {
-      run: { id: overrides.runId ?? "run-current", status: overrides.status ?? "completed" },
+      run: { id: overrides.runId ?? "run-current", agent_id: "agent-1", status: overrides.status ?? "completed", verification_status: overrides.verification ?? "passed" },
       runtime_snapshot: snapshot,
-      run_events: overrides.events ?? [{ type: "model.route_decided", payload: { outcome: "selected", selected_route_id: "general", provider: "openai", model: "gpt-test" } }],
-      tool_artifacts: overrides.toolArtifacts ?? []
-    },
-    report: {
-      task: overrides.task ?? "Explain the refund policy",
-      final_output: overrides.output ?? "Refunds are available for 30 days.",
-      agent: { id: "agent-1" },
-      messages: overrides.messages ?? [],
-      retrievals: {
-        memories: [],
-        chunks: overrides.chunks ?? [{ document_id: "policy-v2", chunk_id: "refund-window" }]
-      },
-      llm_calls: [{ model: "gpt-test" }],
-      trace_summary: {
+      candidate: { question: overrides.task ?? "Explain the refund policy", message_id: overrides.messageID ?? answer.id },
+      messages: [answer, { id: "later-answer", role: "assistant", content: "Unrelated answer", citations: [{ source_id: "unrelated" }] }],
+      run_events: [...(overrides.events ?? [
+        { type: "model.route_decided", payload: { outcome: "selected", selected_route_id: "general", provider: "openai", model: "gpt-test" } }
+      ]), { type: "retrieval.completed", payload: { retrieved_chunks: overrides.chunks ?? [{ document_id: "policy-v2", chunk_id: "refund-window" }] } }],
+      tool_artifacts: overrides.toolArtifacts ?? [],
+      verification_artifacts: overrides.verificationArtifacts ?? [],
+      summary: {
         total_tokens: overrides.tokens ?? 100,
         llm_calls: 1,
         tool_calls: 0,
         total_duration_ms: overrides.duration ?? 500,
         error_count: overrides.errors ?? 0
-      },
-      verification: {
-        status: overrides.verification ?? "passed",
-        artifacts: overrides.verificationArtifacts ?? []
       }
     },
     modelRequests: {
@@ -66,7 +61,8 @@ test("identical runtime inputs remain comparable despite snapshot timestamps", (
   assert.equal(comparison.mode, "identical");
   assert.equal(evidenceDelta(comparison, "totalTokens"), -30);
   assert.equal(evidenceDelta(comparison, "durationMS"), -250);
-  assert.deepEqual(comparison.current.evidenceRefs, ["context-manifest:context-1", "model-request:request-1"]);
+  assert.equal(comparison.current.finalOutput, "Refunds are available for 30 days.");
+  assert.deepEqual(comparison.current.evidenceRefs, ["context-manifest:context-1", "model-request:request-1", "source:bound-source"]);
 });
 
 test("one predeclared runtime dimension is accepted as a single-variable comparison", () => {
@@ -128,4 +124,11 @@ test("missing identity and canceled outcomes remain explicit", () => {
   assert.equal(comparison.current.stopReason, "user_cancelled");
   assert.match(comparison.reasons.join("; "), /Task identity is unknown/);
   assert.match(comparison.reasons.join("; "), /Runtime snapshot is unavailable/);
+});
+
+test("a missing bound output does not borrow a neighboring answer or enable deltas", () => {
+  const comparison = compareEvidence(bundle({ messageID: "missing" }), bundle());
+  assert.equal(comparison.current.finalOutput, null);
+  assert.equal(comparison.current.identity.task, null);
+  assert.equal(evidenceDelta(comparison, "totalTokens"), null);
 });

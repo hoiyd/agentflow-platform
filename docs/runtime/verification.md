@@ -212,8 +212,8 @@ operator grants, never an old implicit authorization.
 
 ## Replay and Events
 
-Replay returns `verification_evidence` and `verification_artifacts`; Episode adds
-a summary. [Typed events](event-catalog.md) expose requested/started/pass/fail/
+Replay displays its persisted `verification_evidence` without an extra request;
+the response also includes `verification_artifacts`. [Typed events](event-catalog.md) expose requested/started/pass/fail/
 blocked/stale and revision transitions. Durable records use idempotent Postgres
 startup migration, not a separate verification database.
 

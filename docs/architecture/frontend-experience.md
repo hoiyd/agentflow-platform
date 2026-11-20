@@ -186,10 +186,9 @@ for the affected race and browser-to-backend checks.
 `useReplayData` owns Replay reads; `RunReplay` keeps recovery commands
 separate. Only initial Replay failure replaces the page. Refresh failures are
 local warnings and command failures retain the last readable evidence and event
-selection. Episode Report is collapsed by default and fetched only on expansion
-or explicit refresh; its failures stay local and can be retried. Replay refresh
-invalidates the displayed report without fetching it again. Comparison keeps
-using the independent Episode API. Review-verification actions open the report.
+selection. **Review verification** opens persisted evidence already loaded by
+Replay. **Export Run JSON** reuses the loaded response and omits Conversation
+history; neither action makes another request.
 
 Resume changes status only on accepted server events, not on click. Before
 acceptance, rejection leaves the original status intact; after acceptance,

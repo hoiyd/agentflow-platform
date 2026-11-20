@@ -59,7 +59,7 @@ test("two signed identities cannot read, mutate or link another Workspace's reso
       `/api/documents/${document.id}`, `/api/runs/${run.id}`, `/api/runs/${run.id}/events`,
       `/api/runs/${run.id}/replay`, `/api/runs/${run.id}/projection`, `/api/runs/${run.id}/usage`,
       `/api/runs/${run.id}/model_requests?include_content=true`, `/api/runs/${run.id}/artifacts`,
-      `/api/runs/${run.id}/tool-effects`, `/api/runs/${run.id}/episode`
+      `/api/runs/${run.id}/tool-effects`
     ];
     for (const path of readPaths) {
       expect((await page.request.get(`${api}${path}`, { headers })).status(), `owner: ${path}`).toBe(200);

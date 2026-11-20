@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { GitCompareArrows } from "lucide-react";
 import type { RunInfo } from "../../lib/api";
-import { getEpisodeReport, getRunModelRequests, getRunReplay, listRuns } from "../../lib/api";
+import { getRunModelRequests, getRunReplay, listRuns } from "../../lib/api";
 import {
   compareEvidence,
   evidenceDelta,
@@ -54,17 +54,15 @@ export function EvidenceComparison({ initialCurrentRunId = "" }: { initialCurren
     setComparison(null);
     setError("");
     try {
-      const [currentReplay, currentReport, currentRequests, baselineReplay, baselineReport, baselineRequests] = await Promise.all([
+      const [currentReplay, currentRequests, baselineReplay, baselineRequests] = await Promise.all([
         getRunReplay(currentRunId),
-        getEpisodeReport(currentRunId),
         getRunModelRequests(currentRunId),
         getRunReplay(baselineRunId),
-        getEpisodeReport(baselineRunId),
         getRunModelRequests(baselineRunId)
       ]);
       setComparison(compareEvidence(
-        { replay: currentReplay, report: currentReport, modelRequests: currentRequests },
-        { replay: baselineReplay, report: baselineReport, modelRequests: baselineRequests }
+        { replay: currentReplay, modelRequests: currentRequests },
+        { replay: baselineReplay, modelRequests: baselineRequests }
       ));
     } catch (err) {
       setError(errorMessage(err, "Failed to compare runs"));

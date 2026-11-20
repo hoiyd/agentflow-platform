@@ -1017,24 +1017,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/runs/{id}/episode": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["RunId"];
-            };
-            cookie?: never;
-        };
-        get: operations["getEpisodeReport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/runs/{id}/tool-effects": {
         parameters: {
             query?: never;
@@ -2877,73 +2859,12 @@ export interface components {
             invariant_error?: string;
             records: components["schemas"]["ModelRequestDebugRecord"][];
         };
-        EpisodeRetrievals: {
-            event_count: number;
-            memories: {
-                [key: string]: unknown;
-            }[] | null;
-            chunks: {
-                [key: string]: unknown;
-            }[] | null;
-        };
-        EpisodeLLMCall: {
-            event_id: string;
-            step_id?: string;
-            role?: string;
-            agent_id?: string;
-            model?: string;
-            framework?: string;
-            prompt_tokens?: number;
-            completion_tokens?: number;
-            total_tokens?: number;
-            token_usage_estimated?: boolean;
-            output_chars?: number;
-            /** Format: int64 */
-            duration_ms?: number;
-        };
-        EpisodeToolCall: {
-            event_id: string;
-            step_id?: string;
-            tool_name?: string;
-            tool_call_id?: string;
-            error?: string;
-            /** Format: int64 */
-            duration_ms?: number;
-        };
-        EpisodeError: {
-            source: string;
-            event_id?: string;
-            step_id?: string;
-            kind?: string;
-            category?: string;
-            retryable?: boolean;
-            message: string;
-        };
-        EpisodeVerification: {
-            status: string;
-            subject_hash?: string;
-            contract?: {
-                [key: string]: unknown;
-            };
-            evidence: string[] | null;
-            warnings: string[] | null;
-            records: components["schemas"]["VerificationEvidence"][] | null;
-            artifacts: components["schemas"]["VerificationArtifact"][] | null;
-        };
-        EpisodeReport: {
-            run: components["schemas"]["Run"];
-            conversation: components["schemas"]["Conversation"];
-            agent: components["schemas"]["Agent"];
-            task: string;
-            final_output: string;
-            messages: components["schemas"]["Message"][] | null;
-            steps: components["schemas"]["CollaborationStep"][] | null;
-            trace_summary: components["schemas"]["RunTraceSummary"];
-            retrievals: components["schemas"]["EpisodeRetrievals"];
-            llm_calls: components["schemas"]["EpisodeLLMCall"][] | null;
-            tool_calls: components["schemas"]["EpisodeToolCall"][] | null;
-            errors: components["schemas"]["EpisodeError"][] | null;
-            verification: components["schemas"]["EpisodeVerification"];
+        /** @description Candidate bound to this Run; omitted for missing or invalid receipts. */
+        RunReplayCandidate: {
+            /** @description Empty if the legacy receipt did not bind the input. */
+            question: string;
+            /** @description Identifies the bound assistant Message in Replay. */
+            message_id: string;
         };
         RunReplay: {
             plan?: components["schemas"]["RunPlan"];
@@ -2956,6 +2877,7 @@ export interface components {
                 [key: string]: unknown;
             };
             conversation: components["schemas"]["Conversation"];
+            candidate?: components["schemas"]["RunReplayCandidate"];
             messages: components["schemas"]["Message"][] | null;
             steps: components["schemas"]["CollaborationStep"][] | null;
             summary: components["schemas"]["RunTraceSummary"];
@@ -5006,30 +4928,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelRequestDebugResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
-    };
-    getEpisodeReport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["RunId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Derived episode report; not an independent source of Run state. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EpisodeReport"];
                 };
             };
             404: components["responses"]["NotFound"];

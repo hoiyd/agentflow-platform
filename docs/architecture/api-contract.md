@@ -18,7 +18,7 @@ DTOs and frontend path/schema types.
   second fetch stack.
 
 The contract covers health, conversations/messages/Task State, streaming Chat,
-Agents, the primary Run lifecycle, Replay/Usage/Projection, Episode reports,
+Agents, the primary Run lifecycle, Replay/Usage/Projection,
 request debug/capture, collaboration steps, Tools/effect reconciliation, Memory,
 Document upload/list/detail/delete, RAG Search diagnostics, Task State revisions,
 and bounded Artifact reads/search.
@@ -49,4 +49,4 @@ Generated files must not be edited manually.
 `npm test` runs both transport/unit tests and focused React component tests.
 Component tests cover behavior that is easy to regress without requiring a
 browser screenshot: API connection state, latest-request document selection,
-and Replay degradation when an optional Episode Report is unavailable.
+and routing to persisted Verification evidence from Replay.

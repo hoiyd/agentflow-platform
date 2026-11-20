@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
@@ -353,6 +354,9 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 	if err := h.enrichRunProjection(scoped, &replay); err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
+	}
+	if candidate, err := runcompletion.ReadCandidate(replay.Run, replay.Messages, replay.RunEvents); err == nil {
+		replay.Candidate = &domain.RunReplayCandidate{Question: candidate.Question, MessageID: candidate.Message.ID}
 	}
 	hideRunSnapshot(&replay.Run)
 	writeJSON(w, http.StatusOK, replay)
