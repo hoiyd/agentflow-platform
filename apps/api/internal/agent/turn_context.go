@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/skill"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 type turnContextStore interface {
@@ -105,6 +107,24 @@ func (s turnContextSessions) withSession(ctx context.Context, request turn.Reque
 		}
 	}
 	return contextassembly.WithSession(ctx, session), compaction
+}
+
+// A checkpoint can reuse unchanged recall, but cannot adopt a newer revision.
+func (r *Runtime) checkpointMemories(workspaceID string, recalled []domain.RetrievedMemory) ([]domain.RetrievedMemory, error) {
+	kept := make([]domain.RetrievedMemory, 0, len(recalled))
+	for _, item := range recalled {
+		current, err := r.store.GetMemoryDetail(workspaceID, item.Memory.ID)
+		if errors.Is(err, store.ErrMemoryMissing) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("check checkpoint Memory revision: %w", err)
+		}
+		if current.Memory.DeletedAt == nil && current.Memory.Version == item.Memory.Version {
+			kept = append(kept, item)
+		}
+	}
+	return kept, nil
 }
 
 func (s turnContextSessions) loadKnowledgeReads(request turn.Request) ([]domain.KnowledgeToolReadResult, error) {

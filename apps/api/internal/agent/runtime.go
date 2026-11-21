@@ -87,6 +87,7 @@ type RuntimeStore interface {
 	TransitionRun(domain.RunTransition) (domain.RunTransitionResult, error)
 	UpdateRunHeartbeat(string) (domain.Run, error)
 	GetRun(string) (domain.Run, bool, error)
+	GetMemoryDetail(string, string) (domain.MemoryDetail, error)
 	GetDocumentInWorkspace(string, string) (domain.Document, []domain.DocumentChunk, bool, error)
 	CreateCollaborationStep(domain.CollaborationStep) (domain.CollaborationStep, error)
 	UpdateCollaborationStep(string, domain.CollaborationStepStatus, string, string) (domain.CollaborationStep, error)
