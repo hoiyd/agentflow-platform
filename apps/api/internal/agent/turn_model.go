@@ -39,6 +39,12 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if err := m.runtime.validateKnowledgeEvidence(run); err != nil {
 		return turn.Result{}, err
 	}
+	if len(request.Continuation) > 0 && len(request.Context.Memories) > 0 {
+		request.Context.Memories, err = m.runtime.checkpointMemories(run.WorkspaceID, request.Context.Memories)
+		if err != nil {
+			return turn.Result{}, err
+		}
+	}
 	if run.CompletionContract != nil && run.CompletionContract.Output != nil {
 		if err := verification.ValidateFrozenContract(run.CompletionContract); err != nil {
 			return turn.Result{}, err

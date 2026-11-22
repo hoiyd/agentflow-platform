@@ -229,10 +229,14 @@ do not put sensitive original text in audit reasons.
   checked separately from the storage predicate.
 
 The source fence does not blacklist future messages or merge equivalent facts
-under independent IDs. New Recall sees the current revision; existing Context,
-Capture, source Messages, backups and in-flight Recall are not retroactively
-rewritten or erased. Automatic consolidation, approvals and history rollback
-are not implemented.
+under independent IDs. When a saved Turn resumes after clarification or Tool
+approval, it keeps recalled Memory only if the same revision is still active in
+the Run's Workspace. Missing, deleted and replaced revisions are omitted without
+new Recall; a lookup error stops the continuation. Approved Tool arguments and
+authorizations are unchanged.
+
+This check does not rewrite Replay, captured requests, source Messages, or
+completed Tool observations. It does not revoke Memory already sent to a model.
 
 Postgres startup adds `version`, `deleted_at`, and `memory_changes` idempotently.
 Existing rows default to version 1.
