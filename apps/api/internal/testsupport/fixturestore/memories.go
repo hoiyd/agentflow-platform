@@ -11,6 +11,10 @@ import (
 	"agentflow-platform/apps/api/internal/store"
 )
 
+func (s *Store) CreateCuratedMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	return s.CreateMemory(memory, embedding)
+}
+
 func (s *Store) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

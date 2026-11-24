@@ -87,6 +87,15 @@ func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.Me
 }
 
 func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	return s.createMemory(memory, embedding, false)
+}
+
+// CreateCuratedMemory may reuse a scope-identical active record without changing its provenance.
+func (s *PostgresStore) CreateCuratedMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	return s.createMemory(memory, embedding, true)
+}
+
+func (s *PostgresStore) createMemory(memory domain.Memory, embedding domain.MemoryEmbedding, curated bool) (domain.Memory, error) {
 	now := time.Now().UTC()
 	memory.WorkspaceID = NormalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
@@ -153,6 +162,19 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.Memory{}, err
+	}
+
+	if curated {
+		existing, err = scanMemory(tx.QueryRow(`SELECT `+memoryColumns+` FROM memories
+			WHERE workspace_id=$1 AND user_id IS NOT DISTINCT FROM $2 AND project_id IS NOT DISTINCT FROM $3
+			  AND kind=$4 AND content COLLATE "C"=$5 AND deleted_at IS NULL
+			ORDER BY created_at,id LIMIT 1`, memory.WorkspaceID, nullString(memory.UserID), nullString(memory.ProjectID), memory.Kind, memory.Content))
+		if err == nil {
+			return existing, tx.Commit()
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return domain.Memory{}, err
+		}
 	}
 
 	if _, err := tx.Exec(`

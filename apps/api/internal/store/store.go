@@ -140,6 +140,7 @@ type ToolArtifactStore interface {
 
 type MemoryStore interface {
 	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
+	CreateCuratedMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
