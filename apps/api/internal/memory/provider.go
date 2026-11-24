@@ -55,6 +55,7 @@ type Embedder interface {
 type ProviderStore interface {
 	CreateMemoryCandidate(domain.MemoryCandidate) (domain.MemoryCandidate, bool, error)
 	CreateMemory(domain.Memory, domain.MemoryEmbedding) (domain.Memory, error)
+	CreateCuratedMemory(domain.Memory, domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 	CreateRunEvent(domain.RunEvent) (domain.RunEvent, error)
 }
@@ -240,8 +241,9 @@ func (p *BuiltinProvider) Commit(ctx context.Context, item domain.Memory) (domai
 	return p.commit(ctx, item, false)
 }
 
-func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, allowClosing bool) (domain.Memory, error) {
-	if err := p.requireRunning(allowClosing); err != nil {
+func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, curated bool) (domain.Memory, error) {
+	// Queued curated writes are allowed to finish during shutdown.
+	if err := p.requireRunning(curated); err != nil {
 		return domain.Memory{}, err
 	}
 	item.Kind = strings.TrimSpace(item.Kind)
@@ -269,10 +271,14 @@ func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, allowC
 	if err != nil {
 		return domain.Memory{}, EmbeddingError{Err: err}
 	}
+	create := p.store.CreateMemory
+	if curated {
+		create = p.store.CreateCuratedMemory
+	}
 	var created domain.Memory
 	if err := p.retryStore(ctx, "commit.store", func() error {
 		var err error
-		created, err = p.store.CreateMemory(item, domain.MemoryEmbedding{
+		created, err = create(item, domain.MemoryEmbedding{
 			Provider: embedding.Provider, Model: embedding.Model,
 			Dimensions: len(embedding.Vector), Embedding: embedding.Vector,
 		})

@@ -58,6 +58,10 @@ func (s *recordingStore) CreateMemory(memory domain.Memory, _ domain.MemoryEmbed
 	return memory, nil
 }
 
+func (s *recordingStore) CreateCuratedMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	return s.CreateMemory(memory, embedding)
+}
+
 func (s *recordingStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

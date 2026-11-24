@@ -52,7 +52,7 @@ flowchart TD
     Adaptive -->|Proposal| Policy
     Policy --> Candidate["Persist Candidate decision"]
     Candidate -->|Accepted| Embed["Embed accepted fact"]
-    Embed --> Memory["Durable semantic Memory"]
+    Embed --> Memory["Insert or reuse durable Memory"]
     Candidate -->|Rejected / shadow| Rejected["Retain audit; no Memory write"]
     classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
     classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
@@ -98,6 +98,15 @@ The provider uses a bounded, ordered background queue and drains accepted work
 during shutdown. A stable Turn sync key and Candidate ID make duplicate
 delivery idempotent across queue attempts and process retries. Transient
 storage operations use bounded exponential retries (`MEMORY_PROVIDER_*`).
+
+For automatic writes, Postgres reuses the oldest active Memory with the same
+Workspace, user scope, project scope, kind, and exact text after trimming outer
+whitespace. Conversation and source IDs identify provenance, not scope. Each
+source keeps its own Candidate; `memory.sync.completed` links it to the reused
+Memory ID. Reuse does not update the original record and still requires
+embedding to succeed. Explicit writes, tombstones, and pre-existing rows are
+not consolidated.
+
 Embedding and adaptive extraction call the model client once; only that client
 applies `MODEL_RETRY_*`. A failed model operation is not restarted by Memory,
 so attempt limits do not multiply. These requests share normal model concurrency,
